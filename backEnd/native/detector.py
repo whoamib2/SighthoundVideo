@@ -16,10 +16,9 @@ so older clients keep working while newer ones can read them directly:
 * ``face_identity`` — a face identity label
 * ``delivery_carrier`` — one of USPS, FedEx, UPS, Amazon
 
-Phase 1 does not run those recognizers. The fields are parsed and preserved
-so a later ONNX Runtime model can fill them in without changing the wire
-format. The historical implementation is the closed ``SIOWrapper`` binary;
-``SIOObjectDetector`` is the only adapter that imports it.
+The ONNX detector fills those fields when plate, face, or carrier models
+are configured. The historical closed ``SIOWrapper`` binary is still behind
+``SIOObjectDetector`` and is the only adapter that imports it.
 """
 
 from __future__ import annotations

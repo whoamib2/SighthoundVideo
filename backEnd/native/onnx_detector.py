@@ -13,10 +13,11 @@ Execution providers, in order, when ``enable_gpu`` is set:
 * Windows: DirectML, then CUDA, then CPU
 * Linux and macOS: CUDA, then CPU
 
-CPU is always the fallback. Plate, face, and delivery-carrier recognizers are
-not run. If a model output is named ``plate_text``, ``face_identity``, or
-``delivery_carrier``, that value is copied onto each detection so the existing
-HTTP fields stay populated.
+CPU is always the fallback. After boxes are decoded, plate, face, and
+delivery recognizers in ``attribute_recognizers`` run on the person and
+vehicle crops when their ONNX files are present. If a detector output is
+named ``plate_text``, ``face_identity``, or ``delivery_carrier``, that value
+is still copied onto each detection.
 """
 
 from __future__ import annotations
@@ -362,6 +363,21 @@ class OnnxYoloDetector:
         self._output_names = [item.name for item in self._session.get_outputs()]
         self._height, self._width, self._channels_first = _input_hw(self._session, self._spec)
         self._log("info", "ONNX detector %s providers=%s" % (model_path, ",".join(self.providers)))
+        self._attributes = None
+        try:
+            from backEnd.native.attribute_recognizers import AttributePipeline
+
+            self._attributes = AttributePipeline.from_environment(
+                enable_gpu=enable_gpu, logger=logger
+            )
+        except Exception as exc:
+            self._log("error", "attribute recognizers were not attached: %s" % exc)
+
+    def set_gallery_db(self, path: Optional[str]) -> None:
+        """Point face matching at the local object database."""
+        pipeline = self._attributes
+        if pipeline is not None:
+            pipeline.set_gallery_db(path)
 
     def _log(self, level: str, message: str) -> None:
         logger = self._logger
@@ -414,6 +430,8 @@ class OnnxYoloDetector:
                     attributes=dict(attributes),
                 )
             )
+        if detections and self._attributes is not None:
+            self._attributes.annotate(rgb, width, height, detections)
         return detections
 
     def _extra_attributes(self, outputs: list[Any]) -> dict[str, Any]:

@@ -778,6 +778,8 @@ class FrontEndFrame(wx.Frame):
 
                     (None, None, None, None),
                     ("&FTP Status", "", wx.ID_ANY, self.OnFtpStatus),
+                    ("Face Gallery && Plate Watchlist...", "", wx.ID_ANY,
+                     self.OnAttributeLibrary),
                     # (None, None, None, None), Separator auto-added on Win...
                     (_kMenuOptions, "", wx.ID_PREFERENCES, self.OnOptions),
                 ) + extraToolsData,
@@ -1291,6 +1293,21 @@ class FrontEndFrame(wx.Frame):
             self.Layout()
         finally:
             self.Thaw()
+
+
+    ############################################################
+    def OnAttributeLibrary(self, event=None):
+        """Open the local face gallery and plate watchlist.
+
+        @param  event  The menu event (ignored).
+        """
+        from frontEnd.AttributeLibraryDialog import AttributeLibraryDialog
+
+        dlg = AttributeLibraryDialog(self, self._dataManager)
+        try:
+            dlg.ShowModal()
+        finally:
+            dlg.Destroy()
 
 
     ############################################################

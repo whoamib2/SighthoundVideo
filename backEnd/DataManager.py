@@ -220,6 +220,37 @@ class DataManager(object):
         except sql.OperationalError:
             # Happens if two processes try at same time...
             pass
+        self._ensureAttributeSchema()
+
+
+    ###########################################################
+    def _ensureAttributeSchema(self):
+        """Create plate, face, and carrier tables on old and new databases.
+
+        ``PRAGMA user_version`` 3 marks this schema. Older files are at 0.
+        The tables are also created when the version was already bumped, so a
+        partial upgrade still finishes. Embeddings stay in this file.
+        """
+        statements = (
+            '''CREATE TABLE IF NOT EXISTS objAttributes '''
+            '''(objUid INTEGER, key TEXT, value TEXT, confidence REAL, '''
+            '''time INTEGER, PRIMARY KEY (objUid, key))''',
+            '''CREATE TABLE IF NOT EXISTS faceIdentities '''
+            '''(id INTEGER PRIMARY KEY, name TEXT UNIQUE, embedding BLOB, '''
+            '''dim INTEGER, createdMs INTEGER)''',
+            '''CREATE TABLE IF NOT EXISTS plateWatchlist '''
+            '''(id INTEGER PRIMARY KEY, pattern TEXT UNIQUE)''',
+            '''CREATE TABLE IF NOT EXISTS attributeSettings '''
+            '''(key TEXT PRIMARY KEY, value TEXT)''',
+        )
+        for statement in statements:
+            self._cur.execute(statement)
+        try:
+            version = self._cur.execute("PRAGMA user_version").fetchone()[0]
+        except sql.OperationalError:
+            version = 0
+        if not version:
+            self._cur.execute("PRAGMA user_version=3")
 
 
     ###########################################################
@@ -335,6 +366,7 @@ class DataManager(object):
             self._createTables()
 
         self._upgradeOldTablesIfNeeded()
+        self._ensureAttributeSchema()
 
         # Always call addIndices to update old versions of databases...
         self._addIndices()
@@ -403,6 +435,7 @@ class DataManager(object):
         """Reset the database"""
         assert self._connection is not None
 
+        self._connection.execute('''DROP TABLE IF EXISTS objAttributes''')
         self._connection.execute('''DROP TABLE objects''')
         self._connection.execute('''DROP TABLE motion''')
 
@@ -597,6 +630,165 @@ class DataManager(object):
         else:
             # TODO: not sure why this happens, but be robust...
             return "unknown"
+
+
+    ###########################################################
+    def setObjectAttributes(self, objId, attributes, timeMs=0):
+        """Store plate, face, and carrier values for one object.
+
+        @param  objId       The object id.
+        @param  attributes  Recognizer fields. Empty values are skipped.
+        @param  timeMs      Time associated with the read.
+        """
+        from backEnd.attribute_text import stored_attribute_rows
+
+        assert self._connection is not None
+        for key, value, confidence, when in stored_attribute_rows(attributes, timeMs):
+            self._cur.execute(
+                '''INSERT OR REPLACE INTO objAttributes '''
+                '''(objUid, key, value, confidence, time) VALUES (?, ?, ?, ?, ?)''',
+                (int(objId), key, value, float(confidence), int(when)))
+
+
+    ###########################################################
+    def getObjectAttributes(self, objId):
+        """Return ``{key: value, key_confidence: confidence}`` for one object."""
+        assert self._connection is not None
+        rows = self._cur.execute(
+            '''SELECT key, value, confidence FROM objAttributes WHERE objUid=?''',
+            (int(objId),)).fetchall()
+        found = {}
+        for key, value, confidence in rows:
+            found[key] = value
+            if confidence is not None:
+                found["%s_confidence" % key] = confidence
+        # plate_text's confidence column is stored as plate_text_confidence.
+        # Recognizers and notifications use plate_confidence. Keep both names.
+        aliases = (
+            ("plate_text_confidence", "plate_confidence"),
+            ("face_identity_confidence", "face_confidence"),
+            ("delivery_carrier_confidence", "delivery_confidence"),
+        )
+        for stored, public in aliases:
+            if stored in found and public not in found:
+                found[public] = found[stored]
+        return found
+
+
+    ###########################################################
+    def notificationSentenceNear(self, cameraLocation, ms, slop=2000):
+        """Join attribute sentences for objects at one camera around ``ms``."""
+        from backEnd.attribute_text import notification_sentence
+
+        assert self._connection is not None
+        rows = self._cur.execute(
+            '''SELECT uid FROM objects WHERE camLoc=? AND timeStart<=? '''
+            '''AND timeStop>=?''',
+            (cameraLocation, int(ms) + int(slop), int(ms) - int(slop))).fetchall()
+        parts = []
+        for (obj_id,) in rows:
+            text = notification_sentence(self.getObjectAttributes(obj_id))
+            if text and text not in parts:
+                parts.append(text)
+        return ", ".join(parts)
+
+
+    ###########################################################
+    def enrollFace(self, name, embedding, dim=None):
+        """Store a face embedding locally. Replaces an existing name."""
+        assert self._connection is not None
+        label = str(name or "").strip()
+        if not label:
+            raise ValueError("face name is empty")
+        raw = bytes(embedding)
+        width = int(dim) if dim else len(raw) // 4
+        if width <= 0 or len(raw) < width * 4:
+            raise ValueError("face embedding is empty")
+        now = int(time.time() * 1000)
+        self._cur.execute('''DELETE FROM faceIdentities WHERE name=?''', (label,))
+        self._cur.execute(
+            '''INSERT INTO faceIdentities (name, embedding, dim, createdMs) '''
+            '''VALUES (?, ?, ?, ?)''',
+            (label, sql.Binary(raw), width, now))
+        self.save()
+
+
+    ###########################################################
+    def deleteFace(self, name):
+        """Remove one enrolled person. The stored vector is deleted with the row."""
+        assert self._connection is not None
+        self._cur.execute(
+            '''DELETE FROM faceIdentities WHERE name=?''', (str(name or "").strip(),))
+        self.save()
+
+
+    ###########################################################
+    def listFaces(self):
+        """Return ``(name, dim, createdMs)`` rows, ordered by name."""
+        assert self._connection is not None
+        return self._cur.execute(
+            '''SELECT name, dim, createdMs FROM faceIdentities ORDER BY name'''
+        ).fetchall()
+
+
+    ###########################################################
+    def getFaceThreshold(self):
+        """Cosine similarity required for a gallery match. Default 0.4."""
+        assert self._connection is not None
+        try:
+            row = self._cur.execute(
+                "SELECT value FROM attributeSettings WHERE key='face_threshold'"
+            ).fetchone()
+        except sql.OperationalError:
+            return 0.4
+        if row is None or row[0] in (None, ""):
+            return 0.4
+        try:
+            return float(row[0])
+        except (TypeError, ValueError):
+            return 0.4
+
+
+    ###########################################################
+    def setFaceThreshold(self, value):
+        """Set the cosine threshold used the next time a camera process reloads."""
+        assert self._connection is not None
+        self._cur.execute(
+            '''INSERT OR REPLACE INTO attributeSettings (key, value) '''
+            '''VALUES ('face_threshold', ?)''',
+            (str(float(value)),))
+        self.save()
+
+
+    ###########################################################
+    def addPlateWatch(self, pattern):
+        """Add a plate pattern. ``*`` and ``?`` are wildcards."""
+        assert self._connection is not None
+        text = str(pattern or "").strip()
+        if not text:
+            raise ValueError("plate pattern is empty")
+        self._cur.execute(
+            '''INSERT OR IGNORE INTO plateWatchlist (pattern) VALUES (?)''', (text,))
+        self.save()
+
+
+    ###########################################################
+    def removePlateWatch(self, pattern):
+        """Remove one watchlist pattern."""
+        assert self._connection is not None
+        self._cur.execute(
+            '''DELETE FROM plateWatchlist WHERE pattern=?''', (str(pattern or "").strip(),))
+        self.save()
+
+
+    ###########################################################
+    def listPlateWatchlist(self):
+        """Return watchlist patterns in insertion order."""
+        assert self._connection is not None
+        rows = self._cur.execute(
+            '''SELECT pattern FROM plateWatchlist ORDER BY id'''
+        ).fetchall()
+        return [row[0] for row in rows]
 
 
     ###########################################################

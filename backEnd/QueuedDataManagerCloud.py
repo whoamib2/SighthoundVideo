@@ -56,6 +56,7 @@ from . import MessageIds
 from appCommon.CommonStrings import kThumbsSubfolder
 
 from backEnd.native.tracking import object_collector_base
+from backEnd.attribute_text import merge_track_attributes
 
 # Globals...
 from vitaToolbox.image.ImageConversion import convertProcFrameToPIL
@@ -184,6 +185,14 @@ class QueuedDataManagerCloud(object_collector_base()):
 
         self._debugMode = not hasattr(sys, 'frozen')
 
+
+    ###########################################################
+    def setGalleryDatabase(self, path):
+        """Tell the in-process detector which local file holds face embeddings."""
+        client = getattr(self, "_httpClient", None)
+        setter = getattr(client, "set_gallery_db", None)
+        if setter is not None:
+            setter(path)
 
 
     ###########################################################
@@ -433,8 +442,12 @@ class QueuedDataManagerCloud(object_collector_base()):
 
             if not obj.reported:
                 camObjId = obj.dbId[1]
-                self._queue.put([MessageIds.msgIdDataAddObject, self._id,
-                          camObjId, ms, objType, self.cameraLocation])
+                message = [MessageIds.msgIdDataAddObject, self._id,
+                          camObjId, ms, objType, self.cameraLocation]
+                attributes = getattr(obj, "detectionAttributes", None)
+                if attributes:
+                    message.append(dict(attributes))
+                self._queue.put(message)
                 self._stats.record(obj)
                 obj.reported = True
 
@@ -840,6 +853,7 @@ class _QueuedObjId(object):
         self.detectionsRequested = 0   # number of detection requests sent for this object
         self.reported = False          # whether the object was reported
         self.sentryFramesSeen = 0     # number of times this object was seen by sentry
+        self.detectionAttributes = {} # best plate, face, and carrier reads
 
         _QueuedObjId._idToQueuedObj[idNum] = self
 
@@ -866,16 +880,17 @@ class _QueuedObjId(object):
         identity, delivery carrier). They are stored for a later response
         path and do not change the type/score decision.
         """
+        if attributes:
+            self.detectionAttributes = merge_track_attributes(
+                getattr(self, "detectionAttributes", {}), attributes
+            )
         if self.detectorDecision is not None:
-            # do not update the object if final determination had been made
+            # The type is settled. Later frames can still improve a plate,
+            # a face match, or a carrier label.
             return
 
         self.lastDetectionEventTime = ms
         self.externalDetections[ms].append((type, score, overlap))
-        if attributes:
-            if not hasattr(self, "detectionAttributes"):
-                self.detectionAttributes = {}
-            self.detectionAttributes.update(attributes)
 
     ###########################################################
     def notifyDetectionRequested(self, ms):

@@ -63,6 +63,7 @@ from vitaToolbox.path.GetDiskSpaceAvailable import checkFreeSpace
 
 # Local imports...
 from appCommon.CommonStrings import kRemoteFolder, isLocalCamera, kMinFreeSysDriveSpaceMB
+from appCommon.CommonStrings import kObjDbFile
 from .ClipManager import ClipManager
 from . import MessageIds
 from .QueuedDataManagerCloud import QueuedDataManagerCloud
@@ -269,6 +270,8 @@ class CameraCapture(object):
                                                 self._logger,
                                                 extras.get('sioInProcess', False))
         self._queuedDataMgr.setDebugFolder(extras.get('analyticsDumpFolder', None))
+        gallery_db = extras.get('objectDbPath') or os.path.join(self._userDir, kObjDbFile)
+        self._queuedDataMgr.setGalleryDatabase(gallery_db)
 
         self._debugLogManager = DebugLogManager(self._cameraLocation, self._userDir)
         debugConfig = extras.get('debugConfig', None)

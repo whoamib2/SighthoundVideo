@@ -851,6 +851,8 @@ class BackEndApp(object):
 
         self._clipDbPath = os.path.join(self._dataStorageLocation, kClipDbFile)
         self._objDbPath = os.path.join(self._dataStorageLocation, kObjDbFile)
+        # Camera and analytics processes match faces against this local file.
+        os.environ["SIGHTHOUND_OBJECT_DB"] = self._objDbPath
         self._responseDbPath = os.path.join(self._dataStorageLocation,
                                             kResponseDbFile)
         self._videoDir = os.path.join(videoStorageLocation, kVideoFolder)
@@ -1786,6 +1788,7 @@ class BackEndApp(object):
             if loc == camLocation:
                 pendingMoves.append(os.path.basename(targetPath))
         extra['pendingMoves'] = pendingMoves
+        extra['objectDbPath'] = self._objDbPath
 
         self._enableDiskLogging(False)
         try:
@@ -2381,9 +2384,13 @@ class BackEndApp(object):
 
         # Data manager messages
         elif msgId == MessageIds.msgIdDataAddObject:
-            (pipeId, camObjId, addTime, objType, location) = msg[1:]
+            tail = msg[1:]
+            (pipeId, camObjId, addTime, objType, location) = tail[:5]
+            attributes = tail[5] if len(tail) > 5 and isinstance(tail[5], dict) else None
 
             dbId = self._dataManager.addObject(addTime, objType, location)
+            if attributes:
+                self._dataManager.setObjectAttributes(dbId, attributes, addTime)
 
             self._logger.info("Received msgIdDataAddObject, loc: %s, time: %i,"
                               "type: %s, dbId: %i"

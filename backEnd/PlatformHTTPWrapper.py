@@ -48,6 +48,7 @@ from backEnd.native.detector import (
     parse_rgb_body,
 )
 from backEnd.native.onnx_detector import create_detector
+from appCommon.CommonStrings import kObjDbFile
 
 
 #from DebugLogManager import DebugLogManager
@@ -177,6 +178,12 @@ class PlatformHTTPWrapper(object):
 
         enableGpu = True  # DirectML or CUDA when that provider is installed; CPU otherwise.
         self._detector = create_detector(self._logger, _getModelDir(), enable_gpu=enableGpu)
+        gallery = os.environ.get("SIGHTHOUND_OBJECT_DB") or os.path.join(
+            self._localDataDir, kObjDbFile
+        )
+        setter = getattr(self._detector, "set_gallery_db", None)
+        if setter is not None:
+            setter(gallery)
 
         HandlerClass = HandlerFactory(self._logger, self._detector)
         HTTPServer.allow_reuse_address = True

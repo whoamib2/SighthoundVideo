@@ -64,6 +64,7 @@ from backEnd.VideoMarkupModel import VideoMarkupModel
 from appCommon.CommonStrings import kFrontEndLogName
 from appCommon.CommonStrings import kImportSuffix
 from appCommon.CommonStrings import kSearchingString, kSearchingOnString
+from backEnd.attribute_text import attribute_search_label
 
 from . import MenuIds
 
@@ -965,6 +966,17 @@ class SearchResultsList(wx.VListBox):
                     typeStrs.append(typeStr + 's')
 
             label = ', '.join(typeStrs)
+            details = []
+            for obj in objList:
+                try:
+                    detail = attribute_search_label(dataMgr.getObjectAttributes(obj))
+                except Exception:
+                    detail = ""
+                if detail and detail not in details:
+                    details.append(detail)
+            if details:
+                extra = ", ".join(details)
+                label = ("%s (%s)" % (label, extra)) if label else extra
 
             if camLoc.endswith(kImportSuffix):
                 try:

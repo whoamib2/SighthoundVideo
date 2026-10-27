@@ -578,6 +578,12 @@ class ObjectDetectorClientInProcess(ObjectDetectorClient):
         super(ObjectDetectorClientInProcess, self).__init__(id, logger)
         self._detector = create_detector(self._logger, _getModelDir(), enable_gpu=False)
 
+    def set_gallery_db(self, path):
+        """Point face matching at the local object database."""
+        setter = getattr(self._detector, "set_gallery_db", None)
+        if setter is not None:
+            setter(path)
+
     #---------------------------------------------------------------------------
     def _doRefreshHTTPConnection(self):
         """ Establish HTTP/S connection

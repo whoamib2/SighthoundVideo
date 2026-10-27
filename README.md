@@ -30,7 +30,7 @@ What works in the open backend:
 * The 32-byte live-view mmap header the monitor reads, JPEG snapshots, and a best-effort single-variant HLS playlist (MPEG-TS segments).
 * A motion gate and a ByteTrack-style tracker (high-score association, then low-score recovery, with a constant-velocity prediction) that calls `QueuedDataManagerCloud`.
 * An ONNX Runtime YOLO detector on the existing local HTTP contract: raw RGB `POST` with `X-Width` and `X-Height`, JSON `objects` reply. COCO classes map to `person`, `vehicle`, and `animal` for `TargetTrigger`. Providers are DirectML, CUDA, and CPU on Windows, and CUDA and CPU on Linux. CPU is the fallback and is what CI runs.
-* `plate_text`, `face_identity`, and `delivery_carrier` still travel on the detection JSON when a model output provides them.
+* `plate_text`, `face_identity`, and `delivery_carrier` are filled by the attribute recognizers when their models are present, stored on the object, and available to rules, search labels, and notification text.
 
 The default weights are Megvii YOLOX-Nano (Apache-2.0). They are not in git:
 
@@ -42,10 +42,39 @@ Ultralytics YOLOv8 and YOLOv10 are AGPL-3.0. The fetch script does not download 
 
 Set `SIGHTHOUND_USE_CLOSED_CAPTURE=1` or `SIGHTHOUND_USE_CLOSED_SENTRY=1` only if you still have those Python 2.7 binaries and want the adapters to try them.
 
+### Attribute recognizers
+
+Plate OCR, face matching, and delivery-carrier labels run on the person and vehicle crops from the YOLO detector. Windows providers are DirectML, then CUDA, then CPU. Linux and macOS use CUDA, then CPU.
+
+```bash
+python scripts/fetch_attribute_models.py
+python scripts/train_carrier_classifier.py --data /path/to/labeled-photos
+```
+
+`fetch_attribute_models.py` downloads three files and does not commit them:
+
+* Plate OCR: fast-plate-ocr `cct_xs_v1_global.onnx` (MIT, Latin alphabet). Without a plate-detector file, OCR uses the lower part of the vehicle crop. Point `SIGHTHOUND_PLATE_DETECTOR_MODEL` at your own detector ONNX if you have one. The optional detector contract is in `models/README.md`.
+* Face detection: OpenCV Zoo YuNet (Apache-2.0).
+* Face embeddings: OpenCV Zoo SFace (Apache-2.0). This is not an InsightFace ArcFace pack. Many InsightFace pretrained weights are non-commercial only, and this project does not download them. If you point `SIGHTHOUND_FACE_EMBED_MODEL` at one of those files, that non-commercial limit still applies.
+
+There is no permissive pretrained USPS/FedEx/UPS/Amazon classifier here. `scripts/train_carrier_classifier.py` fits a small color model from folders named `none`, `USPS`, `FedEx`, `UPS`, and `Amazon`. Until that file exists, a color heuristic can label a crop. Set `SIGHTHOUND_CARRIER_HEURISTIC=0` to disable it. The heuristic and the trained color model are not a logo reader.
+
+Rules, in the Look For panel of the query builder:
+
+* Plate equals, plate matches (`*` and `?`), or plate is on the watchlist.
+* Face is a known person, an unknown person, or a specific enrolled name.
+* Delivery arrived for the carriers you pick, optionally only inside the where-region, once per visit until the cooldown passes.
+
+The Tools menu item "Face Gallery & Plate Watchlist" enrolls a person from image files or from a stored object id, deletes a person, sets the cosine threshold (default 0.4), and edits watchlist patterns. Unknown means no stored identity.
+
+**Privacy.** Enrolled names and embeddings are written only to the local object database (`objdb2`) on this computer. This phase does not upload them. Deleting a gallery entry deletes that vector. You are responsible for notice and consent where the law requires it. Cameras that record people are still your cameras.
+
+**Accuracy.** The automated tests use tiny synthetic ONNX graphs. They prove the plumbing: a read can reach the database and fire a rule. They do not measure real plates, real faces, or real trucks. YOLOX-Nano is a small COCO model. YuNet and SFace quality depends on crop size, alignment, and the threshold. The carrier model only sees color statistics. The wx gallery dialog and a live camera were not exercised in CI. wxPython is not installed in CI, so the query-builder controls and the gallery dialog need a manual pass on Windows.
+
 What is left:
 
-* The wxPython UI and a PyInstaller bundle have not been exercised against these backends on Windows or macOS.
-* Plate, face, and delivery-carrier recognizers are not implemented.
+* The wxPython UI and a PyInstaller bundle have not been exercised against these backends on Windows or macOS. That includes the new gallery dialog and the attribute controls on the query builder.
+* Real-camera accuracy for plates, faces, and delivery trucks has not been measured.
 * Packet capture returns "driver not available" (`-2`). There is no pcap backend.
 * Clip playback does not draw the old on-frame box and zone overlays.
 * HLS is a single-variant playlist, not the historical multi-bitrate ladder.

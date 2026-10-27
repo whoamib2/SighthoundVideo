@@ -38,8 +38,12 @@ def _apply(data_mgr: DataManager, messages: list) -> None:
     for message in messages:
         kind = message[0]
         if kind == MessageIds.msgIdDataAddObject:
-            _pipe_id, cam_obj_id, add_time, obj_type, location = message[1:]
+            tail = message[1:]
+            _pipe_id, cam_obj_id, add_time, obj_type, location = tail[:5]
+            attributes = tail[5] if len(tail) > 5 and isinstance(tail[5], dict) else None
             db_id = data_mgr.addObject(add_time, obj_type, location)
+            if attributes:
+                data_mgr.setObjectAttributes(db_id, attributes, add_time)
             temp_ids[cam_obj_id] = db_id
         elif kind == MessageIds.msgIdDataAddFrame:
             _pipe_id, db_id, frame, frame_time, bbox, obj_type, action = message[1:]

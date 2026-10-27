@@ -16,7 +16,7 @@ import os
 _INPUT = 64
 
 
-def build_bright_blob_model(path: str, size: int = _INPUT) -> str:
+def build_bright_blob_model(path: str, size: int = _INPUT, class_id: float = 0.0) -> str:
     import numpy as np
     import onnx
     from onnx import TensorProto, helper, numpy_helper
@@ -29,7 +29,7 @@ def build_bright_blob_model(path: str, size: int = _INPUT) -> str:
         tensor("half", np.array(0.5, dtype=np.float32)),
         tensor("one", np.ones((1, 1, 1, 1), dtype=np.float32)),
         tensor("score_scale", np.array(0.95, dtype=np.float32)),
-        tensor("class_id", np.array(0.0, dtype=np.float32)),
+        tensor("class_id", np.array(float(class_id), dtype=np.float32)),
         tensor("big", np.array(float(size), dtype=np.float32)),
         tensor("coords_x", coords.reshape(1, 1, 1, size)),
         tensor("coords_y", coords.reshape(1, 1, size, 1)),
