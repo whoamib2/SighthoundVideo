@@ -29,8 +29,24 @@ What works in the open backend:
 * Clip files registered with `ClipManager.addClip`, plus `getMsList`, `getDuration`, `ClipReader`, and remux helpers.
 * The 32-byte live-view mmap header the monitor reads, JPEG snapshots, and a best-effort single-variant HLS playlist (MPEG-TS segments).
 * A motion gate and a ByteTrack-style tracker (high-score association, then low-score recovery, with a constant-velocity prediction) that calls `QueuedDataManagerCloud`.
-* An ONNX Runtime YOLO detector on the existing local HTTP contract: raw RGB `POST` with `X-Width` and `X-Height`, JSON `objects` reply. COCO classes map to `person`, `vehicle`, and `animal` for `TargetTrigger`. Providers are DirectML, CUDA, and CPU on Windows, and CUDA and CPU on Linux. CPU is the fallback and is what CI runs.
+* An ONNX Runtime YOLO detector on the existing local HTTP contract: raw RGB `POST` with `X-Width` and `X-Height`, JSON `objects` reply. COCO classes map to `person`, `vehicle`, and `animal` for `TargetTrigger`. Providers are DirectML, CUDA, and CPU on Windows, and CUDA and CPU on Linux. CPU is the fallback when those providers are absent.
 * `plate_text`, `face_identity`, and `delivery_carrier` still travel on the detection JSON when a model output provides them.
+
+### Windows installer
+
+End users run `dist\SighthoundVideo-Setup.exe`. A developer produces it on a Windows PC. From a checkout of this branch:
+
+```powershell
+powershell -NoProfile -ExecutionPolicy Bypass -File scripts\bootstrap.ps1 -Package
+```
+
+`scripts\bootstrap.ps1` updates the checkout (or clones the repository when you point it at an empty directory) and runs `scripts\build_windows.ps1`. Pass `-Branch cursor/python3-port-phase2-0735` when the script is not already inside a checkout.
+
+`scripts\build_windows.ps1` is safe to re-run. It reuses `.venv`, downloads YOLOX-Nano when `models\yolox_nano.onnx` is missing, runs ruff, compileall, and pytest, and builds the CMake projects when MSVC 2022 is installed. With `-Package` it installs PyInstaller and, through winget, Inno Setup when that compiler is missing. If winget itself is missing, the script says so and stops before the installer step. MSVC 2022 is optional: when it is absent the script prints a message and continues. The native projects are `optsearches`, `launch`, and `xnat`.
+
+The package is a PyInstaller one-folder bundle. Python, wxPython, PyAV/FFmpeg, and ONNX Runtime DirectML are inside the folder, so the installed app does not need Python. Inno Setup adds Start menu and desktop shortcuts, an uninstaller, and an optional "start with Windows" task. The finished file is `dist\SighthoundVideo-Setup.exe`, and the script prints that path.
+
+The Windows build installs `onnxruntime-directml`. The analytics process uses the GPU when DirectML is available and the CPU otherwise. YOLOX-Nano is fetched at build time and copied into the app folder, so the installed program works offline. That file is about 3.5 MB.
 
 The default weights are Megvii YOLOX-Nano (Apache-2.0). They are not in git:
 
@@ -55,13 +71,12 @@ What is left:
 * Python 3.11 or 3.12, 64-bit.
 * `python -m pip install -e ".[dev]"` from the repo root. That installs Pillow, requests, wxPython, numpy, PyAV, ONNX Runtime, pytest, ruff, and the `onnx` package used to build the tiny test detector.
 * wxPython wheels need the Visual C++ runtime that the wheel documents. Capture itself does not need Visual Studio once PyAV is installed.
-* CPU inference needs no GPU. CI on `windows-latest` uses this path.
-* DirectML: remove `onnxruntime` and install `onnxruntime-directml`. The detector selects `DmlExecutionProvider` when that package is the one installed.
-* CUDA: install `onnxruntime-gpu` built for your CUDA version. `CUDAExecutionProvider` is used on Windows and Linux when it is present.
+* CPU inference needs no GPU. `onnxruntime-directml` uses the GPU when DirectML is available and the CPU otherwise.
+* A developer who wants CUDA instead of the packaged DirectML runtime can install `onnxruntime-gpu` built for their CUDA version. `CUDAExecutionProvider` is used on Windows and Linux when it is present.
 * USB cameras: `python -m pip install opencv-python-headless`.
 * Download the detector before starting the analytics process: `python scripts/fetch_detector_model.py`.
 
-Phase 1 still covers the Python 3 syntax port, wxPython 4 / Pillow 10 call sites, CMake 3.20 projects for `launch`, `xnat`, `optsearches`, and Apple `volumeUtils`, and PyInstaller packaging via `scripts/package_app.py`. GitHub Actions runs the Python tests, including the video-to-database test, on `ubuntu-latest` and `windows-latest`.
+Phase 1 still covers the Python 3 syntax port, wxPython 4 / Pillow 10 call sites, CMake 3.20 projects for `launch`, `xnat`, `optsearches`, and Apple `volumeUtils`, and PyInstaller packaging via `scripts/package_app.py`. On Windows, `scripts\build_windows.ps1` runs those checks and can write the installer.
 
 Historical build notes (Python 2.7, VS2017, `cx_Freeze`, `py2exe`) remain below for the original source release. Several assets are still Git LFS objects.
 
