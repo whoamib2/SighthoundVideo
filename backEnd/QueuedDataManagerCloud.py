@@ -142,6 +142,9 @@ class QueuedDataManagerCloud(object_collector_base()):
         """
         # Call the superclass constructor.
         super(QueuedDataManagerCloud, self).__init__()
+        # Set before the detector client is constructed. If that constructor
+        # raises, __del__ still runs and must not touch a missing attribute.
+        self._httpClient = None
 
         # This is publicly accessible in case the camera location changes.
         self.cameraLocation = cameraLocation
@@ -189,33 +192,48 @@ class QueuedDataManagerCloud(object_collector_base()):
     ###########################################################
     def __del__(self):
         """Destructor for QueuedDataManager."""
-        self.terminate()
+        try:
+            self.terminate()
+        except Exception:
+            pass
 
         try:
             # Inform the back end that our pipe is no longer in use.
-            self._queue.put([MessageIds.msgIdPipeFinished, self._id])
+            # Init may have failed before these attributes existed.
+            queue = getattr(self, "_queue", None)
+            if queue is not None:
+                queue.put([MessageIds.msgIdPipeFinished, getattr(self, "_id", None)])
         finally:
-            # Our base class, ObjectCollector, implements `__del__` also. Make
-            # sure we call it without fail...
-            super(QueuedDataManagerCloud, self).__del__()
+            # The closed ObjectCollector base implements __del__. The open
+            # tracker uses a plain object, which does not.
+            parent_del = getattr(super(QueuedDataManagerCloud, self), "__del__", None)
+            if parent_del is not None:
+                parent_del()
 
     ###########################################################
     def terminate(self):
-        if self._httpClient is not None:
-            self._logger.debug("Destroying HTTP client")
-            if self._httpClient.isAlive():
-                while self._outstandingDetectionRequests > 0:
-                    self._logger.debug("Destroying HTTP client - waiting for " + str(self._outstandingDetectionRequests) + " pending results")
-                    self._processDetections()
-                    if self._outstandingDetectionRequests > 0:
-                        time.sleep(0.1)
+        # Init can fail before _httpClient exists, or leave it None.
+        client = getattr(self, "_httpClient", None)
+        if client is None:
+            return
+        self._logger.debug("Destroying HTTP client")
+        if hasattr(client, "is_alive"):
+            alive = client.is_alive()
+        else:
+            alive = client.isAlive()
+        if alive:
+            while self._outstandingDetectionRequests > 0:
+                self._logger.debug("Destroying HTTP client - waiting for " + str(self._outstandingDetectionRequests) + " pending results")
+                self._processDetections()
+                if self._outstandingDetectionRequests > 0:
+                    time.sleep(0.1)
 
-                self._logger.debug("Destroying HTTP client - terminating")
-                self._httpClient.terminate()
-                self._logger.debug("Destroying HTTP client - waiting ...")
-                self._httpClient.join()
-                self._logger.debug("Destroying HTTP client - done")
-            self._httpClient = None
+            self._logger.debug("Destroying HTTP client - terminating")
+            client.terminate()
+            self._logger.debug("Destroying HTTP client - waiting ...")
+            client.join()
+            self._logger.debug("Destroying HTTP client - done")
+        self._httpClient = None
 
     ###########################################################
     def setDebugFolder(self, folder):

@@ -49,7 +49,7 @@ The build prefers Python 3.14 (`py -3.14`). Checked on PyPI on 2026-10-27: wxPyt
 
 The package is a PyInstaller one-folder bundle. Python, wxPython, PyAV/FFmpeg, and ONNX Runtime DirectML are inside the folder, so the installed app does not need Python. Inno Setup adds Start menu and desktop shortcuts, an uninstaller, and an optional "start with Windows" task. The finished file is `dist\SighthoundVideo-Setup.exe`, and the script prints that path.
 
-The Windows build installs `onnxruntime-directml`. The app uses the GPU when DirectML is available and the CPU otherwise. Model fetch scripts, when this checkout has them, download weights during the build and the installer copies those files into the app folder so it works offline. The downloaded detector and attribute weights are about 45 MB, small enough to ship in the installer.
+The Windows build depends on `onnxruntime-directml` and not the CPU `onnxruntime` wheel. Those two distributions own the same `onnxruntime` package directory, so the script removes any CPU or CUDA wheel and force-reinstalls DirectML, then checks `get_available_providers`. The app uses the GPU when DirectML is available and the CPU otherwise. Model fetch scripts, when this checkout has them, download weights during the build and the installer copies those files into the app folder so it works offline. The downloaded detector and attribute weights are about 45 MB, small enough to ship in the installer.
 
 What is still blocked by closed binaries that are not in this tree (`videoLib2`, `svsentry`, `SIOWrapper`, sometimes inside the LFS `libs` archive):
 
