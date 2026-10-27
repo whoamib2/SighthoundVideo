@@ -41,6 +41,16 @@ def _sep(platform: str) -> str:
     return ";" if platform == "win32" else ":"
 
 
+def _data_arg(source: Path, dest: str, sep: str) -> str:
+    """One PyInstaller --add-data value. Spaces are kept; the separator is not."""
+    text = str(source)
+    if sep in text:
+        raise ValueError(
+            "Cannot pack %s because that path contains %r" % (text, sep)
+        )
+    return "%s%s%s" % (text, sep, dest)
+
+
 def _importable(name: str) -> bool:
     try:
         __import__(name)
@@ -90,17 +100,17 @@ def pyinstaller_command(
     for relative in _DATA_DIRS:
         source = root / relative
         if source.is_dir():
-            command.extend(["--add-data", f"{source}{sep}{relative}"])
+            command.extend(["--add-data", _data_arg(source, relative, sep)])
     sounds = root / "frontEnd" / "sounds"
     if sounds.is_dir():
-        command.extend(["--add-data", f"{sounds}{sep}frontEnd/sounds"])
+        command.extend(["--add-data", _data_arg(sounds, "frontEnd/sounds", sep)])
     models = root / "models"
     if models.is_dir():
         for path in sorted(models.iterdir()):
             if not path.is_file():
                 continue
             if path.suffix.lower() == ".onnx" or path.name.endswith(".onnx.json"):
-                command.extend(["--add-data", f"{path}{sep}models"])
+                command.extend(["--add-data", _data_arg(path, "models", sep)])
     for binary in extra_binaries or []:
         command.extend(["--add-binary", binary])
     if windowed:

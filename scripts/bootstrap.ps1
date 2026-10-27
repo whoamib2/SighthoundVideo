@@ -77,7 +77,7 @@ if (-not $root) {
     Write-Host "Using checkout $root"
 }
 
-Set-Location $root
+Set-Location -LiteralPath $root
 $status = & git status --porcelain
 if ($LASTEXITCODE -ne 0) { throw "git status failed." }
 if ($status) {
