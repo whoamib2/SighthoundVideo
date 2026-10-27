@@ -36,7 +36,7 @@ Empty environment variables disable a default file. For example `SIGHTHOUND_FACE
 
 ## Windows
 
-* Python 3.11 or 3.12.
+* The Windows build prefers Python 3.14. 3.11 through 3.13 still work. 3.15 is refused because onnxruntime-directml 1.24.4 has no cp315 wheel.
 * `scripts\build_windows.ps1` installs `onnxruntime-directml`. The detector uses DirectML when that provider loads, and CPU otherwise.
 * The same script downloads YOLOX-Nano, plate OCR, YuNet, and SFace, and with `-Package` copies them into `dist\SighthoundVideo-Setup.exe`. The installed app works offline. Those weights are about 45 MB.
 * CUDA: install `onnxruntime-gpu` and a matching CUDA driver. `CUDAExecutionProvider` is selected on Windows and Linux when it is present.

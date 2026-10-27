@@ -15,7 +15,7 @@ param(
 
 $ErrorActionPreference = 'Stop'
 $Root = Split-Path -Parent $PSScriptRoot
-Set-Location $Root
+Set-Location -LiteralPath $Root
 
 $script:NativeStatus = 'not started'
 $script:InstallerPath = ''
@@ -67,44 +67,70 @@ function Install-WithWinget {
     return $false
 }
 
-function Find-PythonExecutable {
+# Newest first. 3.14 is preferred. 3.15+ is refused: onnxruntime-directml 1.24.4
+# has no Windows amd64 cp315 wheel. See scripts\windows_python.py.
+$script:AllowedVersions = @('3.14', '3.13', '3.12', '3.11')
+
+function Get-PythonMM([string]$Exe) {
+    if (-not $Exe -or -not (Test-Path -LiteralPath $Exe)) { return $null }
+    $out = & $Exe -c 'import sys; print("%d.%d" % (sys.version_info[0], sys.version_info[1]))'
+    if ($LASTEXITCODE -ne 0 -or -not $out) { return $null }
+    return ($out | Select-Object -Last 1).ToString().Trim()
+}
+
+function Find-VersionedPython([string]$Version) {
     if (Test-Tool 'py') {
-        $listed = & py -3 -c "import sys; print(sys.executable)"
-        if ($LASTEXITCODE -eq 0 -and $listed) {
-            $exe = ($listed | Select-Object -Last 1).ToString().Trim()
-            if ($exe -and (Test-Path $exe)) {
-                & $exe -c "import sys; raise SystemExit(0 if sys.version_info >= (3, 11) else 1)"
-                if ($LASTEXITCODE -eq 0) { return $exe }
+        $out = & py "-$Version" -c 'import sys; print(sys.executable)' 2>$null
+        if ($LASTEXITCODE -eq 0 -and $out) {
+            $exe = ($out | Select-Object -Last 1).ToString().Trim()
+            if ($exe -and (Test-Path -LiteralPath $exe)) {
+                $mm = Get-PythonMM $exe
+                if ($mm -eq $Version) { return $exe }
             }
         }
     }
-    if (Test-Tool 'python') {
-        $cmd = Get-Command python
-        & $cmd.Source -c "import sys; raise SystemExit(0 if sys.version_info >= (3, 11) else 1)"
-        if ($LASTEXITCODE -eq 0) { return $cmd.Source }
-    }
+    $tag = 'Python' + $Version.Replace('.', '')
     $candidates = @(
-        (Join-Path $env:LocalAppData 'Programs\Python\Python312\python.exe'),
-        (Join-Path $env:LocalAppData 'Programs\Python\Python311\python.exe'),
-        (Join-Path $env:ProgramFiles 'Python312\python.exe'),
-        (Join-Path $env:ProgramFiles 'Python311\python.exe')
+        (Join-Path $env:LocalAppData "Programs\Python\$tag\python.exe"),
+        (Join-Path $env:ProgramFiles "$tag\python.exe")
     )
     foreach ($path in $candidates) {
-        if (Test-Path $path) {
-            & $path -c "import sys; raise SystemExit(0 if sys.version_info >= (3, 11) else 1)"
-            if ($LASTEXITCODE -eq 0) { return $path }
+        if ($path -and (Test-Path -LiteralPath $path)) {
+            $mm = Get-PythonMM $path
+            if ($mm -eq $Version) { return $path }
         }
     }
     return $null
 }
 
+function Find-BasePython {
+    foreach ($version in $script:AllowedVersions) {
+        $exe = Find-VersionedPython $version
+        if ($exe) {
+            # A bare hashtable is unrolled into the pipeline. A PSCustomObject stays one object.
+            return [pscustomobject]@{ Exe = $exe; Version = $version }
+        }
+    }
+    return $null
+}
+
+function Write-PythonPolicy([string]$Chosen) {
+    Write-Host "Windows build prefers Python 3.14 (py -3.14)."
+    Write-Host "cp314 win_amd64 wheels: wxPython 4.3.2, numpy 2.5.4, Pillow 13.0.0, onnxruntime-directml 1.24.4."
+    Write-Host "Installed on 3.14 from another tag: PyAV 19.0.2 (cp312-abi3), onnx 1.23.2 (cp312-abi3), opencv-python-headless 5.0.0.93 (cp37-abi3), PyInstaller 6.22.3 (py3-none-win_amd64)."
+    Write-Host "Python 3.15 and newer are refused: onnxruntime-directml 1.24.4 has no Windows amd64 cp315 wheel."
+    if ($Chosen -and $Chosen -ne '3.14') {
+        Write-Host "Python 3.14 was not found. Using Python $Chosen." -ForegroundColor Yellow
+    }
+}
+
 function Find-Msvc2022 {
     $vswhere = Join-Path ${env:ProgramFiles(x86)} 'Microsoft Visual Studio\Installer\vswhere.exe'
-    if (-not (Test-Path $vswhere)) { return $null }
+    if (-not (Test-Path -LiteralPath $vswhere)) { return $null }
     $install = & $vswhere -latest -version "[17.0,18.0)" -products * -requires Microsoft.VisualStudio.Component.VC.Tools.x86.x64 -property installationPath
     if ($LASTEXITCODE -ne 0 -or -not $install) { return $null }
     $path = ($install | Select-Object -Last 1).ToString().Trim()
-    if ($path -and (Test-Path $path)) { return $path }
+    if ($path -and (Test-Path -LiteralPath $path)) { return $path }
     return $null
 }
 
@@ -118,7 +144,7 @@ function Find-Cmake([string]$VsRoot) {
     }
     $candidates += (Join-Path $env:ProgramFiles 'CMake\bin\cmake.exe')
     foreach ($path in $candidates) {
-        if ($path -and (Test-Path $path)) { return $path }
+        if ($path -and (Test-Path -LiteralPath $path)) { return $path }
     }
     return $null
 }
@@ -129,7 +155,7 @@ function Find-Iscc {
         (Join-Path $env:ProgramFiles 'Inno Setup 6\ISCC.exe')
     )
     foreach ($path in $candidates) {
-        if (Test-Path $path) { return $path }
+        if (Test-Path -LiteralPath $path) { return $path }
     }
     if (Test-Tool 'ISCC') { return (Get-Command ISCC).Source }
     return $null
@@ -138,21 +164,21 @@ function Find-Iscc {
 function Invoke-ModelFetch([string]$Python) {
     $detector = Join-Path $Root 'scripts\fetch_detector_model.py'
     $attributes = Join-Path $Root 'scripts\fetch_attribute_models.py'
-    if (-not (Test-Path $detector) -and -not (Test-Path $attributes)) {
+    if (-not (Test-Path -LiteralPath $detector) -and -not (Test-Path -LiteralPath $attributes)) {
         Write-Host "No model fetch script is in this checkout."
         return
     }
     $models = Join-Path $Root 'models'
     New-Item -ItemType Directory -Force -Path $models | Out-Null
-    if (Test-Path $detector) {
+    if (Test-Path -LiteralPath $detector) {
         $dest = Join-Path $models 'yolox_nano.onnx'
-        if (Test-Path $dest) {
+        if (Test-Path -LiteralPath $dest) {
             Write-Host "Detector weights already present: $dest"
         } else {
             Invoke-Checked "Fetching YOLOX-Nano (Apache-2.0)" { & $Python $detector }
         }
     }
-    if (Test-Path $attributes) {
+    if (Test-Path -LiteralPath $attributes) {
         $needed = @(
             'plate_ocr_cct_xs.onnx',
             'face_detector_yunet.onnx',
@@ -160,7 +186,7 @@ function Invoke-ModelFetch([string]$Python) {
         )
         $missing = @()
         foreach ($name in $needed) {
-            if (-not (Test-Path (Join-Path $models $name))) { $missing += $name }
+            if (-not (Test-Path -LiteralPath (Join-Path $models $name))) { $missing += $name }
         }
         if ($missing.Count -eq 0) {
             Write-Host "Plate and face weights already present."
@@ -180,32 +206,38 @@ if ($Package) {
     Write-Host "Installer: no (pass -Package to build dist\SighthoundVideo-Setup.exe)"
 }
 
-$pythonBase = Find-PythonExecutable
-if (-not $pythonBase) {
-    $installed = Install-WithWinget 'Python.Python.3.12' 'Python 3.12' { return [bool](Find-PythonExecutable) }
+$chosen = Find-BasePython
+if (-not $chosen) {
+    $installed = Install-WithWinget 'Python.Python.3.14' 'Python 3.14' { return [bool](Find-BasePython) }
     if (-not $installed) {
-        throw "Python 3.11 or newer was not found. Install it, then re-run scripts\build_windows.ps1."
+        throw "Python 3.14, 3.13, 3.12, or 3.11 was not found. Python 3.15 and newer are refused because onnxruntime-directml 1.24.4 has no Windows amd64 cp315 wheel. Install Python 3.14, then re-run scripts\build_windows.ps1."
     }
-    $pythonBase = Find-PythonExecutable
+    $chosen = Find-BasePython
 }
-if (-not $pythonBase) {
-    throw "Python 3.11 or newer was not found after the winget install."
+if (-not $chosen) {
+    throw "Python 3.14 was not found after the winget install."
 }
+$pythonBase = $chosen.Exe
+Write-PythonPolicy $chosen.Version
 Write-Host "Base Python: $pythonBase"
 
 $venvPython = Join-Path $Root '.venv\Scripts\python.exe'
+$venvDir = Join-Path $Root '.venv'
 $reuseVenv = $false
-if (Test-Path $venvPython) {
-    & $venvPython -c "import sys; raise SystemExit(0 if sys.version_info >= (3, 11) else 1)"
-    if ($LASTEXITCODE -eq 0) { $reuseVenv = $true }
+if (Test-Path -LiteralPath $venvPython) {
+    $venvMM = Get-PythonMM $venvPython
+    if ($venvMM -eq $chosen.Version) {
+        $reuseVenv = $true
+    } else {
+        Write-Host "Existing .venv is Python $venvMM. Recreating it with Python $($chosen.Version)."
+    }
 }
 if ($reuseVenv) {
-    Write-Host "Using existing .venv"
+    Write-Host "Using existing .venv (Python $($chosen.Version))"
 } else {
-    Write-Step "Creating .venv"
-    $venvDir = Join-Path $Root '.venv'
-    if (Test-Path $venvDir) {
-        Remove-Item -Recurse -Force $venvDir
+    Write-Step "Creating .venv with Python $($chosen.Version)"
+    if (Test-Path -LiteralPath $venvDir) {
+        Remove-Item -LiteralPath $venvDir -Recurse -Force
     }
     & $pythonBase -m venv $venvDir
     if ($LASTEXITCODE -ne 0) { throw "Could not create .venv." }
@@ -215,11 +247,17 @@ $Python = $venvPython
 Invoke-Checked "Installing Python dependencies" {
     & $Python -m pip install --upgrade pip
     if ($LASTEXITCODE -ne 0) { return }
+    # '{0}[extras]' keeps a path with spaces as one argument. "$Root[extras]" is not safe:
+    # PowerShell treats $Root[ as an index.
+    $pyproject = Get-Content -LiteralPath (Join-Path $Root 'pyproject.toml') -Raw
+    $extras = @('dev')
     if ($Package) {
-        & $Python -m pip install -e ".[dev,vision,package]"
-    } else {
-        & $Python -m pip install -e ".[dev]"
+        $extras += 'package'
+        if ($pyproject -match '(?m)^vision\s*=') { $extras += 'vision' }
     }
+    $editable = '{0}[{1}]' -f $Root, ($extras -join ',')
+    Write-Host "pip install -e $editable"
+    & $Python -m pip install -e $editable
 }
 # The editable install pulls the CPU onnxruntime package. Replace it so the
 # venv and the PyInstaller bundle ship one runtime that uses DirectML or CPU.
@@ -276,7 +314,7 @@ if ($Package) {
         & $Python (Join-Path $Root 'scripts\package_app.py') --windowed
     }
     $bundle = Join-Path $Root 'dist\SighthoundVideo\SighthoundVideo.exe'
-    if (-not (Test-Path $bundle)) {
+    if (-not (Test-Path -LiteralPath $bundle)) {
         throw "PyInstaller did not write $bundle."
     }
     $iscc = Find-Iscc
@@ -291,7 +329,7 @@ if ($Package) {
     $iss = Join-Path $Root 'installer\SighthoundVideo.iss'
     Invoke-Checked "Inno Setup" { & $iscc $iss }
     $script:InstallerPath = Join-Path $Root 'dist\SighthoundVideo-Setup.exe'
-    if (-not (Test-Path $script:InstallerPath)) {
+    if (-not (Test-Path -LiteralPath $script:InstallerPath)) {
         throw "Inno Setup finished without writing $($script:InstallerPath)."
     }
 }

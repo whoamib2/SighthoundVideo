@@ -15,8 +15,9 @@ def _load():
 
 
 def test_windows_bundle_is_one_folder_and_packs_models(tmp_path):
-    models = tmp_path / "models"
-    models.mkdir()
+    root = tmp_path / "App Dev"
+    models = root / "models"
+    models.mkdir(parents=True)
     weight = models / "yolox_nano.onnx"
     weight.write_bytes(b"not a real model")
     sidecar = models / "yolox_nano.onnx.json"
@@ -24,7 +25,7 @@ def test_windows_bundle_is_one_folder_and_packs_models(tmp_path):
     readme = models / "README.md"
     readme.write_text("skip", encoding="utf-8")
 
-    command = _load().pyinstaller_command(tmp_path, platform="win32", windowed=True)
+    command = _load().pyinstaller_command(root, platform="win32", windowed=True)
     assert "--onedir" in command
     assert "--onefile" not in command
     contents = command[command.index("--contents-directory") + 1]
@@ -36,4 +37,6 @@ def test_windows_bundle_is_one_folder_and_packs_models(tmp_path):
     assert str(sidecar) in blob
     assert "README.md" not in blob
     assert any(item.endswith(";models") or item.endswith(":models") for item in packed)
-    assert command[-1] == str(tmp_path / "FrontEndLaunchpad.py")
+    assert command[-1] == str(root / "FrontEndLaunchpad.py")
+    data_values = [command[index + 1] for index, item in enumerate(command) if item == "--add-data"]
+    assert any("App Dev" in item and item.endswith(";models") for item in data_values)

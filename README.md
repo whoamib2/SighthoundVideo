@@ -42,7 +42,9 @@ powershell -NoProfile -ExecutionPolicy Bypass -File scripts\bootstrap.ps1 -Packa
 
 `scripts\bootstrap.ps1` updates the checkout (or clones the repository when you point it at an empty directory) and runs `scripts\build_windows.ps1`. Pass `-Branch cursor/python3-port-phase3-0735` when the script is not already inside a checkout.
 
-`scripts\build_windows.ps1` is safe to re-run. It reuses `.venv`, downloads YOLOX-Nano, the plate OCR model, YuNet, and SFace when those files are missing, runs ruff, compileall, and pytest, and builds the CMake projects when MSVC 2022 is installed. With `-Package` it installs PyInstaller and, through winget, Inno Setup when that compiler is missing. If winget itself is missing, the script says so and stops before the installer step. MSVC 2022 is optional: when it is absent the script prints a message and continues. The native projects are `optsearches`, `launch`, and `xnat`.
+The build prefers Python 3.14 (`py -3.14`). Checked on PyPI on 2026-10-27: wxPython 4.3.2, numpy 2.5.4, Pillow 13.0.0, and onnxruntime-directml 1.24.4 publish Windows amd64 cp314 wheels. PyAV 19.0.2 and onnx 1.23.2 install on 3.14 from cp312 stable-ABI wheels (their cp314t files are free-threaded only). opencv-python-headless 5.0.0.93 installs from a cp37 stable-ABI wheel. PyInstaller 6.22.3 publishes `py3-none-win_amd64`. Python 3.15 is refused because onnxruntime-directml 1.24.4 has no cp315 wheel. If 3.14 is not installed, the script uses 3.13, then 3.12, then 3.11, and says so. `requires-python` stays `>=3.11`. An existing `.venv` from another version is recreated. Paths with spaces, such as `C:\App Dev\SighthoundVideo`, are passed as single arguments.
+
+`scripts\build_windows.ps1` is safe to re-run. It reuses `.venv` when that environment is already the chosen Python, downloads YOLOX-Nano, the plate OCR model, YuNet, and SFace when those files are missing, runs ruff, compileall, and pytest, and builds the CMake projects when MSVC 2022 is installed. With `-Package` it installs PyInstaller and, through winget, Inno Setup when that compiler is missing. If winget itself is missing, the script says so and stops before the installer step. MSVC 2022 is optional: when it is absent the script prints a message and continues. The native projects are `optsearches`, `launch`, and `xnat`.
 
 The package is a PyInstaller one-folder bundle. Python, wxPython, PyAV/FFmpeg, and ONNX Runtime DirectML are inside the folder, so the installed app does not need Python. Inno Setup adds Start menu and desktop shortcuts, an uninstaller, and an optional "start with Windows" task. The finished file is `dist\SighthoundVideo-Setup.exe`, and the script prints that path.
 
@@ -97,7 +99,7 @@ What is left:
 
 ### Windows setup
 
-* Python 3.11 or 3.12, 64-bit, only on the machine that builds the installer. People who run `dist\SighthoundVideo-Setup.exe` do not install Python.
+* Python 3.14 is what `scripts\build_windows.ps1` selects on the build PC. 3.13, 3.12, and 3.11 are fallbacks. People who run `dist\SighthoundVideo-Setup.exe` do not install Python.
 * `scripts\build_windows.ps1` creates `.venv` and installs Pillow, requests, wxPython, numpy, PyAV, pytest, ruff, and the `onnx` package used to build the tiny test detector. It then installs `onnxruntime-directml` in place of the CPU `onnxruntime` package.
 * wxPython wheels need the Visual C++ runtime that the wheel documents. Capture itself does not need Visual Studio once PyAV is installed.
 * CPU inference needs no GPU. `onnxruntime-directml` uses the GPU when DirectML is available and the CPU otherwise.
