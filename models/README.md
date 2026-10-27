@@ -17,7 +17,7 @@ Plate text, face identity, and delivery carrier are fields on the detection JSON
 ## Windows
 
 * Python 3.11 or 3.12.
-* `scripts\build_windows.ps1` installs `onnxruntime-directml`. The detector uses DirectML when that provider loads, and CPU otherwise.
+* `scripts\build_windows.ps1` installs `onnxruntime-directml` and does not install the CPU `onnxruntime` wheel. The detector uses DirectML when that provider loads, and CPU otherwise.
 * The same script downloads `models/yolox_nano.onnx` and, with `-Package`, copies it into `dist\SighthoundVideo-Setup.exe`.
 * CUDA: install `onnxruntime-gpu` and a matching CUDA driver. `CUDAExecutionProvider` is selected on Windows and Linux when it is present.
 * USB cameras: `pip install opencv-python-headless`. DirectShow is used on Windows. RTSP, HTTP, and files use PyAV and do not need OpenCV.

@@ -14,14 +14,17 @@ dependencies = [
     "wxPython>=4.2",
     "numpy>=1.26",
     "av>=12",
-    "onnxruntime>=1.18",
+    # The CPU wheel and onnxruntime-directml both install the onnxruntime
+    # package. Windows must not depend on the CPU wheel.
+    "onnxruntime>=1.18; sys_platform != 'win32'",
+    "onnxruntime-directml>=1.18; sys_platform == 'win32'",
 ]
 
 [project.optional-dependencies]
 package = ["pyinstaller>=6"]
 # onnx builds the tiny test detector. opencv-python-headless is the USB camera
-# option (DirectShow on Windows). onnxruntime-directml replaces onnxruntime on
-# Windows when DirectML is wanted; do not install both.
+# option (DirectShow on Windows). Windows already depends on
+# onnxruntime-directml; do not also install the CPU onnxruntime wheel.
 vision = ["opencv-python-headless>=4.8"]
 dev = ["pytest>=8", "ruff>=0.6", "onnx>=1.16"]
 

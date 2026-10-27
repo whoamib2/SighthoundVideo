@@ -315,11 +315,24 @@ Invoke-Checked "Installing Python dependencies" {
     Write-Host "pip install -e $editable"
     & $Python -m pip install -e $editable
 }
-# The editable install pulls the CPU onnxruntime package. Replace it so the
-# venv and the PyInstaller bundle ship one runtime that uses DirectML or CPU.
-Invoke-Checked "Installing ONNX Runtime DirectML" {
-    & $Python -m pip uninstall -y onnxruntime onnxruntime-gpu
-    & $Python -m pip install 'onnxruntime-directml>=1.18'
+# The CPU wheel and onnxruntime-directml both own the onnxruntime/ directory.
+# Uninstalling the CPU wheel deletes those files, and a later DirectML install
+# can report "already satisfied" and leave get_available_providers missing.
+# pyproject.toml selects DirectML on Windows. This step still repairs a venv
+# that already has the broken mix.
+Write-Step "Installing ONNX Runtime DirectML"
+Invoke-Native { & $Python -m pip uninstall -y onnxruntime onnxruntime-gpu }
+Write-Host "Removed onnxruntime and onnxruntime-gpu if they were installed (exit $LASTEXITCODE)."
+Invoke-Native { & $Python -m pip install --force-reinstall --no-deps 'onnxruntime-directml>=1.18' }
+if ($LASTEXITCODE -ne 0) {
+    throw "Could not force-reinstall onnxruntime-directml."
+}
+# No double quotes: Windows PowerShell 5.1 strips them from python -c.
+$ortProbe = 'import onnxruntime as ort; import sys; sys.stdout.write(str(ort.get_available_providers())+chr(10))'
+Write-Host "Checking onnxruntime.get_available_providers"
+Invoke-Native { & $Python -c $ortProbe }
+if ($LASTEXITCODE -ne 0) {
+    throw "onnxruntime.get_available_providers failed. onnxruntime-directml is not importable."
 }
 
 Invoke-ModelFetch $Python
