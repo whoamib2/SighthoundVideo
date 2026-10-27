@@ -31,7 +31,23 @@ What this port covers:
 * Dependencies in `pyproject.toml`. The desktop UI needs `wxPython`; tests and lint need the `dev` extra (`pytest`, `ruff`) plus Pillow and requests.
 * CMake 3.20 projects for `launch`, `xnat`, `backEnd/triggers` (`optsearches`), and `vitaToolbox/path` (`volumeUtils`, Apple only), aimed at MSVC 2022 and current clang/gcc.
 * Packaging through `scripts/package_app.py` (PyInstaller). `frontEnd/setup-Win.py` and `frontEnd/setup-Mac.py` delegate to it.
-* GitHub Actions on `ubuntu-latest` and `windows-latest`.
+* A local Windows build: `scripts\build_windows.ps1` creates `.venv`, installs dependencies, fetches any model scripts this checkout has, runs ruff, compileall, and pytest, and builds the CMake projects when MSVC 2022 is installed.
+
+### Windows installer
+
+End users run `dist\SighthoundVideo-Setup.exe`. A developer produces it on a Windows PC. From a checkout of this branch:
+
+```powershell
+powershell -NoProfile -ExecutionPolicy Bypass -File scripts\bootstrap.ps1 -Package
+```
+
+`scripts\bootstrap.ps1` updates the checkout (or clones the repository when you point it at an empty directory) and runs `scripts\build_windows.ps1`. Pass `-Branch cursor/python3-port-phase1-0735` when the script is not already inside a checkout.
+
+`scripts\build_windows.ps1` is safe to re-run. It reuses `.venv`. With `-Package` it installs PyInstaller and, through winget, Inno Setup when that compiler is missing. If winget itself is missing, the script says so and stops before the installer step. MSVC 2022 is optional: when it is absent the script prints a message and continues. The native projects are `optsearches`, `launch`, and `xnat`.
+
+The package is a PyInstaller one-folder bundle. Python, wxPython, PyAV/FFmpeg, and ONNX Runtime DirectML are inside the folder, so the installed app does not need Python. Inno Setup adds Start menu and desktop shortcuts, an uninstaller, and an optional "start with Windows" task. The finished file is `dist\SighthoundVideo-Setup.exe`, and the script prints that path.
+
+The Windows build installs `onnxruntime-directml`. The app uses the GPU when DirectML is available and the CPU otherwise. Model fetch scripts, when this checkout has them, download weights during the build and the installer copies those files into the app folder so it works offline. The downloaded detector and attribute weights are about 45 MB, small enough to ship in the installer.
 
 What is still blocked by closed binaries that are not in this tree (`videoLib2`, `svsentry`, `SIOWrapper`, sometimes inside the LFS `libs` archive):
 

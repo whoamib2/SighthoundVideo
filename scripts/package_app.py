@@ -4,6 +4,12 @@ The historical Windows build used py2exe and the Mac build used cx_Freeze.
 Both entry points (``frontEnd/setup-Win.py`` and ``frontEnd/setup-Mac.py``)
 delegate here.
 
+``scripts/build_windows.ps1 -Package`` calls this, then wraps the one-folder
+bundle with Inno Setup. The bundle contains the Python runtime, wxPython,
+PyAV (and its FFmpeg libraries), and ONNX Runtime, so the installed app does
+not need a Python install. On Windows the files sit next to the executable,
+which is where the frozen app already looks for ``models``.
+
 Closed binaries (``videoLib2``, ``svsentry``, ``SIOWrapper``) are not part of
 this source tree. When a replacement or a legacy build of those libraries is
 available, pass each one with ``--add-binary``:
@@ -28,18 +34,79 @@ _DATA_DIRS = (
     "config",
 )
 
+_COLLECT_ALL = ("wx", "av", "onnxruntime", "PIL", "numpy", "cv2")
 
-def _existing_datas() -> list[str]:
-    args: list[str] = []
+
+def _sep(platform: str) -> str:
+    return ";" if platform == "win32" else ":"
+
+
+def _importable(name: str) -> bool:
+    try:
+        __import__(name)
+    except Exception:
+        return False
+    return True
+
+
+def pyinstaller_command(
+    root: Path,
+    *,
+    name: str = "SighthoundVideo",
+    distpath: Path | None = None,
+    workpath: Path | None = None,
+    extra_binaries: list[str] | None = None,
+    windowed: bool = False,
+    platform: str | None = None,
+) -> list[str]:
+    """Arguments for a one-folder PyInstaller build, excluding the tool name."""
+    system = platform or sys.platform
+    sep = _sep(system)
+    dist = distpath or (root / "dist")
+    work = workpath or (root / "build" / "pyinstaller")
+    command = [
+        "--noconfirm",
+        "--clean",
+        "--onedir",
+        "--name",
+        name,
+        "--distpath",
+        str(dist),
+        "--workpath",
+        str(work),
+        "--specpath",
+        str(root / "build"),
+        "--paths",
+        str(root),
+    ]
+    # The frozen Windows app looks for models beside the executable.
+    if system == "win32":
+        command.extend(["--contents-directory", "."])
+    for module_name in ("backEnd", "frontEnd", "vitaToolbox", "appCommon", "launch", "xnat"):
+        command.extend(["--collect-submodules", module_name])
+    for module_name in _COLLECT_ALL:
+        if _importable(module_name):
+            command.extend(["--collect-all", module_name])
     for relative in _DATA_DIRS:
-        source = ROOT / relative
+        source = root / relative
         if source.is_dir():
-            args.extend(["--add-data", f"{source}{';' if sys.platform == 'win32' else ':'}{relative}"])
-    sounds = ROOT / "frontEnd" / "sounds"
+            command.extend(["--add-data", f"{source}{sep}{relative}"])
+    sounds = root / "frontEnd" / "sounds"
     if sounds.is_dir():
-        sep = ";" if sys.platform == "win32" else ":"
-        args.extend(["--add-data", f"{sounds}{sep}frontEnd/sounds"])
-    return args
+        command.extend(["--add-data", f"{sounds}{sep}frontEnd/sounds"])
+    models = root / "models"
+    if models.is_dir():
+        for path in sorted(models.iterdir()):
+            if not path.is_file():
+                continue
+            if path.suffix.lower() == ".onnx" or path.name.endswith(".onnx.json"):
+                command.extend(["--add-data", f"{path}{sep}models"])
+    for binary in extra_binaries or []:
+        command.extend(["--add-binary", binary])
+    if windowed:
+        command.append("--windowed")
+    command.append(str(root / "FrontEndLaunchpad.py"))
+    return command
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -65,38 +132,16 @@ def main(argv: list[str] | None = None) -> int:
         )
         return 1
 
-    command = [
-        "--noconfirm",
-        "--clean",
-        "--name",
-        args.name,
-        "--distpath",
-        args.distpath,
-        "--workpath",
-        args.workpath,
-        "--specpath",
-        str(ROOT / "build"),
-        "--paths",
-        str(ROOT),
-        "--collect-submodules",
-        "backEnd",
-        "--collect-submodules",
-        "frontEnd",
-        "--collect-submodules",
-        "vitaToolbox",
-        "--collect-submodules",
-        "appCommon",
-        "--collect-submodules",
-        "launch",
-        "--collect-submodules",
-        "xnat",
-    ]
-    command.extend(_existing_datas())
-    for binary in args.add_binary:
-        command.extend(["--add-binary", binary])
-    if args.windowed:
-        command.append("--windowed")
-    command.append(str(ROOT / "FrontEndLaunchpad.py"))
+    command = pyinstaller_command(
+        ROOT,
+        name=args.name,
+        distpath=Path(args.distpath),
+        workpath=Path(args.workpath),
+        extra_binaries=args.add_binary,
+        windowed=args.windowed,
+    )
+    folder = Path(args.distpath) / args.name
+    print("PyInstaller one-folder bundle: %s" % folder)
     pyinstaller_run(command)
     return 0
 
