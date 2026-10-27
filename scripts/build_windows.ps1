@@ -13,6 +13,14 @@ param(
     [switch]$Package
 )
 
+# Stop applies to cmdlets. Native stderr must not stop the script: Windows
+# PowerShell 5.1 turns it into a terminating NativeCommandError, and PowerShell
+# 7 does the same for a non-zero exit when PSNativeCommandUseErrorActionPreference
+# is true. Invoke-Native turns that off for each native command.
+if (Test-Path variable:PSNativeCommandUseErrorActionPreference) {
+    $PSNativeCommandUseErrorActionPreference = $false
+    $global:PSNativeCommandUseErrorActionPreference = $false
+}
 $ErrorActionPreference = 'Stop'
 $Root = Split-Path -Parent $PSScriptRoot
 Set-Location -LiteralPath $Root
@@ -29,14 +37,57 @@ function Test-Tool([string]$Name) {
     return [bool](Get-Command $Name -ErrorAction SilentlyContinue)
 }
 
+function Invoke-Native {
+    param(
+        [Parameter(Mandatory = $true)][scriptblock]$Command,
+        [switch]$Quiet
+    )
+    # Local and global: 5.1 promotes native stderr using the preference it
+    # finds, and a scriptblock inherits the preference of the function that
+    # invokes it. PowerShell 7's native-exit preference is turned off too.
+    $previousLocal = $ErrorActionPreference
+    $previousGlobal = $global:ErrorActionPreference
+    $ErrorActionPreference = 'Continue'
+    $global:ErrorActionPreference = 'Continue'
+    $restoreNative = $false
+    $previousNative = $false
+    if (Test-Path variable:PSNativeCommandUseErrorActionPreference) {
+        $restoreNative = $true
+        $previousNative = $PSNativeCommandUseErrorActionPreference
+        $PSNativeCommandUseErrorActionPreference = $false
+        $global:PSNativeCommandUseErrorActionPreference = $false
+    }
+    $global:LASTEXITCODE = 0
+    $code = 0
+    try {
+        # 2>&1 makes stderr an ErrorRecord in the pipeline instead of a
+        # terminating error. Stdout is returned. Stderr is printed.
+        & $Command 2>&1 | ForEach-Object {
+            if ($_ -is [System.Management.Automation.ErrorRecord]) {
+                if (-not $Quiet) { Write-Host $_.ToString() }
+            } else {
+                $_
+            }
+        }
+        $code = $global:LASTEXITCODE
+    } finally {
+        $ErrorActionPreference = $previousLocal
+        $global:ErrorActionPreference = $previousGlobal
+        if ($restoreNative) {
+            $PSNativeCommandUseErrorActionPreference = $previousNative
+            $global:PSNativeCommandUseErrorActionPreference = $previousNative
+        }
+    }
+    $global:LASTEXITCODE = $code
+}
+
 function Invoke-Checked {
     param(
         [Parameter(Mandatory = $true)][string]$Label,
         [Parameter(Mandatory = $true)][scriptblock]$Action
     )
     Write-Step $Label
-    $global:LASTEXITCODE = 0
-    & $Action
+    Invoke-Native $Action
     if ($LASTEXITCODE -ne 0) {
         throw "$Label failed (exit $LASTEXITCODE)."
     }
@@ -58,7 +109,7 @@ function Install-WithWinget {
         return $false
     }
     Write-Step "Installing $Label ($Id)"
-    & winget install --id $Id -e --accept-package-agreements --accept-source-agreements --disable-interactivity
+    Invoke-Native { & winget install --id $Id -e --accept-package-agreements --accept-source-agreements --disable-interactivity }
     if (& $Verify) {
         Write-Host "$Label is ready."
         return $true
@@ -73,14 +124,19 @@ $script:AllowedVersions = @('3.14', '3.13', '3.12', '3.11')
 
 function Get-PythonMM([string]$Exe) {
     if (-not $Exe -or -not (Test-Path -LiteralPath $Exe)) { return $null }
-    $out = & $Exe -c 'import sys; print("%d.%d" % (sys.version_info[0], sys.version_info[1]))'
+    # Same text as scripts\windows_python.py VERSION_PROBE. No quote characters:
+    # Windows PowerShell 5.1 strips them from arguments to python.exe.
+    $probe = 'import sys; sys.stdout.write(str(sys.version_info[0])+chr(46)+str(sys.version_info[1])+chr(10))'
+    $out = Invoke-Native { & $Exe -c $probe }
     if ($LASTEXITCODE -ne 0 -or -not $out) { return $null }
     return ($out | Select-Object -Last 1).ToString().Trim()
 }
 
 function Find-VersionedPython([string]$Version) {
     if (Test-Tool 'py') {
-        $out = & py "-$Version" -c 'import sys; print(sys.executable)' 2>$null
+        # Same text as scripts\windows_python.py EXECUTABLE_PROBE. No quote characters.
+        $probe = 'import sys; sys.stdout.write(sys.executable+chr(10))'
+        $out = Invoke-Native -Quiet { & py "-$Version" -c $probe }
         if ($LASTEXITCODE -eq 0 -and $out) {
             $exe = ($out | Select-Object -Last 1).ToString().Trim()
             if ($exe -and (Test-Path -LiteralPath $exe)) {
@@ -127,7 +183,7 @@ function Write-PythonPolicy([string]$Chosen) {
 function Find-Msvc2022 {
     $vswhere = Join-Path ${env:ProgramFiles(x86)} 'Microsoft Visual Studio\Installer\vswhere.exe'
     if (-not (Test-Path -LiteralPath $vswhere)) { return $null }
-    $install = & $vswhere -latest -version "[17.0,18.0)" -products * -requires Microsoft.VisualStudio.Component.VC.Tools.x86.x64 -property installationPath
+    $install = Invoke-Native { & $vswhere -latest -version '[17.0,18.0)' -products * -requires Microsoft.VisualStudio.Component.VC.Tools.x86.x64 -property installationPath }
     if ($LASTEXITCODE -ne 0 -or -not $install) { return $null }
     $path = ($install | Select-Object -Last 1).ToString().Trim()
     if ($path -and (Test-Path -LiteralPath $path)) { return $path }
@@ -239,7 +295,7 @@ if ($reuseVenv) {
     if (Test-Path -LiteralPath $venvDir) {
         Remove-Item -LiteralPath $venvDir -Recurse -Force
     }
-    & $pythonBase -m venv $venvDir
+    Invoke-Native { & $pythonBase -m venv $venvDir }
     if ($LASTEXITCODE -ne 0) { throw "Could not create .venv." }
 }
 $Python = $venvPython
@@ -263,7 +319,7 @@ Invoke-Checked "Installing Python dependencies" {
 # venv and the PyInstaller bundle ship one runtime that uses DirectML or CPU.
 Invoke-Checked "Installing ONNX Runtime DirectML" {
     & $Python -m pip uninstall -y onnxruntime onnxruntime-gpu
-    & $Python -m pip install "onnxruntime-directml>=1.18"
+    & $Python -m pip install 'onnxruntime-directml>=1.18'
 }
 
 Invoke-ModelFetch $Python
@@ -298,8 +354,10 @@ if (-not $vsRoot) {
         foreach ($project in $projects) {
             $source = Join-Path $Root $project.Source
             $build = Join-Path $Root $project.Build
+            # The generator name is one argument. Do not put a " character in it:
+            # Windows PowerShell 5.1 strips those from native arguments.
             Invoke-Checked "Configure $($project.Name)" {
-                & $cmake -S $source -B $build -G "Visual Studio 17 2022" -A x64
+                & $cmake -S $source -B $build -G 'Visual Studio 17 2022' -A x64
             }
             Invoke-Checked "Build $($project.Name) (Release)" {
                 & $cmake --build $build --config Release

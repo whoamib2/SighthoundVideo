@@ -15,11 +15,61 @@ param(
     [switch]$Package
 )
 
+# Stop applies to cmdlets. Native stderr must not stop the script: Windows
+# PowerShell 5.1 turns it into a terminating NativeCommandError, and PowerShell
+# 7 does the same for a non-zero exit when PSNativeCommandUseErrorActionPreference
+# is true. Invoke-Native turns that off for each native command.
+if (Test-Path variable:PSNativeCommandUseErrorActionPreference) {
+    $PSNativeCommandUseErrorActionPreference = $false
+    $global:PSNativeCommandUseErrorActionPreference = $false
+}
 $ErrorActionPreference = 'Stop'
 
 function Write-Step([string]$Message) {
     Write-Host ""
     Write-Host "==> $Message" -ForegroundColor Cyan
+}
+
+function Invoke-Native {
+    param(
+        [Parameter(Mandatory = $true)][scriptblock]$Command,
+        [switch]$Quiet
+    )
+    # Local and global: 5.1 promotes native stderr using the preference it
+    # finds, and a scriptblock inherits the preference of the function that
+    # invokes it. PowerShell 7's native-exit preference is turned off too.
+    $previousLocal = $ErrorActionPreference
+    $previousGlobal = $global:ErrorActionPreference
+    $ErrorActionPreference = 'Continue'
+    $global:ErrorActionPreference = 'Continue'
+    $restoreNative = $false
+    $previousNative = $false
+    if (Test-Path variable:PSNativeCommandUseErrorActionPreference) {
+        $restoreNative = $true
+        $previousNative = $PSNativeCommandUseErrorActionPreference
+        $PSNativeCommandUseErrorActionPreference = $false
+        $global:PSNativeCommandUseErrorActionPreference = $false
+    }
+    $global:LASTEXITCODE = 0
+    $code = 0
+    try {
+        & $Command 2>&1 | ForEach-Object {
+            if ($_ -is [System.Management.Automation.ErrorRecord]) {
+                if (-not $Quiet) { Write-Host $_.ToString() }
+            } else {
+                $_
+            }
+        }
+        $code = $global:LASTEXITCODE
+    } finally {
+        $ErrorActionPreference = $previousLocal
+        $global:ErrorActionPreference = $previousGlobal
+        if ($restoreNative) {
+            $PSNativeCommandUseErrorActionPreference = $previousNative
+            $global:PSNativeCommandUseErrorActionPreference = $previousNative
+        }
+    }
+    $global:LASTEXITCODE = $code
 }
 
 function Find-Checkout([string]$Start) {
@@ -40,7 +90,7 @@ function Ensure-Git {
         throw "git is not on PATH, and winget is missing. Install Git for Windows, then re-run scripts\bootstrap.ps1."
     }
     Write-Step "Installing Git for Windows"
-    & winget install --id Git.Git -e --accept-package-agreements --accept-source-agreements --disable-interactivity
+    Invoke-Native { & winget install --id Git.Git -e --accept-package-agreements --accept-source-agreements --disable-interactivity }
     $gitCmd = 'C:\Program Files\Git\cmd'
     if (Test-Path (Join-Path $gitCmd 'git.exe')) {
         $env:Path = $gitCmd + ';' + $env:Path
@@ -66,9 +116,9 @@ if (-not $root) {
     } else {
         Write-Step "Cloning $RepoUrl"
         if ($Branch) {
-            & git clone --branch $Branch $RepoUrl $Destination
+            Invoke-Native { & git clone --branch $Branch $RepoUrl $Destination }
         } else {
-            & git clone $RepoUrl $Destination
+            Invoke-Native { & git clone $RepoUrl $Destination }
         }
         if ($LASTEXITCODE -ne 0) { throw "git clone failed (exit $LASTEXITCODE)." }
         $root = (Resolve-Path $Destination).Path
@@ -78,14 +128,16 @@ if (-not $root) {
 }
 
 Set-Location -LiteralPath $root
-$status = & git status --porcelain
+$status = Invoke-Native { & git status --porcelain }
 if ($LASTEXITCODE -ne 0) { throw "git status failed." }
 if ($status) {
     Write-Host "Working tree has local changes. Building this checkout without pulling."
 } else {
-    $branchName = (& git rev-parse --abbrev-ref HEAD).Trim()
+    $rev = Invoke-Native { & git rev-parse --abbrev-ref HEAD }
+    if ($LASTEXITCODE -ne 0) { throw "git rev-parse failed." }
+    $branchName = ($rev | Select-Object -Last 1).ToString().Trim()
     Write-Step "Updating $branchName"
-    & git pull --ff-only
+    Invoke-Native { & git pull --ff-only }
     if ($LASTEXITCODE -ne 0) {
         throw "git pull --ff-only failed. Fix the checkout, then re-run scripts\bootstrap.ps1."
     }
