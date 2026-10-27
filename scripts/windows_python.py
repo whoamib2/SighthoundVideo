@@ -33,6 +33,14 @@ CEILING_REASON = (
 # Order the build script tries. Newest first, none above MAXIMUM.
 CANDIDATES = tuple(range(MAXIMUM[1], MINIMUM[1] - 1, -1))
 
+# Passed to python.exe -c by scripts/build_windows.ps1. Windows PowerShell 5.1
+# deletes " characters inside native arguments, so these strings contain neither
+# quote character. chr(46) is "." and chr(10) is a newline.
+VERSION_PROBE = (
+    "import sys; sys.stdout.write(str(sys.version_info[0])+chr(46)+str(sys.version_info[1])+chr(10))"
+)
+EXECUTABLE_PROBE = "import sys; sys.stdout.write(sys.executable+chr(10))"
+
 
 def version_label(version: tuple[int, int] = PREFERRED) -> str:
     return "%d.%d" % version
