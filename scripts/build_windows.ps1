@@ -107,7 +107,8 @@ function Find-BasePython {
     foreach ($version in $script:AllowedVersions) {
         $exe = Find-VersionedPython $version
         if ($exe) {
-            return @{ Exe = $exe; Version = $version }
+            # A bare hashtable is unrolled into the pipeline. A PSCustomObject stays one object.
+            return [pscustomobject]@{ Exe = $exe; Version = $version }
         }
     }
     return $null
