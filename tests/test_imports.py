@@ -49,6 +49,9 @@ _ALLOWED_MISSING = {
     "winreg",
     "netifaces",
     "requests",
+    "av",
+    "onnxruntime",
+    "onnx",
 }
 
 

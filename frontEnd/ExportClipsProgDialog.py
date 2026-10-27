@@ -259,7 +259,7 @@ class ExportProgressDialog(wx.Dialog):
     ###########################################################
     def _endThread(self):
         if self._thread is not None:
-            if self._thread.isAlive():
+            if self._thread.is_alive():
                 self._result = -1
 
                 # Definitely not normal, we expect 2 min files, and copying should not take this long

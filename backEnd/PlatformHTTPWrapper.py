@@ -44,10 +44,10 @@ import time
 import threading
 
 from backEnd.native.detector import (
-    SIOObjectDetector,
     encode_detection_response,
     parse_rgb_body,
 )
+from backEnd.native.onnx_detector import create_detector
 
 
 #from DebugLogManager import DebugLogManager
@@ -175,8 +175,8 @@ class PlatformHTTPWrapper(object):
         self._logger.grabStdStreams()
         self._msgQ = msgQ
 
-        enableGpu = True  # until we decide to make configurable
-        self._detector = SIOObjectDetector(self._logger, _getModelDir(), enable_gpu=enableGpu)
+        enableGpu = True  # DirectML or CUDA when that provider is installed; CPU otherwise.
+        self._detector = create_detector(self._logger, _getModelDir(), enable_gpu=enableGpu)
 
         HandlerClass = HandlerFactory(self._logger, self._detector)
         HTTPServer.allow_reuse_address = True

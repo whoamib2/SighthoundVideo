@@ -9,11 +9,18 @@ dependencies = [
     "Pillow>=10",
     "requests>=2.31",
     "wxPython>=4.2",
+    "numpy>=1.26",
+    "av>=12",
+    "onnxruntime>=1.18",
 ]
 
 [project.optional-dependencies]
 package = ["pyinstaller>=6"]
-dev = ["pytest>=8", "ruff>=0.6"]
+# onnx builds the tiny test detector. opencv-python-headless is the USB camera
+# option (DirectShow on Windows). onnxruntime-directml replaces onnxruntime on
+# Windows when DirectML is wanted; do not install both.
+vision = ["opencv-python-headless>=4.8"]
+dev = ["pytest>=8", "ruff>=0.6", "onnx>=1.16"]
 
 [tool.pytest.ini_options]
 pythonpath = ["."]

@@ -21,32 +21,47 @@ Useful public resources:
 
 ## Important technical notes
 
-Phase 1 of the source port targets Python 3.11+ (also exercised on 3.12). Windows stays a first-class native target, and the same Python sources are what Linux and macOS import.
+Phase 1 ported the Python tree to 3.11+ (also exercised on 3.12). Phase 2 replaces the closed `videoLib2`, `svsentry`, and `SIOWrapper` binaries with open backends so a Python 3.11 process can capture, track, and classify without those extensions. Windows stays a first-class target. Linux and macOS use the same sources.
 
-What this port covers:
+What works in the open backend:
 
-* Python syntax and the standard-library renames (`pickle`, `http.client`, `xmlrpc`, `queue`, `urllib`).
-* Bytes versus text for live-view mmap headers, pickle files, SQLite blobs, HTTP bodies, and XML-RPC.
-* wxPython 4.x (Phoenix) call sites and Pillow 10 image helpers.
-* Dependencies in `pyproject.toml`. The desktop UI needs `wxPython`; tests and lint need the `dev` extra (`pytest`, `ruff`) plus Pillow and requests.
-* CMake 3.20 projects for `launch`, `xnat`, `backEnd/triggers` (`optsearches`), and `vitaToolbox/path` (`volumeUtils`, Apple only), aimed at MSVC 2022 and current clang/gcc.
-* Packaging through `scripts/package_app.py` (PyInstaller). `frontEnd/setup-Win.py` and `frontEnd/setup-Mac.py` delegate to it.
-* GitHub Actions on `ubuntu-latest` and `windows-latest`.
+* Capture and decode of files, RTSP, and HTTP through PyAV (FFmpeg is inside the PyAV wheels). USB cameras use OpenCV when `opencv-python-headless` is installed, including DirectShow on Windows.
+* Clip files registered with `ClipManager.addClip`, plus `getMsList`, `getDuration`, `ClipReader`, and remux helpers.
+* The 32-byte live-view mmap header the monitor reads, JPEG snapshots, and a best-effort single-variant HLS playlist (MPEG-TS segments).
+* A motion gate and a ByteTrack-style tracker (high-score association, then low-score recovery, with a constant-velocity prediction) that calls `QueuedDataManagerCloud`.
+* An ONNX Runtime YOLO detector on the existing local HTTP contract: raw RGB `POST` with `X-Width` and `X-Height`, JSON `objects` reply. COCO classes map to `person`, `vehicle`, and `animal` for `TargetTrigger`. Providers are DirectML, CUDA, and CPU on Windows, and CUDA and CPU on Linux. CPU is the fallback and is what CI runs.
+* `plate_text`, `face_identity`, and `delivery_carrier` still travel on the detection JSON when a model output provides them.
 
-What is still blocked by closed binaries that are not in this tree (`videoLib2`, `svsentry`, `SIOWrapper`, sometimes inside the LFS `libs` archive):
+The default weights are Megvii YOLOX-Nano (Apache-2.0). They are not in git:
 
-* Camera capture and clip decode (`backEnd.native.capture`).
-* The tracking pipeline (`backEnd.native.tracking`).
-* The in-process object detector (`backEnd.native.detector.SIOObjectDetector`).
+```bash
+python scripts/fetch_detector_model.py
+```
 
-Those names are the only import sites for the closed extensions. Calling them without the binary raises `NativeDependencyError`. The local detector HTTP contract is unchanged: raw RGB `POST` with `X-Width` and `X-Height`, JSON `objects` reply. Detections can already carry `plate_text`, `face_identity`, and `delivery_carrier` (USPS, FedEx, UPS, Amazon). This phase does not run those recognizers.
+Ultralytics YOLOv8 and YOLOv10 are AGPL-3.0. The fetch script does not download them. A raw YOLOv8 ONNX file can still be selected with `SIGHTHOUND_DETECTOR_MODEL` if you accept that license. See `models/README.md`.
 
-Recommended next steps:
+Set `SIGHTHOUND_USE_CLOSED_CAPTURE=1` or `SIGHTHOUND_USE_CLOSED_SENTRY=1` only if you still have those Python 2.7 binaries and want the adapters to try them.
 
-* Replace capture with PyAV or OpenCV behind `backEnd.native.capture`.
-* Replace `svsentry` with an open tracker behind `pipeline_base` / `object_collector_base`.
-* Serve the existing RGB HTTP contract from an ONNX Runtime detector and fill the reserved attributes.
-* Smoke-test the wxPython UI and a PyInstaller bundle on Windows and macOS once those backends exist.
+What is left:
+
+* The wxPython UI and a PyInstaller bundle have not been exercised against these backends on Windows or macOS.
+* Plate, face, and delivery-carrier recognizers are not implemented.
+* Packet capture returns "driver not available" (`-2`). There is no pcap backend.
+* Clip playback does not draw the old on-frame box and zone overlays.
+* HLS is a single-variant playlist, not the historical multi-bitrate ladder.
+
+### Windows setup
+
+* Python 3.11 or 3.12, 64-bit.
+* `python -m pip install -e ".[dev]"` from the repo root. That installs Pillow, requests, wxPython, numpy, PyAV, ONNX Runtime, pytest, ruff, and the `onnx` package used to build the tiny test detector.
+* wxPython wheels need the Visual C++ runtime that the wheel documents. Capture itself does not need Visual Studio once PyAV is installed.
+* CPU inference needs no GPU. CI on `windows-latest` uses this path.
+* DirectML: remove `onnxruntime` and install `onnxruntime-directml`. The detector selects `DmlExecutionProvider` when that package is the one installed.
+* CUDA: install `onnxruntime-gpu` built for your CUDA version. `CUDAExecutionProvider` is used on Windows and Linux when it is present.
+* USB cameras: `python -m pip install opencv-python-headless`.
+* Download the detector before starting the analytics process: `python scripts/fetch_detector_model.py`.
+
+Phase 1 still covers the Python 3 syntax port, wxPython 4 / Pillow 10 call sites, CMake 3.20 projects for `launch`, `xnat`, `optsearches`, and Apple `volumeUtils`, and PyInstaller packaging via `scripts/package_app.py`. GitHub Actions runs the Python tests, including the video-to-database test, on `ubuntu-latest` and `windows-latest`.
 
 Historical build notes (Python 2.7, VS2017, `cx_Freeze`, `py2exe`) remain below for the original source release. Several assets are still Git LFS objects.
 

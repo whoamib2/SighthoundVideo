@@ -19,7 +19,7 @@ jobs:
         with:
           python-version: ${{ matrix.python-version }}
       - name: Install test tools
-        run: python -m pip install --upgrade pip pytest ruff pillow requests
+        run: python -m pip install --upgrade pip pytest ruff pillow requests "numpy>=1.26" "av>=12" "onnxruntime>=1.18" "onnx>=1.16"
       - name: Compile
         run: python -m compileall -f -q appCommon backEnd frontEnd launch scripts vitaToolbox xnat FrontEndLaunchpad.py PackageSources.py
       - name: Lint

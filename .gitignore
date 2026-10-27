@@ -1,3 +1,7 @@
+models/*.onnx
+models/*.onnx.json
+models/*.pt
+models/*.pth
 *.bak
 *.iss
 *.pyc

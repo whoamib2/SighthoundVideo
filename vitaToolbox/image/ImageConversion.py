@@ -57,6 +57,20 @@ def _bytes_from_pointer(ptr, size):
         raise ValueError("null frame buffer")
     return ctypes.string_at(address, size)
 
+
+def _rgb_bytes_from_frame(frame):
+    """RGB bytes for a closed-binary frame or an open-backend frame.
+
+    Open frames carry an owned ``rgb`` buffer. Closed frames only have a
+    pointer in ``buffer``. Prefer the owned bytes so the conversion does not
+    depend on that pointer staying alive.
+    """
+    expected = int(frame.width) * int(frame.height) * 3
+    rgb = getattr(frame, "rgb", None)
+    if isinstance(rgb, (bytes, bytearray, memoryview)) and len(rgb) >= expected:
+        return bytes(rgb[:expected])
+    return _bytes_from_pointer(frame.buffer, expected)
+
 # Common 3rd-party imports...
 
 numpy = None   # Imported lazily to avoid overhead when not used...
@@ -310,7 +324,7 @@ def convertClipFrameToNumpy(frame):
         """
     needNumpy()
 
-    buff = _bytes_from_pointer(frame.buffer, frame.width * frame.height * 3)
+    buff = _rgb_bytes_from_frame(frame)
     numpyImg = numpy.frombuffer(buff, dtype=numpy.uint8).reshape(
         (frame.height, frame.width, 3)
     ).copy()
@@ -325,7 +339,7 @@ def convertClipFrameToBuffer( frame ):
         @return buffer PyBuffer_FromMemory
         """
 
-    return _bytes_from_pointer(frame.buffer, frame.width * frame.height * 3)
+    return _rgb_bytes_from_frame(frame)
 
 ##############################################################################
 def convertClipFrameToPIL( frame ):
@@ -336,7 +350,7 @@ def convertClipFrameToPIL( frame ):
         """
     needImage()
 
-    buff = _bytes_from_pointer(frame.buffer, frame.width * frame.height * 3)
+    buff = _rgb_bytes_from_frame(frame)
     return Image.frombytes('RGB', (frame.width, frame.height), buff)
 
 ##############################################################################

@@ -195,15 +195,17 @@ class QueuedDataManagerCloud(object_collector_base()):
             # Inform the back end that our pipe is no longer in use.
             self._queue.put([MessageIds.msgIdPipeFinished, self._id])
         finally:
-            # Our base class, ObjectCollector, implements `__del__` also. Make
-            # sure we call it without fail...
-            super(QueuedDataManagerCloud, self).__del__()
+            # The closed ObjectCollector base implements __del__. The open
+            # tracker uses a plain object, which does not.
+            parent_del = getattr(super(QueuedDataManagerCloud, self), "__del__", None)
+            if parent_del is not None:
+                parent_del()
 
     ###########################################################
     def terminate(self):
         if self._httpClient is not None:
             self._logger.debug("Destroying HTTP client")
-            if self._httpClient.isAlive():
+            if self._httpClient.is_alive():
                 while self._outstandingDetectionRequests > 0:
                     self._logger.debug("Destroying HTTP client - waiting for " + str(self._outstandingDetectionRequests) + " pending results")
                     self._processDetections()

@@ -56,11 +56,11 @@ from vitaToolbox.image.ImageConversion import convertProcFrameToPIL
 from vitaToolbox.image.PilCompat import text_size
 from backEnd.native.detector import (
     Detection,
-    SIOObjectDetector,
     TrackMatch,
     parse_detection_response,
     parse_rgb_body,
 )
+from backEnd.native.onnx_detector import create_detector
 from vitaToolbox.path.PathUtils import safeMkdir
 
 
@@ -576,7 +576,7 @@ class ObjectDetectorClientInProcess(ObjectDetectorClient):
     #---------------------------------------------------------------------------
     def __init__(self, id, logger):
         super(ObjectDetectorClientInProcess, self).__init__(id, logger)
-        self._detector = SIOObjectDetector(self._logger, _getModelDir(), enable_gpu=False)
+        self._detector = create_detector(self._logger, _getModelDir(), enable_gpu=False)
 
     #---------------------------------------------------------------------------
     def _doRefreshHTTPConnection(self):

@@ -69,7 +69,7 @@ class NetworkScanner(threading.Thread):
         self._logger.info("Shutting down " + self._name + " manager ...")
         self._stopped = True
         self.force()
-        if self.isAlive():
+        if self.is_alive():
             self.join()
         self._logger.info("... done")
 
