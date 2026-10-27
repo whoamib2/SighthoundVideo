@@ -328,7 +328,33 @@ Invoke-Checked "Ruff" { & $Python -m ruff check . }
 Invoke-Checked "Compile Python" {
     & $Python -m compileall -f -q appCommon backEnd frontEnd launch scripts vitaToolbox xnat FrontEndLaunchpad.py PackageSources.py
 }
-Invoke-Checked "Pytest" { & $Python -m pytest -q }
+# -q --tb=short stays on the console. The same stream is teed to build\pytest.log.
+# Tee-Object on Windows PowerShell 5.1 writes UTF-16, so the file is a UTF-8 StreamWriter.
+$pytestLog = Join-Path $Root 'build\pytest.log'
+New-Item -ItemType Directory -Force -Path (Join-Path $Root 'build') | Out-Null
+Write-Step "Pytest"
+Write-Host "Pytest log: $pytestLog"
+Invoke-Native {
+    $utf8 = New-Object System.Text.UTF8Encoding $false
+    $writer = New-Object System.IO.StreamWriter ($pytestLog, $false, $utf8)
+    try {
+        & $Python -m pytest -q --tb=short 2>&1 | ForEach-Object {
+            if ($_ -is [System.Management.Automation.ErrorRecord]) {
+                $line = $_.ToString()
+            } else {
+                $line = [string]$_
+            }
+            $writer.WriteLine($line)
+            $line
+        }
+    } finally {
+        $writer.Flush()
+        $writer.Dispose()
+    }
+}
+if ($LASTEXITCODE -ne 0) {
+    throw "Pytest failed (exit $LASTEXITCODE). Full output: $pytestLog"
+}
 
 $vsRoot = Find-Msvc2022
 if (-not $vsRoot) {
