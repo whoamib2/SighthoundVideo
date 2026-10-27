@@ -10,6 +10,9 @@ from __future__ import annotations
 
 import importlib
 import importlib.util
+import os
+import shutil
+import subprocess
 import sys
 import traceback
 from pathlib import Path
@@ -20,7 +23,18 @@ ROOT = Path(__file__).resolve().parents[1]
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
-_SKIP_PARTS = {"build", "dist", "tests", ".git"}
+# Directory names that are not project source. Hidden directories are skipped
+# too, so .venv, .git, and .pytest_cache are never walked.
+_SKIP_DIR_NAMES = frozenset({
+    ".venv",
+    "venv",
+    "build",
+    "dist",
+    ".git",
+    "tests",
+    "__pycache__",
+})
+_SKIP_DIR_NAMES_FOLDED = frozenset(name.casefold() for name in _SKIP_DIR_NAMES)
 _ALLOWED_MISSING = {
     "wx",
     "wx.adv",
@@ -55,13 +69,20 @@ _ALLOWED_MISSING = {
 }
 
 
-def _python_files():
-    for path in sorted(ROOT.rglob("*.py")):
-        if any(part in _SKIP_PARTS for part in path.parts):
-            continue
-        if path.name.startswith("."):
-            continue
-        yield path
+def _skip_dir(name: str) -> bool:
+    return name.startswith(".") or name.casefold() in _SKIP_DIR_NAMES_FOLDED
+
+
+def _python_files(root: Path | None = None) -> list[Path]:
+    root = ROOT if root is None else root
+    found: list[Path] = []
+    for dirpath, dirnames, filenames in os.walk(root):
+        # Prune in place so os.walk does not descend into .venv or build trees.
+        dirnames[:] = sorted(name for name in dirnames if not _skip_dir(name))
+        for filename in sorted(filenames):
+            if filename.endswith(".py") and not filename.startswith("."):
+                found.append(Path(dirpath) / filename)
+    return found
 
 
 def _module_name(path: Path) -> str:
@@ -90,7 +111,59 @@ def _is_allowed_missing(exc: BaseException) -> bool:
     return False
 
 
-@pytest.mark.parametrize("path", list(_python_files()), ids=lambda p: str(p.relative_to(ROOT)))
+def test_import_walk_skips_virtualenv_build_and_hidden_dirs(tmp_path: Path):
+    keep = [
+        tmp_path / "appCommon" / "ok.py",
+        tmp_path / "FrontEndLaunchpad.py",
+    ]
+    skipped = [
+        tmp_path / ".venv" / "Lib" / "site-packages" / "altgraph" / "ObjectGraph.py",
+        tmp_path / "venv" / "Lib" / "site-packages" / "bad.py",
+        tmp_path / "build" / "gen.py",
+        tmp_path / "dist" / "gen.py",
+        tmp_path / ".git" / "hooks" / "x.py",
+        tmp_path / ".hidden" / "x.py",
+        tmp_path / "tests" / "test_x.py",
+        tmp_path / "__pycache__" / "stale.py",
+    ]
+    for path in keep + skipped:
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text("x = 1\n", encoding="utf-8")
+    found = {path.relative_to(tmp_path).as_posix() for path in _python_files(tmp_path)}
+    assert found == {"appCommon/ok.py", "FrontEndLaunchpad.py"}
+
+
+def test_pytest_collection_skips_a_venv_directory():
+    planted = ROOT / "tests" / "venv" / "test_planted_venv_collect.py"
+    planted.parent.mkdir(parents=True, exist_ok=True)
+    planted.write_text(
+        "def test_planted_venv_collect():\n    raise AssertionError('collected')\n",
+        encoding="utf-8",
+    )
+    try:
+        proc = subprocess.run(
+            [sys.executable, "-m", "pytest", "--collect-only", "-q", "tests"],
+            cwd=ROOT,
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+        blob = proc.stdout + proc.stderr
+        assert proc.returncode == 0, blob
+        assert "test_planted_venv_collect" not in blob
+    finally:
+        shutil.rmtree(planted.parent, ignore_errors=True)
+
+
+def test_pytest_config_does_not_collect_virtualenv():
+    text = (ROOT / "pyproject.toml").read_text(encoding="utf-8")
+    assert 'testpaths = ["tests"]' in text
+    assert "norecursedirs" in text
+    for name in (".git", ".venv", "venv", "build", "dist"):
+        assert f'"{name}"' in text
+
+
+@pytest.mark.parametrize("path", _python_files(), ids=lambda p: str(p.relative_to(ROOT)))
 def test_module_imports(path: Path):
     name = _module_name(path)
     try:
