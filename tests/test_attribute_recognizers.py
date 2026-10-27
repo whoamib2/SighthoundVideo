@@ -1,5 +1,8 @@
 """Plate, face, and carrier recognizers on tiny ONNX graphs."""
 
+import os
+import sys
+
 import numpy as np
 import pytest
 
@@ -115,3 +118,20 @@ def test_best_plate_and_notification_sentence():
     assert notification_sentence({"plate_text": "ABC123"}) == "plate ABC123"
     assert notification_sentence({"face_identity": "Ada"}) == "Ada"
     assert notification_sentence({}) == ""
+
+
+def test_frozen_app_reads_models_beside_the_executable(tmp_path, monkeypatch):
+    models = tmp_path / "models"
+    models.mkdir()
+    weight = models / "yolox_nano.onnx"
+    weight.write_bytes(b"x")
+    exe = tmp_path / "SighthoundVideo.exe"
+    exe.write_bytes(b"")
+    monkeypatch.setattr(sys, "frozen", True, raising=False)
+    monkeypatch.setattr(sys, "executable", str(exe))
+    monkeypatch.delenv("SIGHTHOUND_DETECTOR_MODEL", raising=False)
+    from backEnd.native.attribute_recognizers import _models_dir
+    from backEnd.native.onnx_detector import resolve_model_path
+
+    assert os.path.normcase(_models_dir()) == os.path.normcase(str(models))
+    assert os.path.normcase(resolve_model_path()) == os.path.normcase(str(weight))

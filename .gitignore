@@ -4,11 +4,14 @@ models/*.pt
 models/*.pth
 *.bak
 *.iss
+!installer/*.iss
 *.pyc
 *.tar
 install_manifest.txt
 .build
 build
+dist
+.venv
 install
 libs
 tools

@@ -13,7 +13,8 @@ Execution providers, in order, when ``enable_gpu`` is set:
 * Windows: DirectML, then CUDA, then CPU
 * Linux and macOS: CUDA, then CPU
 
-CPU is always the fallback. After boxes are decoded, plate, face, and
+The Windows installer ships ``onnxruntime-directml``. DirectML is used when
+that provider loads, and CPU otherwise. After boxes are decoded, plate, face, and
 delivery recognizers in ``attribute_recognizers`` run on the person and
 vehicle crops when their ONNX files are present. If a detector output is
 named ``plate_text``, ``face_identity``, or ``delivery_carrier``, that value
@@ -62,6 +63,29 @@ def select_execution_providers(
     return chosen
 
 
+def installed_models_dirs() -> list[str]:
+    """Model folders for a frozen app, then the source-tree ``models`` directory."""
+    folders = []
+    if getattr(sys, "frozen", False):
+        exe_dir = os.path.dirname(os.path.abspath(sys.executable))
+        folders.append(os.path.join(exe_dir, "models"))
+        meipass = getattr(sys, "_MEIPASS", "") or ""
+        if meipass:
+            folders.append(os.path.join(meipass, "models"))
+    folders.append(
+        os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..", "models"))
+    )
+    unique: list[str] = []
+    seen = set()
+    for folder in folders:
+        key = os.path.normcase(os.path.abspath(folder))
+        if key in seen:
+            continue
+        seen.add(key)
+        unique.append(os.path.abspath(folder))
+    return unique
+
+
 def default_model_candidates(model_dir: Optional[str] = None) -> list[str]:
     candidates = []
     env = os.environ.get(_ENV_MODEL)
@@ -70,11 +94,9 @@ def default_model_candidates(model_dir: Optional[str] = None) -> list[str]:
     if model_dir:
         candidates.append(os.path.join(model_dir, "yolox_nano.onnx"))
         candidates.append(os.path.join(model_dir, "detector.onnx"))
-    repo_models = os.path.abspath(
-        os.path.join(os.path.dirname(__file__), "..", "..", "models")
-    )
-    candidates.append(os.path.join(repo_models, "yolox_nano.onnx"))
-    candidates.append(os.path.join(repo_models, "detector.onnx"))
+    for folder in installed_models_dirs():
+        candidates.append(os.path.join(folder, "yolox_nano.onnx"))
+        candidates.append(os.path.join(folder, "detector.onnx"))
     return candidates
 
 

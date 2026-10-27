@@ -29,8 +29,24 @@ What works in the open backend:
 * Clip files registered with `ClipManager.addClip`, plus `getMsList`, `getDuration`, `ClipReader`, and remux helpers.
 * The 32-byte live-view mmap header the monitor reads, JPEG snapshots, and a best-effort single-variant HLS playlist (MPEG-TS segments).
 * A motion gate and a ByteTrack-style tracker (high-score association, then low-score recovery, with a constant-velocity prediction) that calls `QueuedDataManagerCloud`.
-* An ONNX Runtime YOLO detector on the existing local HTTP contract: raw RGB `POST` with `X-Width` and `X-Height`, JSON `objects` reply. COCO classes map to `person`, `vehicle`, and `animal` for `TargetTrigger`. Providers are DirectML, CUDA, and CPU on Windows, and CUDA and CPU on Linux. CPU is the fallback and is what CI runs.
+* An ONNX Runtime YOLO detector on the existing local HTTP contract: raw RGB `POST` with `X-Width` and `X-Height`, JSON `objects` reply. COCO classes map to `person`, `vehicle`, and `animal` for `TargetTrigger`. Providers are DirectML, CUDA, and CPU on Windows, and CUDA and CPU on Linux. CPU is the fallback when those providers are absent.
 * `plate_text`, `face_identity`, and `delivery_carrier` are filled by the attribute recognizers when their models are present, stored on the object, and available to rules, search labels, and notification text.
+
+### Windows installer
+
+End users run `dist\SighthoundVideo-Setup.exe`. A developer produces it on a Windows PC. From a checkout of this branch:
+
+```powershell
+powershell -NoProfile -ExecutionPolicy Bypass -File scripts\bootstrap.ps1 -Package
+```
+
+`scripts\bootstrap.ps1` updates the checkout (or clones the repository when you point it at an empty directory) and runs `scripts\build_windows.ps1`. Pass `-Branch cursor/python3-port-phase3-0735` when the script is not already inside a checkout.
+
+`scripts\build_windows.ps1` is safe to re-run. It reuses `.venv`, downloads YOLOX-Nano, the plate OCR model, YuNet, and SFace when those files are missing, runs ruff, compileall, and pytest, and builds the CMake projects when MSVC 2022 is installed. With `-Package` it installs PyInstaller and, through winget, Inno Setup when that compiler is missing. If winget itself is missing, the script says so and stops before the installer step. MSVC 2022 is optional: when it is absent the script prints a message and continues. The native projects are `optsearches`, `launch`, and `xnat`.
+
+The package is a PyInstaller one-folder bundle. Python, wxPython, PyAV/FFmpeg, and ONNX Runtime DirectML are inside the folder, so the installed app does not need Python. Inno Setup adds Start menu and desktop shortcuts, an uninstaller, and an optional "start with Windows" task. The finished file is `dist\SighthoundVideo-Setup.exe`, and the script prints that path.
+
+The Windows build installs `onnxruntime-directml`. The analytics process uses the GPU when DirectML is available and the CPU otherwise. YOLOX-Nano, plate OCR, YuNet, and SFace are fetched at build time and copied into the app folder, so the installed program works offline. Together those weights are about 45 MB, small enough to ship in the installer. A carrier file is not downloaded. The color heuristic runs until you train `models\carrier.onnx`.
 
 The default weights are Megvii YOLOX-Nano (Apache-2.0). They are not in git:
 
@@ -69,11 +85,11 @@ The Tools menu item "Face Gallery & Plate Watchlist" enrolls a person from image
 
 **Privacy.** Enrolled names and embeddings are written only to the local object database (`objdb2`) on this computer. This phase does not upload them. Deleting a gallery entry deletes that vector. You are responsible for notice and consent where the law requires it. Cameras that record people are still your cameras.
 
-**Accuracy.** The automated tests use tiny synthetic ONNX graphs. They prove the plumbing: a read can reach the database and fire a rule. They do not measure real plates, real faces, or real trucks. YOLOX-Nano is a small COCO model. YuNet and SFace quality depends on crop size, alignment, and the threshold. The carrier model only sees color statistics. The wx gallery dialog and a live camera were not exercised in CI. wxPython is not installed in CI, so the query-builder controls and the gallery dialog need a manual pass on Windows.
+**Accuracy.** The automated tests use tiny synthetic ONNX graphs. They prove the plumbing: a read can reach the database and fire a rule. They do not measure real plates, real faces, or real trucks. YOLOX-Nano is a small COCO model. YuNet and SFace quality depends on crop size, alignment, and the threshold. The carrier model only sees color statistics. The wx gallery dialog, the query-builder controls, and a live camera still need a manual pass on Windows. `scripts\build_windows.ps1 -Package` is the way to produce the installer on that PC.
 
 What is left:
 
-* The wxPython UI and a PyInstaller bundle have not been exercised against these backends on Windows or macOS. That includes the new gallery dialog and the attribute controls on the query builder.
+* The wxPython UI, including the gallery dialog and the attribute controls on the query builder, has not been launched against these backends. `scripts\build_windows.ps1 -Package` writes `dist\SighthoundVideo-Setup.exe` on a Windows PC.
 * Real-camera accuracy for plates, faces, and delivery trucks has not been measured.
 * Packet capture returns "driver not available" (`-2`). There is no pcap backend.
 * Clip playback does not draw the old on-frame box and zone overlays.
@@ -81,16 +97,15 @@ What is left:
 
 ### Windows setup
 
-* Python 3.11 or 3.12, 64-bit.
-* `python -m pip install -e ".[dev]"` from the repo root. That installs Pillow, requests, wxPython, numpy, PyAV, ONNX Runtime, pytest, ruff, and the `onnx` package used to build the tiny test detector.
+* Python 3.11 or 3.12, 64-bit, only on the machine that builds the installer. People who run `dist\SighthoundVideo-Setup.exe` do not install Python.
+* `scripts\build_windows.ps1` creates `.venv` and installs Pillow, requests, wxPython, numpy, PyAV, pytest, ruff, and the `onnx` package used to build the tiny test detector. It then installs `onnxruntime-directml` in place of the CPU `onnxruntime` package.
 * wxPython wheels need the Visual C++ runtime that the wheel documents. Capture itself does not need Visual Studio once PyAV is installed.
-* CPU inference needs no GPU. CI on `windows-latest` uses this path.
-* DirectML: remove `onnxruntime` and install `onnxruntime-directml`. The detector selects `DmlExecutionProvider` when that package is the one installed.
-* CUDA: install `onnxruntime-gpu` built for your CUDA version. `CUDAExecutionProvider` is used on Windows and Linux when it is present.
+* CPU inference needs no GPU. `onnxruntime-directml` uses the GPU when DirectML is available and the CPU otherwise.
+* A developer who wants CUDA instead of the packaged DirectML runtime can install `onnxruntime-gpu` built for their CUDA version. `CUDAExecutionProvider` is used on Windows and Linux when it is present.
 * USB cameras: `python -m pip install opencv-python-headless`.
 * Download the detector before starting the analytics process: `python scripts/fetch_detector_model.py`.
 
-Phase 1 still covers the Python 3 syntax port, wxPython 4 / Pillow 10 call sites, CMake 3.20 projects for `launch`, `xnat`, `optsearches`, and Apple `volumeUtils`, and PyInstaller packaging via `scripts/package_app.py`. GitHub Actions runs the Python tests, including the video-to-database test, on `ubuntu-latest` and `windows-latest`.
+Phase 1 still covers the Python 3 syntax port, wxPython 4 / Pillow 10 call sites, CMake 3.20 projects for `launch`, `xnat`, `optsearches`, and Apple `volumeUtils`, and PyInstaller packaging via `scripts/package_app.py`. On Windows, `scripts\build_windows.ps1` runs those checks and can write the installer.
 
 Historical build notes (Python 2.7, VS2017, `cx_Freeze`, `py2exe`) remain below for the original source release. Several assets are still Git LFS objects.
 

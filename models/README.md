@@ -32,14 +32,13 @@ Empty environment variables disable a default file. For example `SIGHTHOUND_FACE
 
 **Privacy.** Face embeddings and the names they belong to are stored in the local object database only. Deleting a person in the gallery dialog removes the vector. This code does not upload the gallery.
 
-**Accuracy.** CI runs tiny synthetic graphs, not these downloaded weights. YuNet at 640 and SFace at 112 will miss small or profile faces. The default cosine threshold is 0.4 (`attributeSettings.face_threshold`, or `SIGHTHOUND_FACE_THRESHOLD`). Plate text is case-insensitive and spaces are ignored when a rule compares it. A plate rule can use `*` and `?`.
+**Accuracy.** The automated tests run tiny synthetic graphs, not these downloaded weights. YuNet at 640 and SFace at 112 will miss small or profile faces. The default cosine threshold is 0.4 (`attributeSettings.face_threshold`, or `SIGHTHOUND_FACE_THRESHOLD`). Plate text is case-insensitive and spaces are ignored when a rule compares it. A plate rule can use `*` and `?`.
 
 ## Windows
 
 * Python 3.11 or 3.12.
-* `pip install av numpy onnxruntime pillow`
-* CPU inference is the default and is what CI runs.
-* DirectML: uninstall `onnxruntime` and install `onnxruntime-directml`. The detector selects `DmlExecutionProvider` when it is present.
+* `scripts\build_windows.ps1` installs `onnxruntime-directml`. The detector uses DirectML when that provider loads, and CPU otherwise.
+* The same script downloads YOLOX-Nano, plate OCR, YuNet, and SFace, and with `-Package` copies them into `dist\SighthoundVideo-Setup.exe`. The installed app works offline. Those weights are about 45 MB.
 * CUDA: install `onnxruntime-gpu` and a matching CUDA driver. `CUDAExecutionProvider` is selected on Windows and Linux when it is present.
 * USB cameras: `pip install opencv-python-headless`. DirectShow is used on Windows. RTSP, HTTP, and files use PyAV and do not need OpenCV.
 * PyAV wheels include FFmpeg. A separate FFmpeg install is not required for capture.

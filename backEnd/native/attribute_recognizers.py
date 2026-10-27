@@ -28,7 +28,7 @@ from backEnd.attribute_text import (
     PLATE_TEXT,
 )
 from backEnd.native.carrier_features import CARRIER_LABELS, heuristic_carrier, image_features
-from backEnd.native.onnx_detector import select_execution_providers
+from backEnd.native.onnx_detector import installed_models_dirs, select_execution_providers
 
 _ENV_PLATE_DETECTOR = "SIGHTHOUND_PLATE_DETECTOR_MODEL"
 _ENV_PLATE_OCR = "SIGHTHOUND_PLATE_OCR_MODEL"
@@ -60,7 +60,11 @@ _FAST_PLATE_ALPHABET = "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ_"
 
 
 def _models_dir() -> str:
-    return os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..", "models"))
+    folders = installed_models_dirs()
+    for folder in folders:
+        if os.path.isdir(folder):
+            return folder
+    return folders[0]
 
 
 def resolve_optional_model(env_name: str, filename: str) -> Optional[str]:
