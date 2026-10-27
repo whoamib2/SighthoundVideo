@@ -13,10 +13,9 @@ Ultralytics YOLOv8 and YOLOv10 are AGPL-3.0. This script does not download
 them. The runtime can still execute a YOLOv8 ONNX file you supply yourself;
 that does not change the license of those weights.
 
-Windows GPU setup is separate from this download. ``onnxruntime`` is the CPU
-build. For DirectML, install ``onnxruntime-directml`` instead of
-``onnxruntime`` (the two packages replace each other). CUDA builds use
-``onnxruntime-gpu``.
+Windows installs ``onnxruntime-directml`` and not the CPU ``onnxruntime``
+wheel. Those two distributions own the same package directory. CUDA builds
+use ``onnxruntime-gpu`` and also replace that directory.
 """
 
 from __future__ import annotations

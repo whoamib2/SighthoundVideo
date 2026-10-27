@@ -67,6 +67,9 @@ def test_windows_build_prefers_python_314_and_names_the_ceiling():
     assert 'print("%d.%d"' not in build
     assert "--tb=short" in build
     assert "build\\pytest.log" in build or "pytest.log" in build
+    assert "--force-reinstall" in build
+    assert "--no-deps" in build
+    assert "$ortProbe = 'import onnxruntime as ort; import sys; sys.stdout.write(str(ort.get_available_providers())+chr(10))'" in build
 
 
 def test_pyproject_pins_discovery_and_spdx_license():
@@ -77,3 +80,7 @@ def test_pyproject_pins_discovery_and_spdx_license():
     assert "appCommon*" in text
     assert "backEnd*" in text
     assert "[tool.setuptools.packages.find]" in text
+    if "onnxruntime>=" in text:
+        assert "onnxruntime>=1.18; sys_platform != 'win32'" in text
+        assert "onnxruntime-directml>=1.18; sys_platform == 'win32'" in text
+        assert '"onnxruntime>=1.18"' not in text
