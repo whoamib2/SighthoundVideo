@@ -377,7 +377,7 @@ class GLCanvasSV( GLCanvas ):
             self.UpdateTextureRaw( data, width, height )
             self.HandleDraw(True)
         except:
-            print("Crash in updateImageBuffer size %s" % traceback.format_exc())
+            print(("Crash in updateImageBuffer size %s" % traceback.format_exc()))
 
     ###########################################################
     def GetImageData(self):

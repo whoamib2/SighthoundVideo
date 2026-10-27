@@ -40,23 +40,23 @@
 import os
 import sys
 if sys.platform == 'win32':
-    from ProcessUtilsWin import listProcesses
-    from ProcessUtilsWin import getProcessName
-    from ProcessUtilsWin import killProcess
-    from ProcessUtilsWin import getMemoryStats
-    from ProcessUtilsWin import checkMemoryLimit
-    from ProcessUtilsWin import getOpenModuleInfoList
-    from ProcessUtilsWin import setPriority
-    from ProcessUtilsWin import filteredProcessCommands
+    from .ProcessUtilsWin import listProcesses
+    from .ProcessUtilsWin import getProcessName
+    from .ProcessUtilsWin import killProcess
+    from .ProcessUtilsWin import getMemoryStats
+    from .ProcessUtilsWin import checkMemoryLimit
+    from .ProcessUtilsWin import getOpenModuleInfoList
+    from .ProcessUtilsWin import setPriority
+    from .ProcessUtilsWin import filteredProcessCommands
     def listChildProcessesOfPID(*args, **kwargs): return []
 else:
-    from ProcessUtilsUnix import listProcesses
-    from ProcessUtilsUnix import getProcessName
-    from ProcessUtilsUnix import killProcess
-    from ProcessUtilsUnix import getMemoryStats
-    from ProcessUtilsUnix import checkMemoryLimit
-    from ProcessUtilsUnix import filteredProcessCommands
-    from ProcessUtilsUnix import listChildProcessesOfPID
+    from .ProcessUtilsUnix import listProcesses
+    from .ProcessUtilsUnix import getProcessName
+    from .ProcessUtilsUnix import killProcess
+    from .ProcessUtilsUnix import getMemoryStats
+    from .ProcessUtilsUnix import checkMemoryLimit
+    from .ProcessUtilsUnix import filteredProcessCommands
+    from .ProcessUtilsUnix import listChildProcessesOfPID
     from os import nice as setPriority
     def getOpenModuleInfoList(_): return []
 
@@ -119,7 +119,7 @@ def _test(args):
             processName = getProcessName(processId)
             if processName is None:
                 processName = "<unknown>"
-            print processId, processName
+            print(processId, processName)
     elif cmd == 'killall':
         toKill = args[0].lower()
 
@@ -128,27 +128,27 @@ def _test(args):
             processName = getProcessName(processId)
             if processName:
                 if toKill == os.path.splitext(processName)[0].lower():
-                    print "Killing %s (%d)" % (processName, processId)
+                    print("Killing %s (%d)" % (processName, processId))
                     try:
                         killProcess(processId)
                     except Exception:
-                        print "...failed!"
+                        print("...failed!")
     elif cmd == 'mem':
         pidList = getProcessesWithName(args[0])
         for pid in pidList:
             memStats = getMemoryStats(pid)
             memStrs = ["%6.2f (%s)" % (memUsage/1024.0, name) for
-                       (name, memUsage) in sorted(memStats.iteritems())]
-            print "% 6d %s" % (pid, " ".join(memStrs))
+                       (name, memUsage) in sorted(memStats.items())]
+            print("% 6d %s" % (pid, " ".join(memStrs)))
     elif cmd == 'dlls':
         pidList = getProcessesWithName(args[0])
         for pid in pidList:
             openModules = getOpenModuleInfoList(pid)
-            print "PID: %d" % pid
-            print "\n  ".join([''] + [str(om) for om in openModules])
-            print "==="
+            print("PID: %d" % pid)
+            print("\n  ".join([''] + [str(om) for om in openModules]))
+            print("===")
     else:
-        print "Unknown test command"
+        print("Unknown test command")
 
 
 ##############################################################################

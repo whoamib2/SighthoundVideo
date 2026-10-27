@@ -50,9 +50,9 @@ from vitaToolbox.wx.FontUtils import makeFontDefault
 # Local imports...
 from appCommon.CommonStrings import kDirectBuyBasic
 from appCommon.CommonStrings import kDirectBuyPro
-from TrialBanner import DIRECT_PURCHASE_EVENT_TYPE
-from TrialBanner import kBackgroundColor, kBasicLabel, kProLabel
-from TrialBanner import getAccountAndToken
+from .TrialBanner import DIRECT_PURCHASE_EVENT_TYPE
+from .TrialBanner import kBackgroundColor, kBasicLabel, kProLabel
+from .TrialBanner import getAccountAndToken
 
 _kPurchaseText = ("""Purchase a license to unlock multiple cameras, """
                   """HD video, remote access, and more.""")

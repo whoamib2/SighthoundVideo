@@ -43,6 +43,13 @@
 #include <limits.h>
 #include <wchar.h>
 
+/* __sync_swap was a non-standard builtin. Clang and GCC provide
+   __atomic_exchange_n, which is the same exchange. */
+static inline int32_t __sync_swap(volatile int32_t *ptr, int32_t value)
+{
+    return __atomic_exchange_n(ptr, value, __ATOMIC_SEQ_CST);
+}
+
 // The unique key to locate the shared memory (one instance of Exchange).
 #define SHARED_MEMORY_KEY  0x278ca2d1
 

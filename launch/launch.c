@@ -146,7 +146,7 @@ LAUNCH_EXPORT LONG launch_shutdown(struct LaunchHandle* handle)
 #include <sys/shm.h>
 #include <errno.h>
 #include <unistd.h>
-#include <libkern/OSAtomic.h>
+#include <time.h>
 
 #include "./shlaunchMac/shlaunchMac/shlaunch.h"
 
@@ -222,13 +222,13 @@ LAUNCH_EXPORT int32_t launch_do(void* handle, int32_t signal)
 LAUNCH_EXPORT uint32_t launch_pid(void* handle)
 {
     struct LaunchHandle *lh = handle;
-    return __sync_fetch_and_xor(&lh->exchange->processId, 0);
+    return __atomic_fetch_xor(&lh->exchange->processId, 0, __ATOMIC_SEQ_CST);
 }
 
 LAUNCH_EXPORT int32_t launch_status(void* handle)
 {
     struct LaunchHandle *lh = handle;
-    return __sync_fetch_and_xor(&lh->exchange->status, 0);
+    return __atomic_fetch_xor(&lh->exchange->status, 0, __ATOMIC_SEQ_CST);
 }
 
 LAUNCH_EXPORT wchar_t* launch_datadir(void* handle)
@@ -246,7 +246,7 @@ LAUNCH_EXPORT char* launch_build(void* handle)
 LAUNCH_EXPORT int32_t launch_shutdown(void* handle)
 {
     struct LaunchHandle *lh = handle;
-    return __sync_fetch_and_xor(&lh->exchange->shutdown, 0);
+    return __atomic_fetch_xor(&lh->exchange->shutdown, 0, __ATOMIC_SEQ_CST);
 }
 
 #endif

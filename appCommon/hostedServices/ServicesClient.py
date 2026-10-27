@@ -43,7 +43,7 @@
 #*****************************************************************************
 
 
-import sys, urllib, json, urlparse, os, httplib, ssl
+import sys, urllib.request, urllib.parse, urllib.error, json, urllib.parse, os, http.client, ssl
 
 from appCommon.CommonStrings import kServicesHost
 
@@ -92,7 +92,7 @@ def _censor(d):
     @return New dictionary with fields masked where necessary.
     """
     result = {}
-    for k, v in d.iteritems():
+    for k, v in d.items():
         if k in [_kParamPassword, _kHeaderToken]:
             result[k] = '*' * len(v)
         else:
@@ -220,7 +220,7 @@ class ServicesClient(object):
             if method == 'GET':
                 body = None
                 if len(params) > 0:
-                    path += '?' + urllib.urlencode(params)
+                    path += '?' + urllib.parse.urlencode(params)
             else:
                 body = json.dumps(params)
                 headers['Content-Type'] = "application/json"
@@ -228,7 +228,7 @@ class ServicesClient(object):
             if headers.get(_kHeaderAccept, None) is None:
                 headers[_kHeaderAccept] = "*/*"
             try:
-                url = urlparse.urlparse(path)
+                url = urllib.parse.urlparse(path)
                 host = url.hostname
                 if host is None:
                     raise Exception()
@@ -243,17 +243,17 @@ class ServicesClient(object):
                               (method, path, _censor(params), _censor(headers), host, port))
             try:
                 if self._secure:
-                    conn = httplib.HTTPSConnection(
+                    conn = http.client.HTTPSConnection(
                         host, port, None, None, False, self._timeout, None,
                         ssl._create_unverified_context())
                 else:
-                    conn = httplib.HTTPConnection(
+                    conn = http.client.HTTPConnection(
                         host, port, False, self._timeout)
                 self._logger.debug("requesting %s ..." % path)
                 conn.request(method, path, body, headers)
                 response = conn.getresponse()
                 status = response.status
-                contentLength = response.getheader("Content-Length", None)
+                contentLength = response.get("Content-Length", None)
                 size = int(contentLength) if contentLength else -1
                 read = 0
                 body = outStream if outStream else ""

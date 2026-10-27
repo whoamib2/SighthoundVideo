@@ -51,6 +51,7 @@ from vitaToolbox.wx.GradientPanel import GradientPanel
 # Local imports...
 from appCommon.CommonStrings import kFrontEndLogName
 from appCommon.CommonStrings import kLiveHeaderSize
+from appCommon.LiveViewBuffer import is_blank, parse_live_footer, parse_live_header
 from appCommon.DebugPrefs import getDebugPrefAsInt
 from frontEnd.FrontEndUtils import getUserLocalDataDir
 from vitaToolbox.image.ImageConversion import convertWxBitmapToPil
@@ -202,22 +203,22 @@ class BaseMonitorView(BaseView):
                                 'live', cameraLocation + '.live')
             f = open(fLoc, 'r+b')
             if f is None:
-                self._logger.error("Failed to open mmap at " + ensureUtf8(fLoc))
+                self._logger.error("Failed to open mmap at " + ensureUnicode(fLoc))
                 return False
 
             try:
                 self._mmaps[cameraLocation] = mmap.mmap(f.fileno(), 0)
                 self._mmapOpenResults[cameraLocation] = (0,0,0)
             except:
-                self._logger.error("Failed to mmap file at " + ensureUtf8(fLoc))
+                self._logger.error("Failed to mmap file at " + ensureUnicode(fLoc))
                 return False
             finally:
                 f.close()
 
         # Once we have a mmap we are an 'open camera' once the mmap actually
         # contains valid data.
-        header = str(self._mmaps[cameraLocation][:kLiveHeaderSize])
-        opened = header != '\x00' * kLiveHeaderSize
+        header = self._mmaps[cameraLocation][:kLiveHeaderSize]
+        opened = not is_blank(header)
         if not opened:
             # We open the file but if before valid data is placed in it the
             # CameraCapture process closes and reopens it we can be stuck
@@ -333,43 +334,35 @@ class BaseMonitorView(BaseView):
         try:
             # Get the header and the bitmap data.
             mmap = self._mmaps[cameraLocation]
-            header = str(mmap[:kLiveHeaderSize])
+            rawHeader = mmap[:kLiveHeaderSize]
             # Notice that the bitmap data also includes the footer and the
-            # slack region videolib is adding.
+            # slack region videolib is adding. Keep it as bytes for wx.
             bmpData = mmap[kLiveHeaderSize:]
 
             # An all-empty header means that videolib has closed the memory
             # map and we're done with things.
-            if header != '\x00' * kLiveHeaderSize:
-
+            parsed = parse_live_header(rawHeader)
+            if parsed is not None:
+                id, width, height, requestFps, captureFps = parsed
                 # Check the ID. If it's the same as the caller has before we're
                 # done already. Notice that videolib never issues a -1 or an ID.
-                id = int(header[0:9])
                 if id == lastId:
                     self._incMMapAccessStat(cameraLocation, "notUpdatedYet")
                     return (None, 0, 0, lastId, 0, 0)
 
-                # Get the image dimension.
-                width = int(header[9:13])
-                height = int(header[13:17])
                 imgSize = width * height * 3
 
                 # Try to get to the footer data. If it doesn't exist we better
                 # tell the caller to give up on this memory map right away.
                 footerOfs = kLiveHeaderSize + imgSize
-                footer = str(mmap[footerOfs:footerOfs + 8])
+                footer = mmap[footerOfs:footerOfs + 8]
                 if len(footer) != 8:
                     self._incMMapAccessStat(cameraLocation, "noFooter")
                     return (None, 0, 0, None, 0, 0)
 
                 # We can still crash here if the footer data isn't fine, but
                 # that is way less likely and can be handled as an exception.
-                widthVerify = int(footer[0:4])
-                heightVerify = int(footer[4:8])
-
-                # Get the FPS counters.
-                requestFps, captureFps = [float(fpsStr) \
-                                          for fpsStr in header[17:].split()]
+                widthVerify, heightVerify = parse_live_footer(footer)
 
                 # Check if the dimension got confirmed by the footer and also
                 # that there's enough bitmap data. Better safe than sorry.

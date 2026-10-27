@@ -16,8 +16,7 @@ from vitaToolbox.strUtils.EnsureUnicode import ensureUnicode
 from vitaToolbox.path.PathUtils import safeMkdir
 from vitaToolbox.math.Rect import Rect
 
-from videoLib2.python.StreamReader import StreamReader
-from backEnd.QueuedDataManagerCloud import QueuedDataManagerCloud
+from backEnd.native.capture import StreamReader
 from backEnd.QueuedDataManagerCloud import QueuedDataManagerCloud
 from backEnd.VideoPipeline import VideoPipeline
 
@@ -141,7 +140,7 @@ def _getopts(argv):
 
 #===========================================================================
 def _printUsage():
-    print "Usage ./testDetections.py (-f file|-d folder) [-v]"
+    print("Usage ./testDetections.py (-f file|-d folder) [-v]")
 
 #===========================================================================
 def main():

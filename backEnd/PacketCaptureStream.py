@@ -44,12 +44,12 @@ import os
 import subprocess
 import sys
 import time
-import cPickle
+import pickle
 import shutil
 import ctypes
 from multiprocessing.managers import BaseManager
-from Queue import Queue
-from Queue import Empty as QueueEmpty
+from queue import Queue
+from queue import Empty as QueueEmpty
 from threading import Thread
 
 # Common 3rd-party imports...
@@ -60,9 +60,8 @@ from vitaToolbox.loggingUtils.LoggingUtils import getLogger, kLogLevelDebug
 # Local imports...
 from appCommon.CommonStrings import kExeName
 from appCommon.CommonStrings import kTestLiveFileName
-from videoLib2.python import StreamReader
-from videoLib2.python.StreamReader import kPacketCaptureErrCodes
-from MessageIds import msgIdPacketCaptureStatus, msgIdPacketCaptureEnabled
+from backEnd.native.capture import StreamReader, kPacketCaptureErrCodes
+from .MessageIds import msgIdPacketCaptureStatus, msgIdPacketCaptureEnabled
 
 
 LOGFUNC = ctypes.CFUNCTYPE(None, ctypes.c_int, ctypes.c_char_p)
@@ -243,9 +242,9 @@ def runPacketCapture(cameraUri, storageDir, pcapDir, configDir, queue, extras, d
         params.append(storageDir)
         params.append(pcapDir)
         params.append(configDir)
-        params.append(cPickle.dumps(address))
-        params.append(cPickle.dumps(extras))
-        params.append(cPickle.dumps(delaySeconds))
+        params.append(pickle.dumps(address))
+        params.append(pickle.dumps(extras))
+        params.append(pickle.dumps(delaySeconds))
 
         logger.info("Parameters: %s" % str(params))
 
@@ -357,11 +356,11 @@ def doRunPacketCapture(cameraUri, storageDir, pcapDir, configDir, address, extra
 
     try:
         if address and isinstance(address, str):
-            address = cPickle.loads(address)
+            address = pickle.loads(address)
         if extras and isinstance(extras, str):
-            extras = cPickle.loads(extras)
+            extras = pickle.loads(extras)
         if delaySeconds and isinstance(delaySeconds, str):
-            delaySeconds = cPickle.loads(delaySeconds)
+            delaySeconds = pickle.loads(delaySeconds)
 
         cmdQueue = FakeQueue()
         msgQueue = FakeQueue()
@@ -432,7 +431,7 @@ class PacketCaptureStream(object):
         self._msgQueue = msgQueue
 
         self._extras = extras
-        for k,v in _kCaptureExtras.iteritems():
+        for k,v in _kCaptureExtras.items():
             self._extras[k] = v
 
         self._delaySeconds = delaySeconds
@@ -453,7 +452,7 @@ class PacketCaptureStream(object):
         self._logger.setLevel(kLogLevelDebug)
         self._logger.debug("Debug logging activated...")
 
-        self._streamReader = StreamReader.StreamReader('', None, None, storageDir,
+        self._streamReader = StreamReader('', None, None, storageDir,
                 '.', configDir, self._logger.getCLogFn(), False)
         # self._streamReader = StreamReader.StreamReader('', None, storageDir,
         #         '.', configDir, getCLogFunc(os.path.join(pcapDir, 'mypcap.log')), False)
@@ -603,7 +602,7 @@ def test_main():
     """OB_REDACT
        Contains various self-test code.
     """
-    print "No tests"
+    print("No tests")
 
 
 ##############################################################################
@@ -611,4 +610,4 @@ if __name__ == '__main__':
     if len(sys.argv) > 1 and sys.argv[1] == "test":
         test_main()
     else:
-        print "Try calling with 'test' as the argument."
+        print("Try calling with 'test' as the argument.")

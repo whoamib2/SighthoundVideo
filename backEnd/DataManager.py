@@ -60,8 +60,8 @@ from vitaToolbox.sysUtils.TimeUtils import getTimeAsMs
 from vitaToolbox.profiling.MarkTime import TimerLogger
 
 # Local imports...
-from VideoMarkupModel import VideoMarkupModel
-from videoLib2.python.ClipReader import ClipReader
+from .VideoMarkupModel import VideoMarkupModel
+from backEnd.native.capture import ClipReader
 
 # Constants...
 from appCommon.CommonStrings import kThumbsSubfolder
@@ -310,7 +310,7 @@ class DataManager(object):
         @param  timeout   The time in seconds connections will wait for locks
                           to free without throwing an exception.
         """
-        assert type(filePath) == unicode
+        assert type(filePath) == str
 
         self._curDbPath = filePath
 
@@ -326,9 +326,9 @@ class DataManager(object):
         # Use persistant mode for journal files.
         self._cur.execute("PRAGMA journal_mode=PERSIST").fetchall()
 
-        tables = map(operator.itemgetter(0),
+        tables = list(map(operator.itemgetter(0),
                      self._cur.execute('''SELECT name FROM sqlite_master '''
-                                       '''WHERE type="table"'''))
+                                       '''WHERE type="table"''')))
 
         if 'objects' not in tables:
             # Set up tables if they don't exist
@@ -814,7 +814,7 @@ class DataManager(object):
         #       we'll log the error and pick a "safe" time of 24 hours ago.
         if lastTime is None:
             self._logger.error("Last added time retrieved as None")
-            lastTime = long(time.time()*1000) - (1000*60*60*24)
+            lastTime = int(time.time()*1000) - (1000*60*60*24)
 
         minStartTime = lastTime - (1000 * 60 * 15)
 
@@ -1198,7 +1198,7 @@ class DataManager(object):
                     '''WHERE ''' + timeStr + actionQuery,
                     list(itertools.chain(*actionTargets))
                 ).fetchall()
-                objUids = map(str, map(operator.itemgetter(0), objRanges))
+                objUids = list(map(str, list(map(operator.itemgetter(0), objRanges))))
 
                 # We know that these objects were performing the right actions
                 # at some point during the time period, so add them in.
@@ -1668,8 +1668,8 @@ class DataManager(object):
         @param  extras         Dict of extras, see _kSaveClipDefaults
         @return success        True if the clip was saved successfully.
         """
-        from videoLib2.python.ClipUtils import remuxClip  # Lazy--loaded on first need
-        from videoLib2.python.ClipUtils import getRealClipSize # Lazy--loaded on first need
+        from backEnd.native.capture import remuxClip  # Lazy--loaded on first need
+        from backEnd.native.capture import getRealClipSize # Lazy--loaded on first need
 
         if not self._firstFile or not self._lastFile:
             return False
@@ -1823,7 +1823,7 @@ class DataManager(object):
     def _getRegionZones(self, filename):
         procW, procH = self._figureOutProcSize2(filename)
         if procW == 0 or procH == 0:
-            print "Couldn't get region boxes: procW=" + str(procW) + " procH=" + str(procH)
+            print("Couldn't get region boxes: procW=" + str(procW) + " procH=" + str(procH))
             return []
 
         zonesOverlay = []
@@ -2491,7 +2491,7 @@ class DataManager(object):
                     size = (10000, size[1])
                 elif size[1] == 0:
                     size = (size[0], 10000)
-                img.thumbnail(size, Image.ANTIALIAS)
+                img.thumbnail(size, Image.Resampling.LANCZOS)
 
                 if objList is not None:
                     self._markThumb(camLoc, img, fileMs, objList)

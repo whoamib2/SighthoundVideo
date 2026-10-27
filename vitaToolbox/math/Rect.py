@@ -35,7 +35,7 @@
 #*****************************************************************************
 
 from math import sqrt
-from Point import Point
+from .Point import Point
 from ctypes import Structure, c_float, c_int
 
 """
@@ -141,7 +141,7 @@ class Rect(object):
             # If Szymkiewicz-Simpson, denominator is the min of the areas
             denomArea = min(self.area(), otherRect.area())
         else:
-            print "Unknown overlap method."
+            print("Unknown overlap method.")
 
         # Compute overlap
         overlap = 0

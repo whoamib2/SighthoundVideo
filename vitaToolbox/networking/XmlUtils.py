@@ -50,7 +50,7 @@ def vitaParseXML(text):
     md = None
     try:
         md = minidom.parseString(text)
-    except ValueError, e:
+    except ValueError as e:
         # minidom doesn't support multi-byte encodings ... reflow the document using UTF-8
         try:
             # sys.stderr.write("Got an exception! Rerunning the parser!")

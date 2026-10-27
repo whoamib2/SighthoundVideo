@@ -54,9 +54,13 @@ if sys.platform == 'win32':
         pass
 
 from glob import glob
-from distutils.core import setup
 import sys
 import os
+
+try:
+    from distutils.core import setup
+except ImportError:  # removed in Python 3.12
+    setup = None
 
 from appCommon.CommonStrings import kAppName, kOemName, kCopyrightYear
 from appCommon.CommonStrings import kVersionString, kExeName
@@ -71,23 +75,22 @@ class Target:
         self.copyright = kCopyrightYear
         self.name = kAppName
 
-ARCH = os.getenv("SVARCH")
+ARCH = os.getenv("SVARCH") or ""
 MS_VC90_CRT = "Microsoft.VC90.CRT"
 
 cwd = os.path.abspath(os.path.curdir)
 
 # Get the paths to the MSVC CRT dll's folders.
 # They should be in the current working directory.
-msvc90Dir = os.path.join(cwd, MS_VC90_CRT+"."+ARCH)
-print("msvc90Dir=%s" % msvc90Dir)
-
-# Add those locations to the path so that py2exe can find them during packaging.
-sys.path.extend([msvc90Dir,])
-
-# Prepare to tell py2app what DLL's to collect from those directories.
-DATA_FILES = [
-    (MS_VC90_CRT, glob(os.path.join(msvc90Dir,"*.*"))),
-]
+msvc90Dir = os.path.join(cwd, MS_VC90_CRT + "." + ARCH) if ARCH else ""
+if msvc90Dir:
+    print(("msvc90Dir=%s" % msvc90Dir))
+    sys.path.extend([msvc90Dir,])
+    DATA_FILES = [
+        (MS_VC90_CRT, glob(os.path.join(msvc90Dir, "*.*"))),
+    ]
+else:
+    DATA_FILES = []
 
 
 ################################################################
@@ -364,6 +367,14 @@ RT_MANIFEST = 24
 
 ################################################################
 if __name__ == '__main__':
+    repo = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
+    if repo not in sys.path:
+        sys.path.insert(0, repo)
+    from scripts.package_app import main as package_main
+    raise SystemExit(package_main())
+
+    # Historical py2exe entry point, kept unreachable so the options above
+    # remain readable. Packaging is scripts/package_app.py.
     import py2exe
 
     # If run without args, build executables, in quiet mode.

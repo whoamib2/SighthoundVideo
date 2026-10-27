@@ -37,7 +37,7 @@
 
 
 # Python imports...
-import cPickle as pickle
+import pickle as pickle
 import datetime
 import gzip
 import os
@@ -63,11 +63,11 @@ from backEnd.SavedQueryDataModel import SavedQueryDataModel
 
 
 # Constants...
-_kZippedObjDb = u"smallTestObjDb2.gz"
-_kUnzippedObjDb = u"smallTestObjDb2"
+_kZippedObjDb = "smallTestObjDb2.gz"
+_kUnzippedObjDb = "smallTestObjDb2"
 
-_kTestDataDir = u"testData"
-_kTmpDir = u"unitTestTmp"
+_kTestDataDir = "testData"
+_kTmpDir = "unitTestTmp"
 
 _kZippedDbPath = os.path.join(_kTestDataDir, _kZippedObjDb)
 _kTmpDbPath = os.path.join(_kTmpDir, _kUnzippedObjDb)
@@ -181,7 +181,7 @@ def _doSendClipSearch(usableQuery, camLoc, searchDate, dataMgr,
     searchConfig.disableClipMerging()
 
     usableQuery.reset()
-    for ms in range(startTime, endTime+1, incrementMs) + [None]:
+    for ms in list(range(startTime, endTime+1, incrementMs)) + [None]:
         if ms is not None:
             endMs = min(ms+incrementMs-1, endTime)
             results = usableQuery.search(ms, endMs, 'realtime')
@@ -323,7 +323,7 @@ def testAgainstOldResults():
         camLoc = query.getVideoSource().getLocationName()
 
         for (mechName, searchFn, resultsSuffix) in searchMechanisms:
-            print ("%16s %s % 32s..." % (mechName, str(searchDate), queryName)),
+            print(("%16s %s % 32s..." % (mechName, str(searchDate), queryName)), end=' ')
             sys.stdout.flush()
 
             usableQuery = query.getUsableQuery(dataMgr)
@@ -332,13 +332,13 @@ def testAgainstOldResults():
             matchingClips = searchFn(usableQuery, camLoc, searchDate, dataMgr)
             time2 = time.time()
 
-            print "...% 4d results, took %.3f seconds" % (len(matchingClips),
-                                                          time2-time1)
+            print("...% 4d results, took %.3f seconds" % (len(matchingClips),
+                                                          time2-time1))
 
             clipData = [_getClipDataTuple(clip) for clip in matchingClips]
             resultsPath = os.path.join(resultsDir, queryName + resultsSuffix)
             if not os.path.exists(resultsPath):
-                print "WARNING: Creating new results for %s" % queryName
+                print("WARNING: Creating new results for %s" % queryName)
                 pickle.dump(clipData, open(resultsPath, 'wb'),
                             pickle.HIGHEST_PROTOCOL)
             oldClipData = pickle.load(open(resultsPath, 'rb'))
@@ -406,10 +406,10 @@ def _compareLists(oldList, newList, oldListName="old", newListName="new",
     if oldList != newList:
         for i, oldItem in enumerate(oldList):
             if oldItem not in newList:
-                print "ERROR: Item %d not in %s: %s" % (i, newListName, formatFn(oldItem))
+                print("ERROR: Item %d not in %s: %s" % (i, newListName, formatFn(oldItem)))
         for i, newItem in enumerate(newList):
             if newItem not in oldList:
-                print "ERROR: Item %d not in %s: %s" % (i, oldListName, formatFn(newItem))
+                print("ERROR: Item %d not in %s: %s" % (i, oldListName, formatFn(newItem)))
 
         return True
     return False
@@ -427,5 +427,5 @@ if __name__ == '__main__':
     if len(sys.argv) > 1 and sys.argv[1] == "test":
         test_main()
     else:
-        print "Try calling with 'test' as the argument."
+        print("Try calling with 'test' as the argument.")
 

@@ -75,7 +75,7 @@ def get_utf8_arguments_windows_only():
         (("CommandLineToArgvW", windll.shell32))
     argc = c_int(0)
     argv_unicode = CommandLineToArgvW(GetCommandLineW(), byref(argc))
-    argv = [argv_unicode[i].encode('utf-8') for i in xrange(0, argc.value)]
+    argv = [argv_unicode[i] for i in range(0, argc.value)]
 
     if not hasattr(sys, 'frozen'):
         # If this is an executable produced by py2exe or bbfreeze, then it will
@@ -86,15 +86,15 @@ def get_utf8_arguments_windows_only():
         # Also skip option arguments to the Python interpreter.
         while len(argv) > 0:
             arg = argv[0]
-            if not arg.startswith(u"-") or arg == u"-":
+            if not arg.startswith("-") or arg == "-":
                 break
             argv = argv[1:]
-            if arg == u'-m':
+            if arg == '-m':
                 # sys.argv[0] should really be the absolute path of the module source,
                 # but never mind
                 break
-            if arg == u'-c':
-                argv[0] = u'-c'
+            if arg == '-c':
+                argv[0] = '-c'
                 break
     # Make our changes available app-wide...
     sys.argv = argv

@@ -77,7 +77,7 @@ def abspathU(path):
     try:
         return os.path.abspath(path)
     except UnicodeDecodeError:
-        return os.path.normpath(os.path.join(os.getcwdu(), path))
+        return os.path.normpath(os.path.join(os.getcwd(), path))
 
 
 ###############################################################
@@ -87,7 +87,7 @@ def getDirSize(path):
     @param  path  The path to the directory whose size should be calculated.
     @return size  The size of the directory in bytes.
     """
-    if type(path) == str:
+    if isinstance(path, (bytes, bytearray)):
         path = path.decode('utf-8')
 
     dirSize = 0
@@ -131,7 +131,7 @@ def normalizePath(path):
     @param  forceConversion If true, convert regardless of platform
     @return normPath            The normalized path, in Unicode format
     """
-    if type(path) == str:
+    if isinstance(path, (bytes, bytearray)):
         path = path.decode('utf-8')
 
     if sys.platform == 'darwin':

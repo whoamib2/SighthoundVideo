@@ -45,15 +45,15 @@ import os
 #   None for now...
 
 # Toolbox imports...
-from svsentry.Sentry import VideoPipeline as _VideoPipeline
-from svsentry.Sentry import loadSentry, kDefaultPipelineConfigFile
+from backEnd.native.tracking import (
+    ensure_sentry_loaded,
+    kDefaultPipelineConfigFile,
+    pipeline_base,
+)
 
-
-from vitaToolbox.ctypesUtils.LoadLibrary import LoadLibrary
-loadSentry(LoadLibrary, None)
 
 ##############################################################################
-class VideoPipeline (_VideoPipeline):
+class VideoPipeline(pipeline_base()):
     """A subclassed Sentry pipeline with video path data.
     """
 
@@ -68,6 +68,7 @@ class VideoPipeline (_VideoPipeline):
         @param pipelineConfigFile   (optional) A configuration file that defines
                                     this pipeline.
         """
+        ensure_sentry_loaded()
         super(VideoPipeline, self).__init__(objectCollector, pipelineConfigFile)
 
         self._videoPath = videoPath

@@ -88,12 +88,12 @@ def _machine_id_osx():
 ###############################################################################
 def _machine_id_win():
     """ Get the serial number available under Windows via the registry value
-    HKEY_LOCAL_MACHINE\SOFTWARE\Microsoft\Cryptography\MachineGuid.
+    HKEY_LOCAL_MACHINE\\SOFTWARE\\Microsoft\\Cryptography\\MachineGuid.
 
     @return The machine identifier, None if the registry didn't yield anything.
     """
-    from _winreg import OpenKey, QueryValueEx, CloseKey
-    from _winreg import HKEY_LOCAL_MACHINE, KEY_READ
+    from winreg import OpenKey, QueryValueEx, CloseKey
+    from winreg import HKEY_LOCAL_MACHINE, KEY_READ
     try:
         key = OpenKey(HKEY_LOCAL_MACHINE, r"SOFTWARE\Microsoft\Cryptography", 0,
           KEY_READ | 0x0100) # _winreg.KEY_WOW64_64KEY is Python 2.7
@@ -142,7 +142,7 @@ def _machine_id_fallback(logger=None):
         # are not suitable for heuristics, at least not with this method ...
         pass
     else:
-        for n in xrange(0,31):
+        for n in range(0,31):
             preferred = "en%d" % n
             for f in found:
                 if preferred == f[0]:
@@ -193,8 +193,8 @@ if __name__ == "__main__":
     logger = logging.getLogger("main")
     tm = time.time()
     loops = int(sys.argv[1]) if 1 < len(sys.argv) else 10000
-    for i in xrange(0, loops):
+    for i in range(0, loops):
         mid = machineId(True, logger)
-    print "machine ID is '%s', %.2f calls/second" % \
-        (mid, loops/max(1, (time.time() - tm)))
+    print("machine ID is '%s', %.2f calls/second" % \
+        (mid, loops/max(1, (time.time() - tm))))
         # (got 1800 on OSX and 50K on Win8)

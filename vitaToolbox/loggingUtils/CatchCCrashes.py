@@ -40,8 +40,8 @@
 import sys
 
 if sys.platform == 'win32':
-    from CatchCCrashesWin import catchCCrashes
-    from CatchCCrashesWin import setSilentCrashHandler
+    from .CatchCCrashesWin import catchCCrashes
+    from .CatchCCrashesWin import setSilentCrashHandler
 else:
     # TODO: Implement for Mac.
     def catchCCrashes():
@@ -55,16 +55,16 @@ def test_main():
     """OB_REDACT
        Contains various self-test code.
     """
-    print "Registering for crashes..."
+    print("Registering for crashes...")
     catchCCrashes()
-    print "...registered!"
+    print("...registered!")
 
     import ctypes
     pz = ctypes.cast(0x04, ctypes.POINTER(ctypes.c_int))
 
-    print "I'm gonna crash.  Really, I am!"
-    print pz.contents
-    print "...oh, somehow I didn't crash.  Am I dreaming?"
+    print("I'm gonna crash.  Really, I am!")
+    print(pz.contents)
+    print("...oh, somehow I didn't crash.  Am I dreaming?")
 
 
 ##############################################################################
@@ -72,4 +72,4 @@ if __name__ == '__main__':
     if len(sys.argv) > 1 and sys.argv[1] == "test":
         test_main(*sys.argv[2:])
     else:
-        print "Try calling with 'test' as the argument."
+        print("Try calling with 'test' as the argument.")

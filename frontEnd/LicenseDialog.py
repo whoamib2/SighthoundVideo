@@ -39,7 +39,7 @@
 
 # Python imports...
 import time
-import urllib
+import urllib.request, urllib.parse, urllib.error
 import webbrowser
 import sys, traceback
 
@@ -67,8 +67,8 @@ from appCommon.LicenseUtils import kNoValueToken
 from appCommon.LicenseUtils import kDefaultUser
 from appCommon.LicenseUtils import kDefaultSerial
 from appCommon.LicenseUtils import licenseValidForAppVersion
-from BackEndClient import LicenseBackEndClient
-from LoginDialog import getLicenseMoreInfoSizer
+from .BackEndClient import LicenseBackEndClient
+from .LoginDialog import getLicenseMoreInfoSizer
 from vitaToolbox.wx.DelayedProgressDialog import DelayedProgressDialog
 from vitaToolbox.wx.FontUtils import adjustPointSize
 from vitaToolbox.wx.FontUtils import makeFontBold
@@ -523,7 +523,7 @@ class LicenseDialog(wx.Dialog):
         """
         serialNum = self._licenseList.getSelectedSerial()
         if serialNum:
-            serialNum = urllib.quote(serialNum)
+            serialNum = urllib.parse.quote(serialNum)
         webbrowser.open(kBuyUpgradeUrl % serialNum)
 
 
@@ -545,7 +545,7 @@ class LicenseDialog(wx.Dialog):
             try:
                 self._licenseClient.acquire(serialNum)
 
-                for _ in xrange(0, int(_kMaxAcquireRetries)):
+                for _ in range(0, int(_kMaxAcquireRetries)):
                     dlg.Pulse()
                     result = self._licenseClient.acquireComplete(
                                 _kAcquirePendingIntervalSec)
@@ -579,7 +579,7 @@ class LicenseDialog(wx.Dialog):
             try:
                 self._licenseClient.unlink()
 
-                for _ in xrange(0, int(_kMaxUnlinkRetries)):
+                for _ in range(0, int(_kMaxUnlinkRetries)):
                     dlg.Pulse()
                     result = self._licenseClient.unlinkComplete(
                                 _kUnlinkPendingIntervalSec)
@@ -772,7 +772,7 @@ class _LicenseList(wx.VListBox):
 
         # Attempt to restore the previous selection
         if curSerial:
-            for i in xrange(0, len(self._licenses)):
+            for i in range(0, len(self._licenses)):
                 if licenses[i][kSerialField] == curSerial:
                     self.SetSelection(i)
                     if not self.IsVisible(i):

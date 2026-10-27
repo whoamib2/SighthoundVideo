@@ -60,8 +60,8 @@ from vitaToolbox.sysUtils.FileUtils import safeRemove
 
 
 # Local imports...
-from BackEndClient import BackEndClient
-from DbCorruptedDialog import DbCorruptedDialog
+from .BackEndClient import BackEndClient
+from .DbCorruptedDialog import DbCorruptedDialog
 
 from appCommon.CommonStrings import kAppName
 from appCommon.CommonStrings import kFrontEndLogName
@@ -81,16 +81,16 @@ try:
     kHasBugReportDialog = True
 except:
     kHasBugReportDialog = False
-from GetLaunchParameters import getLaunchParameters
+from .GetLaunchParameters import getLaunchParameters
 
-from FrontEndFrame import FrontEndFrame
-from FrontEndPrefs import getFrontEndPref, setFrontEndPref
-from FrontEndUtils import getUserLocalDataDir
-from FrontEndUtils import getServiceStartsBackend
-from FrontEndUtils import getRemotePathsFromSettings
-from FrontEndUtils import setServiceStartsBackend, setServiceAutoStart
+from .FrontEndFrame import FrontEndFrame
+from .FrontEndPrefs import getFrontEndPref, setFrontEndPref
+from .FrontEndUtils import getUserLocalDataDir
+from .FrontEndUtils import getServiceStartsBackend
+from .FrontEndUtils import getRemotePathsFromSettings
+from .FrontEndUtils import setServiceStartsBackend, setServiceAutoStart
 
-from LicensingHelpers import getLicense
+from .LicensingHelpers import getLicense
 
 from launch.Launch import serviceAvailable
 from launch.Launch import Launch
@@ -436,7 +436,7 @@ class FrontEndApp(wx.App):
                     self._logger.info("launching backend...")
                     openParams = getLaunchParameters()
                     openParams.extend(["--backEnd",
-                                       userLocalDataDir.encode('utf-8'),
+                                       userLocalDataDir,
                     # mark the backend progress via an argument which is not
                     # used directly but picked up through process enumeration
                     # where we examine the command lines ...
@@ -493,7 +493,7 @@ class FrontEndApp(wx.App):
             self._logger.info("Waiting for backend connection ...")
 
             backEndClient = BackEndClient()
-            for _ in xrange(_kConnectTimeout * 10):
+            for _ in range(_kConnectTimeout * 10):
                 if backEndClient.connect():
                     break
                 time.sleep(.1)
@@ -502,7 +502,7 @@ class FrontEndApp(wx.App):
             if backEndClient.isConnected():
                 self._logger.info("Waiting for backend readiness ...")
                 try:
-                    for _ in xrange(_kReadyTimeout * 10):
+                    for _ in range(_kReadyTimeout * 10):
                         item = backEndClient.memstoreGet(kMemStoreBackendReady,
                                                          .1, -1)
                         if item and item[0]:
@@ -510,7 +510,7 @@ class FrontEndApp(wx.App):
                             break
                         else:
                             self._startDlg.Pulse()
-                except Exception, e:
+                except Exception as e:
                     self._logger.error(
                         "Waiting for backend readiness failed: " + str(e))
 
@@ -669,7 +669,7 @@ class FrontEndApp(wx.App):
                     try:
                         os.rename(oldAppDir, dataDir)
                         setFrontEndPref("vdvImportOffered", True)
-                    except Exception, e:
+                    except Exception as e:
                         # If we can't just rename, give an error message.
                         choice = wx.MessageBox(_kMoveFailedText % str(e),
                                                _kMoveFailedTitle,
@@ -691,7 +691,7 @@ class FrontEndApp(wx.App):
                             prefs = BackEndPrefs(os.path.join(dataDir, kPrefsFile))
 
                             oldVideoDir = prefs.getPref('videoDir')
-                            if type(oldVideoDir) == str:
+                            if isinstance(oldVideoDir, (bytes, bytearray)):
                                 oldVideoDir = oldVideoDir.decode('utf-8')
                             if oldVideoDir is not None:
                                 prefix = os.path.commonprefix([oldVideoDir, oldAppDir])
@@ -706,7 +706,7 @@ class FrontEndApp(wx.App):
                                     prefs.setPref('dataDir',
                                             os.path.join(dataDir, storageDir[len(prefix):]))
 
-                        except Exception, e:
+                        except Exception as e:
                             choice = wx.MessageBox(_kVideoMoveFailedText %
                                                    (oldVideoDir, newVideoDir, str(e)),
                                                    _kVideoMoveFailedTitle,
@@ -743,7 +743,7 @@ class FrontEndApp(wx.App):
                                        is already running.
         """
         client = BackEndClient()
-        for _ in xrange(_kTestConnectTimeout * 10):
+        for _ in range(_kTestConnectTimeout * 10):
             didConnect = client.connect()
             if didConnect:
                 break
@@ -789,7 +789,7 @@ class FrontEndApp(wx.App):
         buildFilePath = os.path.join(lookInDir, _kBuildFile)
 
         try:
-            buildStr = file(buildFilePath).read().split()[-1].strip()
+            buildStr = open(buildFilePath).read().split()[-1].strip()
         except Exception:
             buildStr = "unknown"
         return _kBuildTemplateStr % (buildStr)
@@ -875,7 +875,7 @@ class FrontEndApp(wx.App):
                     now = max(now, os.path.getmtime(log))
 
 
-        except Exception, e:
+        except Exception as e:
             self._logger.error("Error checking for crash reports - " + str(e))
 
         # Update the 'last checked' time.

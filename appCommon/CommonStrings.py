@@ -40,14 +40,14 @@
 
 import os
 import os.path
-import urllib
+import urllib.request, urllib.parse, urllib.error
 import operator
 
 # Helper that we use to make file:/// URLs, since those need to be absolute
 # and refer to the current working directory.
 def __fileUrlHelper(url):
     return url % {
-        'cwd': urllib.quote(os.getcwdu().replace(os.path.sep, '/').lstrip('/'),
+        'cwd': urllib.parse.quote(os.getcwd().replace(os.path.sep, '/').lstrip('/'),
                             '/:')
     }
 
@@ -172,14 +172,14 @@ kSoftwareLicenseAgreementResource = "SLAResources.r"  # Also in FrontEnd.mk
 # Copyright info...
 kCopyrightYear = "2008-2021"
 kCopyrightStr = (
-    u"""© %s %s All rights reserved.\n\n"""
-    u"""This product contains software whose copyright and """
-    u"""IPR are owned by and licensed from x264, LLC\n"""
-    u"""FFmpeg copyright © 2000-2021 Fabrice Bellard, et al. """
-    u"""LIVE555 copyright © 1996-2021 Live Networks, Inc. """
-    u"""Pthreads-win32 copyright © 1998 John E. Bossom and """
-    u"""copyright © 1999, 2006 pthreads-win32 contributors. """
-    u"""FreeType © 2006-2021 The FreeType Project.""") % (
+    """© %s %s All rights reserved.\n\n"""
+    """This product contains software whose copyright and """
+    """IPR are owned by and licensed from x264, LLC\n"""
+    """FFmpeg copyright © 2000-2021 Fabrice Bellard, et al. """
+    """LIVE555 copyright © 1996-2021 Live Networks, Inc. """
+    """Pthreads-win32 copyright © 1998 John E. Bossom and """
+    """copyright © 1999, 2006 pthreads-win32 contributors. """
+    """FreeType © 2006-2021 The FreeType Project.""") % (
     kCopyrightYear, kSighthoundCompanyName,
 )
 kCopyrightMoreInfoStr = "Click here for detailed copyright information."
@@ -448,7 +448,7 @@ kTargetMapping = [
     ('object', "Unknown objects"),
     ('vehicle', "Vehicles"),
 ]
-kTargetLabels = map(operator.itemgetter(1), kTargetMapping)
+kTargetLabels = list(map(operator.itemgetter(1), kTargetMapping))
 kTargetSettingToLabel = dict(kTargetMapping)
 kTargetLabelToSetting = dict(map(operator.itemgetter(1, 0),
                                   kTargetMapping))

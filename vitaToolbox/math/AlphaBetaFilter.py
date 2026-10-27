@@ -97,7 +97,7 @@ class AlphaBetaFilter(object):
 
         # Add points to track
         if initialPosition is not None:
-            for i in xrange(initialPosition.shape[0]):
+            for i in range(initialPosition.shape[0]):
                 pos = initialPosition[i,:].tolist()
                 self.addPoint(pos)
 
@@ -232,22 +232,22 @@ class AlphaBetaFilter(object):
 # Command-line use of filter.
 #================================================================
 def usage():
-    print
-    print "Usage:  python AlphaBetaFilter.py [options] < dataFile >"
-    print
-    print "  \"dataFile\"  -- File containing measurements to process."
-    print "                   Each row should contain a space-separated,"
-    print "                   interleaved list of coordinates for the"
-    print "                   points."
-    print
-    print "                   For example, the line '1 1 2 2' represents"
-    print "                   two points with coordinates (1, 1) and (2, 2)"
-    print "                   respectively."
-    print
-    print
-    print "  Options:"
-    print "    -h, --help:  show this help"
-    print
+    print()
+    print("Usage:  python AlphaBetaFilter.py [options] < dataFile >")
+    print()
+    print("  \"dataFile\"  -- File containing measurements to process.")
+    print("                   Each row should contain a space-separated,")
+    print("                   interleaved list of coordinates for the")
+    print("                   points.")
+    print()
+    print("                   For example, the line '1 1 2 2' represents")
+    print("                   two points with coordinates (1, 1) and (2, 2)")
+    print("                   respectively.")
+    print()
+    print()
+    print("  Options:")
+    print("    -h, --help:  show this help")
+    print()
 
 if __name__ == '__main__':
 
@@ -287,7 +287,7 @@ if __name__ == '__main__':
     splitLine = line.split()
     assert len(splitLine) % 2 == 0  # check for even number of columns
     numPoints = len(splitLine)/2
-    for n in xrange(numPoints):
+    for n in range(numPoints):
         newPoint = [float(splitLine[2*n]), float(splitLine[2*n+1])]
         _ = alphaBetaFilter.addPoint(newPoint)
 
@@ -296,12 +296,12 @@ if __name__ == '__main__':
     posMeasured = numpy.zeros([numPoints, 2], dtype='float32')
     for line in lines[1:]:
         splitLine = line.split()
-        for n in xrange(numPoints):
+        for n in range(numPoints):
             posMeasured[n,:] = \
               [float(splitLine[2*n]), float(splitLine[2*n+1])]
         posPredicted, _ = alphaBetaFilter.predict(dt)
         posSmoothed, _ = alphaBetaFilter.update(posMeasured, dt)
-        print "Predicted positions: \n", posPredicted
-        print "Smoothed positions: \n", posSmoothed
+        print("Predicted positions: \n", posPredicted)
+        print("Smoothed positions: \n", posSmoothed)
 
 

@@ -47,22 +47,19 @@ import traceback
 from PIL import Image
 from collections import deque, defaultdict
 
-from ObjectDetectorClient import ObjectDetectorClientLocal, ObjectDetectorClientInProcess
+from .ObjectDetectorClient import ObjectDetectorClientLocal, ObjectDetectorClientInProcess
 
 # Common 3rd-party imports...
 
 # Local imports...
-import MessageIds
+from . import MessageIds
 from appCommon.CommonStrings import kThumbsSubfolder
 
-from svsentry.Sentry import ObjectCollector, loadSentry
+from backEnd.native.tracking import object_collector_base
 
 # Globals...
 from vitaToolbox.image.ImageConversion import convertProcFrameToPIL
-from vitaToolbox.ctypesUtils.LoadLibrary import LoadLibrary
 from vitaToolbox.strUtils.EnsureUnicode import ensureUtf8
-
-loadSentry(LoadLibrary, None)
 
 _kFrameSaveInterval=1000 # distance in ms between frames we save
 _kStatsReportInterval=30
@@ -124,7 +121,7 @@ class CloudStats(object):
             self._lastLogTime = time.time()
 
 ##############################################################################
-class QueuedDataManagerCloud(ObjectCollector):
+class QueuedDataManagerCloud(object_collector_base()):
     """An interface to DataManager functions to be processed remotely.
 
        Responsible for interpolating the results for frames not submitted to
@@ -468,8 +465,12 @@ class QueuedDataManagerCloud(ObjectCollector):
             timestamp, detections = result
             if self._debugMode:
                 self._logger.debug("Detection response: %d - %s" % (timestamp, str(detections)))
-            for obj, type, score, overlap in detections:
-                obj.reportCloudDetection(timestamp, type, score, overlap, self._logger)
+            for detection in detections:
+                obj, det_type, score, overlap = detection[:4]
+                attributes = getattr(detection, "attributes", None)
+                obj.reportCloudDetection(
+                    timestamp, det_type, score, overlap, self._logger, attributes
+                )
 
             # And then let all the rest know the detection had occurred
             frames = self._trackedObjects.get(timestamp, None)
@@ -502,7 +503,7 @@ class QueuedDataManagerCloud(ObjectCollector):
             del self._trackedObjects[k]
 
         # Free all the frames that aren't needed anymore
-        for timestamp in self._frames.keys():
+        for timestamp in list(self._frames.keys()):
             if timestamp <= self._lastSentryFrameTimeMs:
                 del self._frames[timestamp]
 
@@ -568,7 +569,7 @@ class QueuedDataManagerCloud(ObjectCollector):
                 size = (self._thumbRes*kVeryLargeFactor, self._thumbRes)
             else:
                 size = (self._thumbRes, self._thumbRes*kVeryLargeFactor)
-            pilFrame.thumbnail(size, Image.ANTIALIAS)
+            pilFrame.thumbnail(size, Image.Resampling.LANCZOS)
         try:
             if not os.path.isdir(dirname):
                 os.makedirs(dirname)
@@ -795,7 +796,7 @@ class _QueuedObjId(object):
         if cls._idLastPurgeTime + cls._idPurgeInterval > ms:
             return
         # delete info about objects we haven't seen in awhile
-        for idNum in cls._idToQueuedObj.keys():
+        for idNum in list(cls._idToQueuedObj.keys()):
             if cls._idToQueuedObj[idNum].lastSeenBySentry + cls._idPurgeTimeout < ms:
                 del cls._idToQueuedObj[idNum]
         cls._idLastPurgeTime = ms
@@ -856,8 +857,12 @@ class _QueuedObjId(object):
         return self.detectorDecision
 
     ###########################################################
-    def reportCloudDetection(self, ms, type, score, overlap, logger):
-        """ Notify the object whenever detection result is received for a particular frame
+    def reportCloudDetection(self, ms, type, score, overlap, logger, attributes=None):
+        """ Notify the object whenever detection result is received for a particular frame.
+
+        ``attributes`` holds optional recognizer fields (plate text, face
+        identity, delivery carrier). They are stored for a later response
+        path and do not change the type/score decision.
         """
         if self.detectorDecision is not None:
             # do not update the object if final determination had been made
@@ -865,6 +870,10 @@ class _QueuedObjId(object):
 
         self.lastDetectionEventTime = ms
         self.externalDetections[ms].append((type, score, overlap))
+        if attributes:
+            if not hasattr(self, "detectionAttributes"):
+                self.detectionAttributes = {}
+            self.detectionAttributes.update(attributes)
 
     ###########################################################
     def notifyDetectionRequested(self, ms):
@@ -925,12 +934,12 @@ class _QueuedObjId(object):
         kHighConfidenceOverlap = 0.8
 
         sumFrames, sumScore, sumOverlap = self._getScoresForObservedTypes()
-        frameCount = len(self.externalDetections.keys())
+        frameCount = len(list(self.externalDetections.keys()))
 
         highConfidenceTypes = []
         bestSuperscore = 0
         bestSuperscoreType = None
-        allTypes = sumFrames.keys()
+        allTypes = list(sumFrames.keys())
 
         # See which object types we've seen so far, and if any of those stand out
         for type in allTypes:

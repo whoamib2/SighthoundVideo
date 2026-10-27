@@ -55,7 +55,7 @@ from appCommon.CommonStrings import kAboutAccountsUrl
 from appCommon.CommonStrings import kCreateAccountUrl
 from appCommon.CommonStrings import kForgotPassUrl
 from appCommon.CommonStrings import kLoginStatusLastUser
-from BackEndClient import LicenseBackEndClient
+from .BackEndClient import LicenseBackEndClient
 from vitaToolbox.wx.DelayedProgressDialog import DelayedProgressDialog
 from vitaToolbox.wx.FontUtils import makeFontNotUnderlined
 from vitaToolbox.wx.TextCtrlUtils import setHyperlinkColors
@@ -114,7 +114,7 @@ _kPadding = 16
 _kConnectCheckIntervalSec = .1
 _kMaxConnectRetries = 30/_kConnectCheckIntervalSec
 
-_kEMailRegex = re.compile('^[0-9a-zA-Z._%+-]+@[0-9a-zA-Z.-]+\.[a-zA-Z]{2,63}$')
+_kEMailRegex = re.compile(r'^[0-9a-zA-Z._%+-]+@[0-9a-zA-Z.-]+\.[a-zA-Z]{2,63}$')
 
 ##############################################################################
 def getLicenseMoreInfoSizer(parent):
@@ -303,7 +303,7 @@ class LoginDialog(wx.Dialog):
         try:
             self._licenseClient.login(email, password)
 
-            for _ in xrange(0, int(_kMaxConnectRetries)):
+            for _ in range(0, int(_kMaxConnectRetries)):
                 result = self._licenseClient.loginComplete(
                         _kConnectCheckIntervalSec)
                 if result is not None:

@@ -368,12 +368,12 @@ def computeAccuracies(numCategories, predictionMatrix):
     # dictionary where the key is the category number and the value
     # is a tuple of the form [numCorrect, numInputs].
     categoryCounts = {}
-    for idx, count in predictionMatrix.iteritems():
+    for idx, count in predictionMatrix.items():
 
         # get input category
         category = idx[0]
 
-        if categoryCounts.has_key(category):
+        if category in categoryCounts:
             # category already seen, so appropriately increment
             # numCorrect and numInputs
             currentCounts = categoryCounts[category]
@@ -400,7 +400,7 @@ def computeAccuracies(numCategories, predictionMatrix):
     totalInputs   = 0
     totalVariance = 0
     poolDataForOverallStdErr = False
-    for category, counts in categoryCounts.iteritems():
+    for category, counts in categoryCounts.items():
         if category >= 0 and category < numCategories:
 
             # get number of correct predictions and number of inputs
@@ -662,7 +662,7 @@ def _test_main():
     _testErfcInvAndComputeZValueForStdNormal()
     _testComputeConfidenceIntervalsAndComputeAccuracies()
 
-    print "------------------------------------------------"
+    print("------------------------------------------------")
 
     return
 
@@ -671,8 +671,8 @@ def _testErfcAndComputePValueForStdNormal():
     """OB_REDACT
     Test code for _erfc() and computePValueForStdNormal() functions.
     """
-    print "------------------------------------------------"
-    print "Testing _erfc()"
+    print("------------------------------------------------")
+    print("Testing _erfc()")
     errTol = 2.e-5
     xVals = [9e5, 7.34e4, 342., 72., 15., 8., 5.5, 4.000001, 4.0, 3.99999999,
              3.123413274340875, 2.811658633703122, 2.751063905712061,
@@ -686,18 +686,18 @@ def _testErfcAndComputePValueForStdNormal():
              0.0009, 0.001, 0.01, 0.01003, 0.0504032, 0.094948, 0.1,
              0.126673841612110, 0.288844366346485, 0.744977400407727,
              0.998081757263845, 0.999887162083667, 1.000000000000000]
-    for i in xrange(0, len(xVals)):
+    for i in range(0, len(xVals)):
         x = xVals[i]
-        print "  x =", x, "...",
+        print("  x =", x, "...", end=' ')
 
         p = _erfc(x)
         assert fabs(p-pVals[i]) < errTol
-        print "PASS"  # test passed
+        print("PASS")  # test passed
 
 
     ############################################################
-    print "------------------------------------------------"
-    print "Testing computePValueForStdNormal()"
+    print("------------------------------------------------")
+    print("Testing computePValueForStdNormal()")
     errTol = 2.e-5
     zVals = [1.272792206135786e6, 1.038032754781852e5, 483.6610383315985,
              101.8233764908629, 21.213203435596427, 11.313708498984761,
@@ -714,21 +714,21 @@ def _testErfcAndComputePValueForStdNormal():
              0.0009, 0.001, 0.01, 0.01003, 0.0504032, 0.094948, 0.1,
              0.126673841612110, 0.288844366346485, 0.744977400407727,
              0.998081757263845, 0.999887162083667, 1.000000000000000]
-    for i in xrange(0, len(zVals)):
+    for i in range(0, len(zVals)):
         z = zVals[i]
-        print "  z =", z, "...",
+        print("  z =", z, "...", end=' ')
 
         p = computePValueForStdNormal(z)
         assert fabs(p-pVals[i]) < errTol
-        print "PASS"  # test passed
+        print("PASS")  # test passed
 
 
 def _testErfcInvAndComputeZValueForStdNormal():
     """OB_REDACT
     Test code for _erfcinv() and computeZValueForStdNormal() functions.
     """
-    print "------------------------------------------------"
-    print "Testing _erfcinv() and computeZValueForStdNormal()"
+    print("------------------------------------------------")
+    print("Testing _erfcinv() and computeZValueForStdNormal()")
     errTol = 0.006
     pVals = [1e-5, 7e-5, 1e-4, 3e-4, 0.0002, 0.0009, 0.001,
              0.01, 0.01003, 0.0504032, 0.094948, 0.1]
@@ -740,23 +740,23 @@ def _testErfcInvAndComputeZValueForStdNormal():
              3.615300006924663, 3.719016485455681, 3.320054116699447,
              3.290526731491896, 2.575829303548902, 2.574793324018947,
              1.956526192872185, 1.669855280274727, 1.644853626951473]
-    for i in xrange(0, len(pVals)):
+    for i in range(0, len(pVals)):
         p = pVals[i]
-        print "  p =", p, "...",
+        print("  p =", p, "...", end=' ')
 
         x = _erfcinv(p)
         z = computeZValueForStdNormal(p)
         assert fabs(x-xVals[i]) < errTol
         assert fabs(z-zVals[i]) < errTol
-        print "PASS"  # test passed
+        print("PASS")  # test passed
 
     p = 0.0
-    print "  p =", p, "...",
+    print("  p =", p, "...", end=' ')
     xInf = _erfcinv(p)
     assert fabs(xInf-_kBigNumber) < errTol
     zInf = computeZValueForStdNormal(p)
     assert fabs(zInf-_kSqrtTwo*_kBigNumber) < errTol
-    print "PASS"  # test passed
+    print("PASS")  # test passed
 
 
 def _testComputeConfidenceIntervalsAndComputeAccuracies(): #PYCHECKER too many lines; long function a result of size of test data
@@ -764,8 +764,8 @@ def _testComputeConfidenceIntervalsAndComputeAccuracies(): #PYCHECKER too many l
     Test code for computeConfidenceIntervals() and computeAccuracies()
     functions.
     """
-    print "------------------------------------------------"
-    print "Testing computeConfidenceIntervals() for Non-proportion Data"
+    print("------------------------------------------------")
+    print("Testing computeConfidenceIntervals() for Non-proportion Data")
     errTol = 1e-5
     meansAndStdErrs   = [(0.5, 0.1),
                          (0.8, 0.4),
@@ -791,14 +791,14 @@ def _testComputeConfidenceIntervalsAndComputeAccuracies(): #PYCHECKER too many l
          (-0.000321377602535, 1.780321377602535)] ]
 
 
-    for i in xrange(len(confidenceLevels)):
+    for i in range(len(confidenceLevels)):
         confidence = confidenceLevels[i]
-        print "  confidenceLevel =", confidence, "...",
+        print("  confidenceLevel =", confidence, "...", end=' ')
         confIntervals = computeConfidenceIntervals(meansAndStdErrs,
                                                    confidenceLevel = confidence,
                                                    isProportionData = False)
         allTestsPassed = True
-        for j in xrange(len(meansAndStdErrs)):
+        for j in range(len(meansAndStdErrs)):
             confInt = confIntervals[j]
             confIntCorrect = confIntsCorrect[i][j]
             if (fabs(confInt[0]-confIntCorrect[0]) > errTol) or \
@@ -806,12 +806,12 @@ def _testComputeConfidenceIntervalsAndComputeAccuracies(): #PYCHECKER too many l
                 allTestsPassed = False
 
         assert allTestsPassed
-        print "PASS"  # test passed
+        print("PASS")  # test passed
 
 
     ############################################################
-    print "------------------------------------------------"
-    print "Testing computeConfidenceIntervals() for Proportion Data"
+    print("------------------------------------------------")
+    print("Testing computeConfidenceIntervals() for Proportion Data")
     errTol = 1e-5
     meansAndStdErrs   = [(0.5, 0.1),
                          (0.8, 0.4),
@@ -837,14 +837,14 @@ def _testComputeConfidenceIntervalsAndComputeAccuracies(): #PYCHECKER too many l
          (0.0, 1.0)] ]
 
 
-    for i in xrange(len(confidenceLevels)):
+    for i in range(len(confidenceLevels)):
         confidence = confidenceLevels[i]
-        print "  confidenceLevel =", confidence, "...",
+        print("  confidenceLevel =", confidence, "...", end=' ')
         confIntervals = computeConfidenceIntervals(meansAndStdErrs,
                                                    confidenceLevel = confidence,
                                                    isProportionData = True)
         allTestsPassed = True
-        for j in xrange(len(meansAndStdErrs)):
+        for j in range(len(meansAndStdErrs)):
             confInt = confIntervals[j]
             confIntCorrect = confIntsCorrect[i][j]
             if (fabs(confInt[0]-confIntCorrect[0]) > errTol) or \
@@ -852,12 +852,12 @@ def _testComputeConfidenceIntervalsAndComputeAccuracies(): #PYCHECKER too many l
                 allTestsPassed = False
 
         assert allTestsPassed
-        print "PASS"  # test passed
+        print("PASS")  # test passed
 
 
     ############################################################
-    print "------------------------------------------------"
-    print "Testing computeAccuracies()"
+    print("------------------------------------------------")
+    print("Testing computeAccuracies()")
     errTol = 1e-5
 
     # this tests the case that at least one category has too few
@@ -911,17 +911,17 @@ def _testComputeConfidenceIntervalsAndComputeAccuracies(): #PYCHECKER too many l
                        (-1, -1),
                        (-1, -1),
                        (0.7, 0.027386127)]  # statistics for entire data set
-    print "  Categories with insufficient data...",
+    print("  Categories with insufficient data...", end=' ')
     accAndStdErrs1 = computeAccuracies(numCategories = 28,
                                        predictionMatrix = predictionMatrix1)
     allTestsPassed = True
-    for i in xrange(len(accAndStdErrs1)):
+    for i in range(len(accAndStdErrs1)):
         if (fabs(accAndStdErrs1[i][0]-correctResults1[i][0]) > errTol) or \
            (fabs(accAndStdErrs1[i][1]-correctResults1[i][1]) > errTol):
             allTestsPassed = False
 
     assert allTestsPassed
-    print "PASS"  # test passed
+    print("PASS")  # test passed
 
     # this tests the case that all categories have enough data
     # that there is no need to pool the data when computing the
@@ -949,24 +949,24 @@ def _testComputeConfidenceIntervalsAndComputeAccuracies(): #PYCHECKER too many l
                        (0.826722338204593, 0.017293518746723),
                        (0.344272844272844, 0.00882288303)]  # statistics for
                                                             # entire data set
-    print "  Categories with sufficient data...",
+    print("  Categories with sufficient data...", end=' ')
     accAndStdErrs2 = computeAccuracies(numCategories = 4,
                                        predictionMatrix = predictionMatrix2)
     allTestsPassed = True
-    for i in xrange(len(accAndStdErrs2)):
+    for i in range(len(accAndStdErrs2)):
         if (fabs(accAndStdErrs2[i][0]-correctResults2[i][0]) > errTol) or \
            (fabs(accAndStdErrs2[i][1]-correctResults2[i][1]) > errTol):
             allTestsPassed = False
 
     assert allTestsPassed
-    print "PASS"  # test passed
+    print("PASS")  # test passed
 
 
     ############################################################
-    print "------------------------------------------------"
-    print "Testing computeConfidenceIntervals()/computeAccuracies() interactions"
+    print("------------------------------------------------")
+    print("Testing computeConfidenceIntervals()/computeAccuracies() interactions")
 
-    print "  Categories with insufficient data...",
+    print("  Categories with insufficient data...", end=' ')
     errTol = 1e-5
     confidence = 0.95
     correctResults = [(-1, -1),
@@ -1001,16 +1001,16 @@ def _testComputeConfidenceIntervalsAndComputeAccuracies(): #PYCHECKER too many l
     confIntervals = computeConfidenceIntervals(meansAndStdErrs = accAndStdErrs1,
                                                confidenceLevel = confidence)
     allTestsPassed = True
-    for i in xrange(len(confIntervals)):
+    for i in range(len(confIntervals)):
         if (fabs(confIntervals[i][0]-correctResults[i][0]) > errTol) or \
            (fabs(confIntervals[i][1]-correctResults[i][1]) > errTol):
             allTestsPassed = False
 
     assert allTestsPassed
-    print "PASS"  # test passed
+    print("PASS")  # test passed
 
 
-    print "  Categories with sufficient data...",
+    print("  Categories with sufficient data...", end=' ')
     correctResults = [(0.142150071987007, 0.218674670281035),
                       (0.077135329040187, 0.145774887678079),
                       (0.061162536638764, 0.120156144679918),
@@ -1019,13 +1019,13 @@ def _testComputeConfidenceIntervalsAndComputeAccuracies(): #PYCHECKER too many l
     confIntervals = computeConfidenceIntervals(meansAndStdErrs = accAndStdErrs2,
                                                confidenceLevel = confidence)
     allTestsPassed = True
-    for i in xrange(len(confIntervals)):
+    for i in range(len(confIntervals)):
         if (fabs(confIntervals[i][0]-correctResults[i][0]) > errTol) or \
            (fabs(confIntervals[i][1]-correctResults[i][1]) > errTol):
             allTestsPassed = False
 
     assert allTestsPassed
-    print "PASS"  # test passed
+    print("PASS")  # test passed
 
 
 if __name__ == '__main__':

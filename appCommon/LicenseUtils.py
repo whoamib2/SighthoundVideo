@@ -75,7 +75,7 @@ def isLegacyLicense(licenseDict):
 
     @return isLegacy  True if the license is a legacy license.
     """
-    keys = licenseDict.keys()
+    keys = list(licenseDict.keys())
     keys.sort()
     return keys == kLegacyLicenseKeys
 
@@ -109,7 +109,7 @@ def parseDate(expr, allowEmpty=False):
     if allowEmpty and "" == expr:
         return None
     try:
-        return long(expr)
+        return int(expr)
     except:
         return None
 
@@ -162,8 +162,8 @@ def validateLicenseData(licData):
     legacy = isLegacyLicense(licData)
     if not legacy:
         expectedKeys = copy.deepcopy(kLicenseKeys)
-        for key in licData.keys():
-            expectedKeys = filter(lambda k: k != key, expectedKeys)
+        for key in list(licData.keys()):
+            expectedKeys = [k for k in expectedKeys if k != key]
         if 0 < len(expectedKeys):
             return "missing keys %s" % expectedKeys
 
@@ -176,9 +176,9 @@ def validateLicenseData(licData):
 
     intRules = [(kCamerasField, (-1, kMaxCameras))]
     if not legacy:
-        intRules.append((kExpiresField, (-1, sys.maxint)))
-        intRules.append((kSupportField, (-1, sys.maxint)))
-        intRules.append((kTimestampField, (1, sys.maxint)))
+        intRules.append((kExpiresField, (-1, sys.maxsize)))
+        intRules.append((kSupportField, (-1, sys.maxsize)))
+        intRules.append((kTimestampField, (1, sys.maxsize)))
     for intRule in intRules:
         field = intRule[0]
         value = licData[field]

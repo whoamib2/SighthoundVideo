@@ -36,7 +36,7 @@
 
 
 from vitaToolbox.loggingUtils.LoggingUtils import getLogger, kLogLevelInfo
-from videoLib2.python.VideoLibUtils import SetVideoLibDebugConfig, SetVideoLibDebugConfigSimple
+from backEnd.native.capture import SetVideoLibDebugConfig, SetVideoLibDebugConfigSimple
 from appCommon.DebugPrefs import getDebugPrefAsIntScoped, getDebugPrefScoped
 
 

@@ -67,17 +67,17 @@ from backEnd.SavedQueryDataModel import SavedQueryDataModel
 from frontEnd.CameraSetupWizard import kMaxCameraNameLen
 from frontEnd.VideoWindow import VideoWindow
 
-from constructionComponents.ConstructionBlock import drawConstructionBlock
+from .constructionComponents.ConstructionBlock import drawConstructionBlock
 
 # Construction components
-from constructionComponents.CameraConfigPanel import CameraConfigPanel
-from constructionComponents.CameraConstructionBlock import CameraConstructionBlock
-from constructionComponents.ResponseConfigPanel import ResponseConfigPanel
-from constructionComponents.ResponseConstructionBlock import ResponseConstructionBlock
-from constructionComponents.TargetConfigPanel import TargetConfigPanel
-from constructionComponents.TargetConstructionBlock import TargetConstructionBlock
-from constructionComponents.WhereConfigPanel import WhereConfigPanel
-from constructionComponents.WhereConstructionBlock import WhereConstructionBlock
+from .constructionComponents.CameraConfigPanel import CameraConfigPanel
+from .constructionComponents.CameraConstructionBlock import CameraConstructionBlock
+from .constructionComponents.ResponseConfigPanel import ResponseConfigPanel
+from .constructionComponents.ResponseConstructionBlock import ResponseConstructionBlock
+from .constructionComponents.TargetConfigPanel import TargetConfigPanel
+from .constructionComponents.TargetConstructionBlock import TargetConstructionBlock
+from .constructionComponents.WhereConfigPanel import WhereConfigPanel
+from .constructionComponents.WhereConstructionBlock import WhereConstructionBlock
 
 
 # Constants...
@@ -235,7 +235,7 @@ class QueryConstructionView(wx.Panel):
         @return img  A PIL image.
         """
         # Import here to avoid circular dependencies...
-        from MonitorView import makeVideoStatusBitmap
+        from .MonitorView import makeVideoStatusBitmap
 
         bmp = makeVideoStatusBitmap(_kImageNotAvailableStr, self.GetFont(),
                                     False, None, _kVideoWidth, _kVideoHeight)
@@ -323,7 +323,7 @@ class QueryConstructionView(wx.Panel):
         configSizer.Add(self._videoWindow, 0, wx.BOTTOM, 5)
 
         overlapSizer = OverlapSizer(True)
-        for configPanel in self._configPanels.itervalues():
+        for configPanel in self._configPanels.values():
             overlapSizer.Add(configPanel)
         configSizer.Add(overlapSizer, 1, wx.EXPAND)
 
@@ -644,7 +644,7 @@ class QueryConstructionView(wx.Panel):
             maxsize = (_kVideoWidth, _kVideoHeight)
             ratio = min(maxsize[0]/float(oldsize[0]), maxsize[1]/float(oldsize[1]))
             newsize = (int(oldsize[0]*ratio), int(oldsize[1]*ratio))
-            image = image.resize(newsize, Image.ANTIALIAS)
+            image = image.resize(newsize, Image.Resampling.LANCZOS)
         return image, ms
 
 
@@ -761,7 +761,7 @@ class QueryConstructionView(wx.Panel):
         self._queryDataModel.setLastEdited(lastEditedComponent, i)
 
         # Hide / deactivate the old panel.
-        for panelTuple, configPanel in self._configPanels.iteritems():
+        for panelTuple, configPanel in self._configPanels.items():
             isActive = (panelTuple == (lastEditedComponent, i))
             if (not isActive) and (configPanel.IsShown()):
                 configPanel.Show(False)
@@ -963,7 +963,7 @@ def checkQueryName(queryName, cameraName, existingNames, topLevelParent,
     # Prevent non-UTF8 characters in rule names
     try:
         queryName.encode('utf-8', 'strict')
-    except UnicodeEncodeError, e:
+    except UnicodeEncodeError as e:
         if isAutoNamed:
             wx.MessageBox(("Your region name cannot contain the "
                           "character \"%s\". "
@@ -1005,7 +1005,7 @@ def test_main():
     """OB_REDACT
        Contains various self-test code.
     """
-    print "Please use QueryEditorDialog test code"
+    print("Please use QueryEditorDialog test code")
 
 
 ##############################################################################
@@ -1013,4 +1013,4 @@ if __name__ == '__main__':
     if len(sys.argv) > 1 and sys.argv[1] == "test":
         test_main()
     else:
-        print "Try calling with 'test' as the argument."
+        print("Try calling with 'test' as the argument.")

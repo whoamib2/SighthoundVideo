@@ -52,17 +52,17 @@ from vitaToolbox.wx.CreateMenuFromData import createMenuFromData
 from vitaToolbox.wx.BindChildren import bindChildren
 
 # Local imports...
-import FrontEndEvents
-from FrontEndPrefs import getFrontEndPref
-from FrontEndPrefs import setFrontEndPref
-from FrontEndUtils import determineGridViewCameras
-from BaseView import BaseMonitorView
-from BaseView import makeVideoStatusBitmap
-from BaseView import kStatusTextConnecting
-from BaseView import kStatusTextCouldNotConnect
-from BaseView import kStatusTextCameraTurnedOff
-from BaseView import kStatusStartColor
-from BaseView import kStatusEndColor
+from . import FrontEndEvents
+from .FrontEndPrefs import getFrontEndPref
+from .FrontEndPrefs import setFrontEndPref
+from .FrontEndUtils import determineGridViewCameras
+from .BaseView import BaseMonitorView
+from .BaseView import makeVideoStatusBitmap
+from .BaseView import kStatusTextConnecting
+from .BaseView import kStatusTextCouldNotConnect
+from .BaseView import kStatusTextCameraTurnedOff
+from .BaseView import kStatusStartColor
+from .BaseView import kStatusEndColor
 from appCommon.CommonStrings import kCameraOn
 from appCommon.CommonStrings import kCameraOff
 from appCommon.CommonStrings import kCameraConnecting
@@ -234,7 +234,7 @@ class GridView(BaseMonitorView):
             try:
                 result = OsCompatibleGLCanvas(self)
                 return result
-            except GLExceptionSV, e:
+            except GLExceptionSV as e:
                 if e.version.startswith("1"):
                     self._logger.error("no compatible OpenGL available")
                     # Don't ever try to create GL controls again
@@ -296,10 +296,10 @@ class GridView(BaseMonitorView):
         """ Set up basic UI things, like the grid sizer.
         """
         # Create the menu, ready to replace the default one on activation.
-        self._menuIdBack = wx.NewId()
-        self._menuIdForward = wx.NewId()
-        self._menuIdZoomIn = wx.NewId()
-        self._menuIdZoomOut = wx.NewId()
+        self._menuIdBack = wx.NewIdRef()
+        self._menuIdForward = wx.NewIdRef()
+        self._menuIdZoomIn = wx.NewIdRef()
+        self._menuIdZoomOut = wx.NewIdRef()
         self._controlsMenuPos = wx.NOT_FOUND
         self._controlsMenu = self._createMenu()
         self._otherControlsMenu = None
@@ -471,12 +471,12 @@ class GridView(BaseMonitorView):
         delta = viewControlCount - len(self._viewControls)
 
         if 0 > delta:
-            for _ in xrange(0, -delta):
+            for _ in range(0, -delta):
                 viewControl = self._viewControls.pop()
                 self._gridSizer.Detach(viewControl)
                 viewControl.Destroy()
         else:
-            for _ in xrange(0, delta):
+            for _ in range(0, delta):
                 viewControl = self._createViewControl()
                 self._viewControls.append(viewControl)
                 self._gridSizer.Add(viewControl, 1, wx.EXPAND)
@@ -539,7 +539,7 @@ class GridView(BaseMonitorView):
         # Check cameras which are visible in the view, called visible cameras.
         fps = getFrontEndPref("gridViewFps")
 
-        for i in xrange(start, start + count):
+        for i in range(start, start + count):
             cameraLocation = self._cameraLocations[i]
 
             # Get a visible camera status and whether it's enabled.
@@ -742,7 +742,7 @@ class GridView(BaseMonitorView):
             self.Layout()
             self._syncCameras()
             self.Layout()
-            for _, visibleCamera in self._visibleCameras.iteritems():
+            for _, visibleCamera in self._visibleCameras.items():
                 self._updateLiveViewImage(visibleCamera)
         finally:
             self.Thaw()
@@ -828,7 +828,7 @@ class GridView(BaseMonitorView):
         now = time.time()
         if self._nextMmapSync is None or self._nextMmapSync > now:
              return
-        for _, visibleCamera in self._visibleCameras.iteritems():
+        for _, visibleCamera in self._visibleCameras.items():
             if not visibleCamera.enabled:
                 continue
             if not visibleCamera.location in self._mmaps:
@@ -902,7 +902,7 @@ class GridView(BaseMonitorView):
         fpsLogSkip = True
         fpsLog = "" if now - self._lastFpsLog >= _kFpsLogInterval else None
 
-        for _, visibleCamera in self._visibleCameras.iteritems():
+        for _, visibleCamera in self._visibleCameras.items():
 
             self._updateLiveViewImage(visibleCamera)
 
@@ -1015,7 +1015,7 @@ class GridView(BaseMonitorView):
         try:
             self.__sync()
             self._syncCameras()
-            for _, visibleCamera in self._visibleCameras.iteritems():
+            for _, visibleCamera in self._visibleCameras.items():
                 self._updateLiveViewImage(visibleCamera)
         finally:
             self.Thaw()

@@ -65,7 +65,7 @@ def _getProcessorInfoWin():
     # ...need to also make sure that obfuscator doesn't obfuscate any of the
     # identifiers related to this module.
     _winreg = object()
-    exec 'import _winreg'
+    exec('import _winreg')
 
     identifier = ''
     procName = ''

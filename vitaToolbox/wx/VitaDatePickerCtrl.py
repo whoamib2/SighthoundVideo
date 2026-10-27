@@ -48,9 +48,9 @@ from vitaToolbox.wx.BackgroundStyleUtils import kBackgroundStyle
 from vitaToolbox.sysUtils.TimeUtils import formatTime
 
 # Local imports...
-from HoverBitmapButton import HoverBitmapButton
-from HoverButton import HoverButton
-from TextSizeUtils import makeFontDefault
+from .HoverBitmapButton import HoverBitmapButton
+from .HoverButton import HoverButton
+from .TextSizeUtils import makeFontDefault
 
 # Constants...
 
@@ -130,7 +130,7 @@ class VitaDatePickerCtrl(wx.Panel):
         self._prevDayButton = HoverBitmapButton(
             self, wx.ID_ANY,
             "vitaToolbox/wx/bmps/Date_Arrow_Left_Enabled.png",
-            wx.EmptyString,
+            "",
             "vitaToolbox/wx/bmps/Date_Arrow_Left_Pressed.png",
             "vitaToolbox/wx/bmps/Date_Arrow_Left_Disabled.png",
             "vitaToolbox/wx/bmps/Date_Arrow_Left_Hover.png",
@@ -146,7 +146,7 @@ class VitaDatePickerCtrl(wx.Panel):
         # NOTE: Assumes that "Today" and "Yesterday" are smaller, but could
         # add that if needed...
         maxWidth = 0
-        for i in xrange(7):
+        for i in range(7):
             for dateFormat in (_kDateUS, _kDateInternational):
                 s = formatTime(dateFormat, datetime.date(2099, 12, 20 + i))
 
@@ -158,7 +158,7 @@ class VitaDatePickerCtrl(wx.Panel):
         self._nextDayButton = HoverBitmapButton(
             self, wx.ID_ANY,
             "vitaToolbox/wx/bmps/Date_Arrow_Right_Enabled.png",
-            wx.EmptyString,
+            "",
             "vitaToolbox/wx/bmps/Date_Arrow_Right_Pressed.png",
             "vitaToolbox/wx/bmps/Date_Arrow_Right_Disabled.png",
             "vitaToolbox/wx/bmps/Date_Arrow_Right_Hover.png",
@@ -567,7 +567,7 @@ class _CalendarPopup(wx.Dialog):
         # known Monday and then use strftime().
         day1 = datetime.date(2006, 4, 3) + datetime.timedelta(_kFirstDayOfWeek)
         self._dowLabels = []
-        for i in xrange(_kNumDaysInWeek):
+        for i in range(_kNumDaysInWeek):
             s = formatTime("%a", day1 + datetime.timedelta(i))[0]
             self._dowLabels.append(
                 wx.StaticText(self, -1, s,
@@ -578,7 +578,7 @@ class _CalendarPopup(wx.Dialog):
         staticLine = wx.StaticLine(self)
 
         self._dayButtons = []
-        for i in xrange(_kNumDaysInCal):
+        for i in range(_kNumDaysInCal):
             hoverButton = HoverButton(self, "99", style=wx.ALIGN_RIGHT)
             hoverButton.SetId(i)
             makeFontDefault(hoverButton)
@@ -607,7 +607,7 @@ class _CalendarPopup(wx.Dialog):
         mainSizer.Add(headerSizer, 0, wx.EXPAND | wx.BOTTOM, _kHeaderVgap)
 
         dowSizer = wx.GridSizer(rows=1, cols=_kNumDaysInWeek, vgap=0, hgap=_kCalHgap)
-        for i in xrange(_kNumDaysInWeek):
+        for i in range(_kNumDaysInWeek):
             dowSizer.Add(self._dowLabels[i], 1, wx.EXPAND)
         mainSizer.Add(dowSizer, 0, wx.EXPAND)
 
@@ -615,7 +615,7 @@ class _CalendarPopup(wx.Dialog):
 
         daySizer = wx.GridSizer(rows=_kNumWeeksInCal, cols=_kNumDaysInWeek,
                                 hgap=_kCalHgap, vgap=_kCalVgap)
-        for i in xrange(_kNumDaysInCal):
+        for i in range(_kNumDaysInCal):
             daySizer.Add(self._dayButtons[i], 1, wx.EXPAND)
         mainSizer.Add(daySizer, 0, wx.EXPAND)
 
@@ -630,7 +630,7 @@ class _CalendarPopup(wx.Dialog):
         self._prevMonthButton.Bind(wx.EVT_BUTTON, self.OnPrevMonth)
         self._nextMonthButton.Bind(wx.EVT_BUTTON, self.OnNextMonth)
         self._todayButton.Bind(wx.EVT_BUTTON, self.OnTodayButton)
-        for i in xrange(_kNumDaysInCal):
+        for i in range(_kNumDaysInCal):
             self._dayButtons[i].Bind(wx.EVT_BUTTON, self.OnDateButton)
 
         self.Bind(wx.EVT_IDLE, self.OnIdle)
@@ -673,7 +673,7 @@ class _CalendarPopup(wx.Dialog):
         self._firstShownDate = curDate
 
         # Go through and set all of the labels...
-        for i in xrange(_kNumDaysInCal):
+        for i in range(_kNumDaysInCal):
             self._dayButtons[i].SetLabel(str(curDate.day))
 
             if curDate == self._chosenDate and not disableAll:
@@ -824,7 +824,7 @@ def test_main():
     """OB_REDACT
        Contains various self-test code.
     """
-    from GradientPanel import GradientPanel
+    from .GradientPanel import GradientPanel
     app = wx.App(False)
 
     frame = wx.Frame(None)
@@ -859,4 +859,4 @@ if __name__ == '__main__':
     if len(sys.argv) > 1 and sys.argv[1] == "test":
         test_main()
     else:
-        print "Try calling with 'test' as the argument."
+        print("Try calling with 'test' as the argument.")

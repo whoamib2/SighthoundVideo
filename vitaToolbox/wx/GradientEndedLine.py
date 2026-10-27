@@ -43,7 +43,7 @@ import wx
 
 # Toolbox imports...
 from vitaToolbox.wx.BackgroundStyleUtils import kBackgroundStyle
-from DoubleBufferCompatGc import createDoubleBufferCompatGc
+from .DoubleBufferCompatGc import createDoubleBufferCompatGc
 
 
 

@@ -51,8 +51,8 @@ from vitaToolbox.wx.FontUtils import makeFontDefault
 from appCommon.CommonStrings import kAboutAccountsUrl
 from appCommon.CommonStrings import kLoginStatusLastUser
 from appCommon.LicenseUtils import kEditionField, kStarterEdition
-from LoginDialog import LoginDialog
-from TrialBanner import kBackgroundColor, styleBannerLink
+from .LoginDialog import LoginDialog
+from .TrialBanner import kBackgroundColor, styleBannerLink
 
 _kWarningPaidText = ("""Link your license with a Sighthound Account """
         """to continue receiving updates.""")

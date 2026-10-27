@@ -36,7 +36,7 @@
 #*****************************************************************************
 
 
-import sys, os, time, cPickle
+import sys, os, time, pickle
 import sqlite3 as sqlite
 
 from appCommon.CommonStrings import kObjDbFile
@@ -120,7 +120,7 @@ class TotalProgress(object):
             self._copied += 1
             self._lastDbFile = dbFile
         base = 0
-        for i in xrange(0, self._copied - 1):
+        for i in range(0, self._copied - 1):
             base += self._dbFileSizes[i]
         percentage = ((base + recoverySize) * 100.0) / max(1, self._total)
         if percentage >= 100:
@@ -157,7 +157,7 @@ def _createDatabase(cls, path, logger):
     if os.path.exists(path):
         os.remove(path)
     mng = cls(logger)
-    mng.open(unicode(path))
+    mng.open(str(path))
     mng.close()
 
 # descriptors to tell what database files are out there, what tables with how
@@ -205,7 +205,7 @@ class DbRecovery(object):
             pragma = "PRAGMA quick_check(%d)" % _kMaxCheckErrors
         else:
             pragma = "PRAGMA integrity_check(%d)" % _kMaxCheckErrors
-        for dbFile in _kDescriptors.iterkeys():
+        for dbFile in _kDescriptors.keys():
             try:
                 dbPath = os.path.join(self._path, dbFile)
                 dbSize = os.path.getsize(dbPath)
@@ -216,7 +216,7 @@ class DbRecovery(object):
                 con = sqlite.connect(dbPath)
                 cur = con.cursor()
                 rows = cur.execute(pragma).fetchall()
-                if 1 == len(rows) and (u'ok', ) == rows[0]:
+                if 1 == len(rows) and ('ok', ) == rows[0]:
                     continue;
                 self._logger.error('integrity check failed')
                 for row in rows:
@@ -284,7 +284,7 @@ class DbRecovery(object):
                         # collect a few rows first before writing them all at
                         # once out to the recovery database
                         rows = []
-                        for i in xrange(0, _kRowsBufferSize):
+                        for i in range(0, _kRowsBufferSize):
                             try:
                                 # read things row by row, maximizing our chances to
                                 # recover as many as possible
@@ -401,8 +401,8 @@ def setCorruptDatabaseStatus(status, dataDir):
                 time.sleep(.1)
         return True
     try:
-        f = open(filePath, "w")
-        cPickle.dump(status, f)
+        f = open(filePath, "wb")
+        pickle.dump(status, f)
         return True
     except:
         return False
@@ -427,8 +427,8 @@ def getCorruptDatabaseStatus(dataDir):
     if os.path.isfile(corruptDbFile):
         status = []
         try:
-            f = open(corruptDbFile, "r")
-            status = cPickle.load(f)
+            f = open(corruptDbFile, "rb")
+            status = pickle.load(f)
         except:
             pass
         finally:

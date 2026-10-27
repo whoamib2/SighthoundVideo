@@ -51,7 +51,7 @@ from vitaToolbox.wx.FileBrowseButtonFixed import DirBrowseButton
 
 # Local imports...
 from appCommon.CommonStrings import kAppName, kVideoFolder
-from FrontEndUtils import promptUserIfRemotePathEvtHandler
+from .FrontEndUtils import promptUserIfRemotePathEvtHandler
 
 
 _kPaddingSize = 4

@@ -54,9 +54,9 @@ from vitaToolbox.path.PathUtils import normalizePath
 from vitaToolbox.wx.VitaDatePickerCtrl import VitaDatePickerCtrl
 
 # Local imports...
-from CameraSetupWizard import addDefaultRule, kMaxCameraNameLen
-from CameraSetupWizard import kInvalidCameraNameSuffixes
-import FrontEndEvents
+from .CameraSetupWizard import addDefaultRule, kMaxCameraNameLen
+from .CameraSetupWizard import kInvalidCameraNameSuffixes
+from . import FrontEndEvents
 
 
 _kPaddingSize = 8
@@ -274,7 +274,7 @@ class RenameCameraDialog(wx.Dialog):
         # Prevent non-UTF8 characters in location names
         try:
             newLocation.encode('utf-8', 'strict')
-        except UnicodeEncodeError, e:
+        except UnicodeEncodeError as e:
             wx.MessageBox(("The camera name cannot contain the "
                           "character \"%s\". "
                           "Please choose a different name.") %

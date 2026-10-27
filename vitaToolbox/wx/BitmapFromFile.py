@@ -68,10 +68,10 @@ def bitmapFromFile(f, platformBmps=True):
                           bitmap files.  If they exist, they will be used.
                           See the main class docstring.
     """
-    if type(f) == str:
+    if isinstance(f, (bytes, bytearray)):
         f = f.decode('utf-8')
 
-    if platformBmps and isinstance(f, basestring):
+    if platformBmps and isinstance(f, str):
         platformExt = ""
 
         if wx.Platform == "__WXMAC__":

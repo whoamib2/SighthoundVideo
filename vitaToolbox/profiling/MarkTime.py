@@ -147,7 +147,7 @@ def summarizeMarkedTime():
 
     if not _kEnable:
         return
-    print '\n'.join(map(str, sorted(_totalDict.items(), key=operator.itemgetter(1, 0))))
+    print('\n'.join(map(str, sorted(list(_totalDict.items()), key=operator.itemgetter(1, 0)))))
 
 
 ##############################################################################

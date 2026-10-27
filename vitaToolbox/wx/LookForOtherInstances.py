@@ -63,7 +63,7 @@ def lookForOtherInstances(mainWindowName=None):
     if mainWindowName is None:
         mainWindowName = appName
 
-    if type(mainWindowName) == str:
+    if isinstance(mainWindowName, (bytes, bytearray)):
         mainWindowName = mainWindowName.decode('utf-8')
 
     # Make an object to check for a single instance of apps.  We
@@ -82,7 +82,7 @@ def lookForOtherInstances(mainWindowName=None):
         #   result = ctypes.windll.user32.GetClassNameW(hwnd, className, 1024)
         #   print className.value
         if wx.Platform == '__WXMSW__':
-            hwnd = ctypes.windll.user32.FindWindowW(u'wxWindowClassNR', #PYCHECKER OK: No module attribute (windll) found
+            hwnd = ctypes.windll.user32.FindWindowW('wxWindowClassNR', #PYCHECKER OK: No module attribute (windll) found
                                                     mainWindowName)
             if hwnd:
                 ctypes.windll.user32.SetForegroundWindow(hwnd) #PYCHECKER OK: No module attribute (windll) found

@@ -53,7 +53,7 @@ from vitaToolbox.wx.FileBrowseButtonFixed import DirBrowseButton
 
 # Local imports...
 from appCommon.CommonStrings import kVideoFolder
-from FrontEndUtils import promptUserIfRemotePathEvtHandler
+from .FrontEndUtils import promptUserIfRemotePathEvtHandler
 
 
 _kPaddingSize = 4
@@ -188,7 +188,7 @@ class MoveVideoDialog(wx.Dialog):
                           wx.OK | wx.ICON_ERROR, self.GetTopLevelParent())
             return
 
-        appDir = os.getcwdu()
+        appDir = os.getcwd()
         if appDir == os.path.commonprefix([appDir, newPath]):
             # Prevent selecting a folder inside the application folder.
             wx.MessageBox("You cannot store your videos in the same "

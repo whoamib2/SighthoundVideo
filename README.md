@@ -21,17 +21,34 @@ Useful public resources:
 
 ## Important technical notes
 
-This codebase is legacy software.
+Phase 1 of the source port targets Python 3.11+ (also exercised on 3.12). Windows stays a first-class native target, and the same Python sources are what Linux and macOS import.
 
-Key constraints:
+What this port covers:
 
-* The application and build system are based on Python 2.7.
-* Modern Python 3 environments are not supported without porting.
-* The desktop UI uses wxPython.
-* The packaged build process uses legacy tooling such as `make`, CMake, `cx_Freeze`, and `py2exe`.
-* Several required assets and dependency bundles are stored with Git LFS.
-* Builds may fail unless all Git LFS artifacts are available locally.
-* The source build process may differ from the packaged legacy app described in the public support knowledgebase.
+* Python syntax and the standard-library renames (`pickle`, `http.client`, `xmlrpc`, `queue`, `urllib`).
+* Bytes versus text for live-view mmap headers, pickle files, SQLite blobs, HTTP bodies, and XML-RPC.
+* wxPython 4.x (Phoenix) call sites and Pillow 10 image helpers.
+* Dependencies in `pyproject.toml`. The desktop UI needs `wxPython`; tests and lint need the `dev` extra (`pytest`, `ruff`) plus Pillow and requests.
+* CMake 3.20 projects for `launch`, `xnat`, `backEnd/triggers` (`optsearches`), and `vitaToolbox/path` (`volumeUtils`, Apple only), aimed at MSVC 2022 and current clang/gcc.
+* Packaging through `scripts/package_app.py` (PyInstaller). `frontEnd/setup-Win.py` and `frontEnd/setup-Mac.py` delegate to it.
+* GitHub Actions on `ubuntu-latest` and `windows-latest`.
+
+What is still blocked by closed binaries that are not in this tree (`videoLib2`, `svsentry`, `SIOWrapper`, sometimes inside the LFS `libs` archive):
+
+* Camera capture and clip decode (`backEnd.native.capture`).
+* The tracking pipeline (`backEnd.native.tracking`).
+* The in-process object detector (`backEnd.native.detector.SIOObjectDetector`).
+
+Those names are the only import sites for the closed extensions. Calling them without the binary raises `NativeDependencyError`. The local detector HTTP contract is unchanged: raw RGB `POST` with `X-Width` and `X-Height`, JSON `objects` reply. Detections can already carry `plate_text`, `face_identity`, and `delivery_carrier` (USPS, FedEx, UPS, Amazon). This phase does not run those recognizers.
+
+Recommended next steps:
+
+* Replace capture with PyAV or OpenCV behind `backEnd.native.capture`.
+* Replace `svsentry` with an open tracker behind `pipeline_base` / `object_collector_base`.
+* Serve the existing RGB HTTP contract from an ONNX Runtime detector and fill the reserved attributes.
+* Smoke-test the wxPython UI and a PyInstaller bundle on Windows and macOS once those backends exist.
+
+Historical build notes (Python 2.7, VS2017, `cx_Freeze`, `py2exe`) remain below for the original source release. Several assets are still Git LFS objects.
 
 Before building, install Git LFS and fetch LFS artifacts:
 
@@ -75,7 +92,7 @@ Source-build requirements:
 * Xcode 13.4 with command line tools.
 * CMake.
 * Git LFS.
-* Python 2.7 runtime from the packaged tools bundle.
+* Python 3.11+ (the packaged tools bundle was Python 2.7 and is historical).
 
 Apple Silicon source builds are not guaranteed. The public support knowledgebase notes that the packaged legacy app can run on M1 Macs using Rosetta, but that does not necessarily mean the source build is natively supported on Apple Silicon.
 
@@ -83,9 +100,8 @@ Apple Silicon source builds are not guaranteed. The public support knowledgebase
 
 Source-build requirements:
 
-* Microsoft Visual Studio 2017 or newer.
-* LLVM 10: https://releases.llvm.org/download.html
-* CMake 3.17.1.
+* Microsoft Visual Studio 2022 (MSVC) or current clang-cl.
+* CMake 3.20 or newer.
 * Git for Windows: https://gitforwindows.org/
 * Git LFS.
 * `make`.
@@ -93,7 +109,7 @@ Source-build requirements:
   * The `make` build from https://sourceforge.net/projects/ezwinports/ did not work in the original build notes.
 * Ninja: https://ninja-build.org/
 * Inno Setup: https://jrsoftware.org/isinfo.php
-* Python 2.7 runtime from the packaged tools bundle.
+* Python 3.11+ (the packaged tools bundle was Python 2.7 and is historical).
 
 Build preparation:
 

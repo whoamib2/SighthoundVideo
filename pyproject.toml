@@ -1,0 +1,29 @@
+[project]
+name = "sighthound-video"
+version = "7.0.16"
+description = "Sighthound Video desktop VMS, ported to Python 3.11+"
+readme = "README.md"
+requires-python = ">=3.11"
+license = {text = "GPL-3.0-only"}
+dependencies = [
+    "Pillow>=10",
+    "requests>=2.31",
+    "wxPython>=4.2",
+]
+
+[project.optional-dependencies]
+package = ["pyinstaller>=6"]
+dev = ["pytest>=8", "ruff>=0.6"]
+
+[tool.pytest.ini_options]
+pythonpath = ["."]
+testpaths = ["tests"]
+
+[tool.ruff]
+target-version = "py311"
+extend-exclude = ["build", "dist"]
+
+[tool.ruff.lint]
+# The tree is still legacy style. This selection catches syntax that will
+# not import (undefined names, invalid syntax) without rewriting every file.
+select = ["E9", "F821", "F822", "F823"]

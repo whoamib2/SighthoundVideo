@@ -47,7 +47,7 @@ from email.utils import make_msgid
 import smtplib
 import socket
 
-import StringIO
+import io
 
 import re
 import sys
@@ -55,7 +55,7 @@ import sys
 # Common 3rd-party imports...
 
 # Local imports...
-from vitaToolbox.strUtils.EnsureUnicode import ensureUtf8
+from vitaToolbox.strUtils.EnsureUnicode import ensureUnicode
 
 
 # Lame trick to make py2app find all the email modules (it has problems because
@@ -153,8 +153,8 @@ def sendSimpleEmail(message, fromAddr, toAddrs, subject, #PYCHECKER OK: Too many
     # Check / convert parameters...
     assert encryption in kEncryptionList
     port = int(port)
-    if isinstance(toAddrs, basestring):
-        toAddrs = map(str.strip, toAddrs.split(','))
+    if isinstance(toAddrs, str):
+        toAddrs = list(map(str.strip, toAddrs.split(',')))
     if progressFn is None:
         progressFn = lambda val, msg: True
     if messageId is None:
@@ -171,21 +171,22 @@ def sendSimpleEmail(message, fromAddr, toAddrs, subject, #PYCHECKER OK: Too many
 
     # Make the message...
     msg = MIMEMultipart()
-    if isinstance(message, unicode):
-        msg.attach(MIMEText(message.encode('utf-8'), _charset='utf-8'))
-    else:
-        msg.attach(MIMEText(message))
+    if isinstance(message, (bytes, bytearray)):
+        message = message.decode("utf-8")
+    msg.attach(MIMEText(message, _charset="utf-8"))
     for (partName, img) in imageParts:
-        partName = ensureUtf8(partName)
-        f = StringIO.StringIO()
+        partName = ensureUnicode(partName)
+        f = io.BytesIO()
         img.save(f, 'JPEG')
         mimeImg = MIMEImage(f.getvalue())
         mimeImg.add_header('Content-Disposition', imgDisposition,
                            filename=partName)
         msg.attach(mimeImg)
     for (partName, textPart) in textParts:
-        partName = ensureUtf8(partName)
-        mimeText = MIMEText(textPart)
+        partName = ensureUnicode(partName)
+        if isinstance(textPart, (bytes, bytearray)):
+            textPart = textPart.decode("utf-8")
+        mimeText = MIMEText(textPart, _charset="utf-8")
         mimeText.add_header('Content-Disposition', textDisposition,
                             filename=partName)
         msg.attach(mimeText)
@@ -257,7 +258,7 @@ def sendSimpleEmail(message, fromAddr, toAddrs, subject, #PYCHECKER OK: Too many
                 try:
                     # This will throw if bad username / password...
                     server.login(user, password)
-                except smtplib.SMTPException, e:
+                except smtplib.SMTPException as e:
                     # If we tried CRAM-MD5, try logging in without it.  This
                     # is a hack that fixes authsmtp.streamline.net as well
                     # as other servers that advertise CRAM-MD5 but don't
@@ -269,7 +270,7 @@ def sendSimpleEmail(message, fromAddr, toAddrs, subject, #PYCHECKER OK: Too many
                         server.login(user, password)
                     else:
                         raise
-            except smtplib.SMTPException, e:
+            except smtplib.SMTPException as e:
                 # Give some slightly better error messages...
                 if (encryption == kEncryptionNone) and server.has_extn("starttls"):
                     # Suggest TLS
@@ -289,16 +290,16 @@ def sendSimpleEmail(message, fromAddr, toAddrs, subject, #PYCHECKER OK: Too many
 
         try:
             server.sendmail(fromAddr, toAddrs, msg.as_string())
-        except smtplib.SMTPSenderRefused, e:
+        except smtplib.SMTPSenderRefused as e:
             # Give a good response for bad sender...
             raise smtplib.SMTPException(_kSendersRefusedError % (
                                         e.sender, e.smtp_code, e.smtp_error))
-        except smtplib.SMTPRecipientsRefused, e:
+        except smtplib.SMTPRecipientsRefused as e:
             # Give a good response for bad recipients...
             errStr = "\n\n".join("%s: %d %s" % (toAddr, code,
                                                 _formatSmtpResponse(resp))
                                  for toAddr, (code, resp)
-                                 in e.recipients.iteritems())
+                                 in e.recipients.items())
             raise smtplib.SMTPException(_kRecipientsRefusedError % errStr)
         except Exception:
             raise
@@ -397,14 +398,14 @@ def test_main():
                 sendSimpleEmail(message, fromUser, toUsers, subject,
                                 mxServer, "", "", "25", kEncryptionNone,
                                 imageParts, textParts, None, True)
-            except socket.error, e:
+            except socket.error as e:
                 errors.append(e)
             else:
                 break
         else:
-            print "Couldn't connect to any servers.  Errors:\n"
+            print("Couldn't connect to any servers.  Errors:\n")
             for e in errors:
-                print "%s\n\n" % (str(e))
+                print("%s\n\n" % (str(e)))
 
     if wantTestTls:
         sendSimpleEmail(message, fromUser, toUsers, subject,
@@ -422,4 +423,4 @@ if __name__ == '__main__':
     if len(sys.argv) > 1 and sys.argv[1] == "test":
         test_main()
     else:
-        print "Try calling with 'test' as the argument."
+        print("Try calling with 'test' as the argument.")

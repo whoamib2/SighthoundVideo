@@ -43,11 +43,12 @@ import sys
 import traceback
 import json
 
-from Queue import Queue
+from queue import Queue
 
-from ClipManager import ClipManager
-from DataManager import DataManager
+from .ClipManager import ClipManager
+from .DataManager import DataManager
 
+from appCommon.CommonStrings import kVersionString
 from appCommon.hostedServices.FileUploader import FileUploader
 
 from vitaToolbox.sysUtils.FileUtils import safeRemove

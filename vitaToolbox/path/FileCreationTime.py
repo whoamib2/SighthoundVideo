@@ -43,9 +43,10 @@ import sys
 # ...need to also make sure that obfuscator doesn't obfuscate any of the
 # identifiers related to this module.
 try:
-    exec 'import Carbon.File, Carbon.Files'
-except:
-    pass
+    import Carbon.File  # macOS only; Carbon was removed with the Python 2.7 Apple builds
+    import Carbon.Files
+except ImportError:
+    Carbon = None
 
 def fileCreationTime(path):
     """Return the file creation time
@@ -56,7 +57,7 @@ def fileCreationTime(path):
     @parm    path        Path to the file
     @return  createTime  Time of file creation in seconds since epoch
     """
-    if type(path) == str:
+    if isinstance(path, (bytes, bytearray)):
         path = path.decode('utf-8')
 
     # The file must exist

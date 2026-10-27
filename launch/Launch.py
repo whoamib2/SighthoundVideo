@@ -49,7 +49,7 @@ from ctypes import c_int
 from ctypes import c_char_p
 from ctypes import c_wchar_p
 
-from ConfigParser import ConfigParser
+from configparser import ConfigParser
 
 from vitaToolbox.ctypesUtils.LoadLibrary import LoadLibrary
 
@@ -124,31 +124,40 @@ def serviceAvailable():
 ###############################################################################
 _libName = 'launch'
 
-_launchlib = LoadLibrary(None, _libName)
 
-_launchlib.launch_open.argtypes = []
-_launchlib.launch_open.restype = c_void_p
+class _LaunchLib(object):
+    """Load the launch shared library on first use, not at import time."""
 
-_launchlib.launch_close.argtypes = [c_void_p]
-_launchlib.launch_close.restype = c_int
+    def __init__(self):
+        self._lib = None
 
-_launchlib.launch_do.argtypes = [c_void_p, c_int]
-_launchlib.launch_do.restype = c_int
+    def _load(self):
+        if self._lib is None:
+            lib = LoadLibrary(None, _libName)
+            lib.launch_open.argtypes = []
+            lib.launch_open.restype = c_void_p
+            lib.launch_close.argtypes = [c_void_p]
+            lib.launch_close.restype = c_int
+            lib.launch_do.argtypes = [c_void_p, c_int]
+            lib.launch_do.restype = c_int
+            lib.launch_pid.argtypes = [c_void_p]
+            lib.launch_pid.restype = c_int
+            lib.launch_status.argtypes = [c_void_p]
+            lib.launch_status.restype = c_int
+            lib.launch_build.argtypes = [c_void_p]
+            lib.launch_build.restype = c_char_p
+            lib.launch_datadir.argtypes = [c_void_p]
+            lib.launch_datadir.restype = c_wchar_p
+            lib.launch_shutdown.argtypes = [c_void_p]
+            lib.launch_shutdown.restype = c_int
+            self._lib = lib
+        return self._lib
 
-_launchlib.launch_pid.argtypes = [c_void_p]
-_launchlib.launch_pid.restype = c_int
+    def __getattr__(self, name):
+        return getattr(self._load(), name)
 
-_launchlib.launch_status.argtypes = [c_void_p]
-_launchlib.launch_status.restype = c_int
 
-_launchlib.launch_build.argtypes = [c_void_p]
-_launchlib.launch_build.restype = c_char_p
-
-_launchlib.launch_datadir.argtypes = [c_void_p]
-_launchlib.launch_datadir.restype = c_wchar_p
-
-_launchlib.launch_shutdown.argtypes = [c_void_p]
-_launchlib.launch_shutdown.restype = c_int
+_launchlib = _LaunchLib()
 
 ###############################################################################
 
@@ -294,7 +303,7 @@ class Launch(object):
         if not self._handle:
             return None
         wstrDataDir = _launchlib.launch_datadir(self._handle)
-        return copy.deepcopy(unicode(wstrDataDir))
+        return copy.deepcopy(str(wstrDataDir))
 
 
     ###########################################################
@@ -473,8 +482,8 @@ def _activateMac(build, localDataDir):
     @param  localDataDir  Potential legacy local directory to move.
     @return               True if activation worked, False if it failed.
     """
-    if type(localDataDir) == unicode:
-        localDataDir = localDataDir.encode('utf-8')
+    if isinstance(localDataDir, (bytes, bytearray)):
+        localDataDir = localDataDir.decode('utf-8')
     exeDir = os.path.dirname(sys.executable)
     shlaunchPath = os.path.join(exeDir, _kServiceExe)
     params = []
@@ -613,54 +622,54 @@ def launchCheckMac(build, localDataDir, timeout):
 def _testLaunch():
     launch = Launch()
     if not launch.open():
-        print "cannot open"
+        print("cannot open")
         sys.exit(1)
-    print "opened"
-    print "data directory is '%s'" % launch.dataDir()
-    print "pid: %s" % launch.pid()
-    print "status: %s" % launch.status()
-    print "shutdown: %s" % launch.shutdown()
-    print "launch result: %s" % str(launch.do(killFirst=True))
+    print("opened")
+    print("data directory is '%s'" % launch.dataDir())
+    print("pid: %s" % launch.pid())
+    print("status: %s" % launch.status())
+    print("shutdown: %s" % launch.shutdown())
+    print("launch result: %s" % str(launch.do(killFirst=True)))
     time.sleep(1)
-    print "status: %s" % launch.status()
+    print("status: %s" % launch.status())
     result = launch.close()
     if not result:
-        print "cannot close (%d)" % result
+        print("cannot close (%d)" % result)
         sys.exit(1)
-    print "closed"
+    print("closed")
 
 def _testLaunchPerf():
     now = startedAt = time.time()
     stopAt = now + 5
     polls = 0
     while now < stopAt:
-        for _ in xrange(10):
+        for _ in range(10):
             launch = Launch()
             if not launch.open():
-                print "CANNOT OPEN!"
+                print("CANNOT OPEN!")
                 sys.exit(1)
             if launch.shutdown():
-                print "SHUTDOWN?!"
+                print("SHUTDOWN?!")
                 sys.exit(1)
             if not launch.close():
-                print "CANNOT CLOSE!"
+                print("CANNOT CLOSE!")
                 sys.exit(1)
             polls += 1
         now = time.time()
-    print "%.3f poll(s) per second" % (polls / (now - startedAt), )
+    print("%.3f poll(s) per second" % (polls / (now - startedAt), ))
 
 def _testConfig():
     launch = Launch()
     if not launch.open():
-        print "open error"
+        print("open error")
         sys.exit(1)
     cfg = launch.getConfig()
-    print "config >>> %s" % (str(cfg))
+    print("config >>> %s" % (str(cfg)))
     if not launch.setConfig({ kConfigKeyAutoStart: kConfigValueTrue }):
-        print "cannot set config"
-    print "config >>> %s" % (str(launch.getConfig()))
+        print("cannot set config")
+    print("config >>> %s" % (str(launch.getConfig())))
     if not launch.close():
-        print "close error"
+        print("close error")
         sys.exit(1)
 
 if __name__ == '__main__':

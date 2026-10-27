@@ -45,7 +45,7 @@ import wx
 
 # Toolbox imports...
 from vitaToolbox.wx.BackgroundStyleUtils import kBackgroundStyle
-from TruncateText import truncateText
+from .TruncateText import truncateText
 
 # Local imports...
 
@@ -659,7 +659,7 @@ def test_main():
     """OB_REDACT
        Contains various self-test code.
     """
-    from TextSizeUtils import makeFontDefault
+    from .TextSizeUtils import makeFontDefault
 
     app = wx.App(False)
 
@@ -704,7 +704,7 @@ def test_main():
     makeFontDefault(*bList)
 
     def OnButtonClick(event):
-        print "Click", event
+        print("Click", event)
 
     sizer = wx.BoxSizer(wx.HORIZONTAL)
     sizer.AddSpacer(64)
@@ -731,4 +731,4 @@ if __name__ == '__main__':
     if len(sys.argv) > 1 and sys.argv[1] == "test":
         test_main()
     else:
-        print "Try calling with 'test' as the argument."
+        print("Try calling with 'test' as the argument.")

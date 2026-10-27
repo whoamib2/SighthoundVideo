@@ -48,7 +48,7 @@ import os, glob
 import sys
 import time
 import collections
-import cStringIO, PIL, random, cgi, traceback, re, threading
+import io, PIL, random, traceback, re, threading, urllib.parse
 
 # Toolbox imports...
 from vitaToolbox.loggingUtils.LoggingUtils import getLogger
@@ -63,22 +63,20 @@ from vitaToolbox.path.GetDiskSpaceAvailable import checkFreeSpace
 
 # Local imports...
 from appCommon.CommonStrings import kRemoteFolder, isLocalCamera, kMinFreeSysDriveSpaceMB
-from ClipManager import ClipManager
-import MessageIds
-from QueuedDataManagerCloud import QueuedDataManagerCloud
-from VideoPipeline import VideoPipeline
-from videoLib2.python.StreamReader import StreamReader
-from videoLib2.python.ffmpegLog import FFmpegLog
-from videoLib2.python.VideoLibUtils import getTimestampFlags
+from .ClipManager import ClipManager
+from . import MessageIds
+from .QueuedDataManagerCloud import QueuedDataManagerCloud
+from .VideoPipeline import VideoPipeline
+from backEnd.native.capture import StreamReader, FFmpegLog, getTimestampFlags
 
 from appCommon.TimingInfo import TimingInfo
 from appCommon.DebugPrefs import getDebugPrefAsInt
 
-from BackEndPrefs import BackEndPrefs, kLiveMaxBitrate, kLiveMaxBitrateDefault, kHardwareAccelerationDevice
-from BackEndPrefs import kLiveEnableTimestamp, kLiveEnableTimestampDefault, kLiveMaxResolution, kLiveMaxResolutionDefault
-from BackEndPrefs import kLiveEnableFastStart, kLiveEnableFastStartDefault, kGenThumbnailResolution, kGenThumbnailResolutionDefault
-from BackEndPrefs import kClipMergeThreshold, kClipMergeThresholdDefault
-from DebugLogManager import DebugLogManager
+from .BackEndPrefs import BackEndPrefs, kLiveMaxBitrate, kLiveMaxBitrateDefault, kHardwareAccelerationDevice
+from .BackEndPrefs import kLiveEnableTimestamp, kLiveEnableTimestampDefault, kLiveMaxResolution, kLiveMaxResolutionDefault
+from .BackEndPrefs import kLiveEnableFastStart, kLiveEnableFastStartDefault, kGenThumbnailResolution, kGenThumbnailResolutionDefault
+from .BackEndPrefs import kClipMergeThreshold, kClipMergeThresholdDefault
+from .DebugLogManager import DebugLogManager
 
 def OB_KEYARG(a): return a
 
@@ -213,8 +211,8 @@ class CameraCapture(object):
         self._logger = getLogger(cameraLocation + '.log', self._logDir)
         self._logger.grabStdStreams()
 
-        assert type(userDir) == unicode
-        assert type(clipMgrPath) == unicode
+        assert type(userDir) == str
+        assert type(clipMgrPath) == str
 
         self._lastMemoryStats = 0
         self._lastFreeSpaceCheck = 0
@@ -307,9 +305,9 @@ class CameraCapture(object):
         #       file name written; we don't have a mechanism yet telling the
         #       client "this is the path you want", has to do with historical
         #       reasons, but sooner or later it has to be solved, seriously...
-        self._reGetFile = re.compile(".*/+(.*)\.m3u8");  # TODO: can we share this?
+        self._reGetFile = re.compile(r".*/+(.*)\.m3u8");  # TODO: can we share this?
         self._reGetProfile = re.compile("([^-]*)-([0-9]+)")
-        self._reGetIndex = re.compile(".*-[0-9]([0-9]+)\.ts")
+        self._reGetIndex = re.compile(r".*-[0-9]([0-9]+)\.ts")
 
         self._maxFileIndex = 0
         self._videoSettingsChanged = True
@@ -1019,7 +1017,7 @@ class CameraCapture(object):
         @param  startResponse  The WSGI response sender.
         """
         queryStr = environ.get('QUERY_STRING', '')
-        query = cgi.parse_qs(queryStr)
+        query = urllib.parse.parse_qs(queryStr)
         paramsWidth  = query.get(_kWsgiParamWidth , [_kWsgiParamWidthDefault])
         paramsHeight = query.get(_kWsgiParamHeight, [_kWsgiParamHeightDefault])
         width  = int(paramsWidth [0])
@@ -1029,7 +1027,7 @@ class CameraCapture(object):
             # undocumented query parameter: for testing purpose we can request a
             # dummy picture, which is rendered on the fly and right now consists
             # of random green lines on a black background. Nice to look at.
-            outp = cStringIO.StringIO()
+            outp = io.BytesIO()
             img = PIL.Image.new("RGB", (width, height), "black")
             draw = PIL.ImageDraw.ImageDraw(img)
             for b in range(0, 255):
@@ -1158,7 +1156,7 @@ class CameraCapture(object):
                 except: pass
 
         fileIndex = -1
-        for ln in cStringIO.StringIO(m3u8):
+        for ln in io.StringIO(m3u8):
             ln = ln.rstrip()
             if ln.endswith(".ts"):
                 if fileIndex < 0:

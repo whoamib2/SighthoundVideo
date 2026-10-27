@@ -40,7 +40,7 @@ import wx
 
 # Toolbox imports...
 from vitaToolbox.wx.BackgroundStyleUtils import kBackgroundStyle
-from TextSizeUtils import makeFontDefault
+from .TextSizeUtils import makeFontDefault
 
 class ToolbarBitmapTextButton(wx.lib.buttons.GenBitmapTextButton):
     """A transparent toolbar image/text control."""

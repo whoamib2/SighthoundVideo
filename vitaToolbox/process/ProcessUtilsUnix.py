@@ -52,7 +52,7 @@ SIGKILL = 9  # signal.SIGKILL
 # but on older systems it may be as low as 3GB
 # Lets set the limit to 2.8GB to be sure (still much higher than we expect any of our
 # processes to consume)
-if sys.maxint == 2147483647:
+if sys.maxsize == 2147483647:
     # On 32-bit, keep the limit below 3GB
     _kMemoryDieKB = 2800 * 1000
 else:
@@ -73,7 +73,7 @@ def listProcesses():
     # We're just going to depend on the system having "ps"; this isn't elegant
     # but is easy and portable...
     # NOTE: we list all processes, not just the user's ones
-    return map(int, os.popen('ps ax -o pid').readlines()[1:])
+    return list(map(int, os.popen('ps ax -o pid').readlines()[1:]))
 
 
 ##############################################################################
@@ -91,10 +91,7 @@ def listChildProcessesOfPID(processId):
     # but is easy and portable...
     return [
         procId for [ppid, procId]
-        in map(
-            lambda (x): map(int, str.split(x)),
-            os.popen('ps ax -o ppid,pid').readlines()[1:]
-        )
+        in [list(map(int, str.split(x))) for x in os.popen('ps ax -o ppid,pid').readlines()[1:]]
         if ppid == int(processId)
     ]
 

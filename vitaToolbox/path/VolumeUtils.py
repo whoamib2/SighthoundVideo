@@ -47,7 +47,7 @@ import os
 import sys
 import subprocess
 
-from PathUtils import abspathU
+from .PathUtils import abspathU
 
 from vitaToolbox.ctypesUtils.LoadLibrary import LoadLibrary
 
@@ -111,7 +111,7 @@ def getVolumeNameAndType(path):
     volType = ""
 
     # Make sure our path is Unicode.  Convert to Unicode if it isn't.
-    if type(path) == str:
+    if isinstance(path, (bytes, bytearray)):
         path = path.decode('utf-8')
 
     if sys.platform == 'darwin':

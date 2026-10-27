@@ -44,7 +44,7 @@ Contains the BetterScrolledWindow class.
 
 import wx
 
-from BindChildren import bindChildren
+from .BindChildren import bindChildren
 
 class BetterScrolledWindow(wx.ScrolledWindow):
     """Implements a version of wx.ScrolledWindow that is slightly saner.
@@ -368,7 +368,7 @@ def _runTests():
     # Create our sizer, and the first 10 static texts...
     sizer = wx.BoxSizer(wx.VERTICAL)
     scrolledWindow.SetSizer(sizer)
-    for i in xrange(0, 10):
+    for i in range(0, 10):
         text = wx.StaticText(scrolledWindow, -1, "------------ %d ------------" % i)
         sizer.Add(text)
 
@@ -390,7 +390,7 @@ def _runTests():
     sizer.Add(textControl)
 
     # Add the last 10 static texts...
-    for i in xrange(10, 20):
+    for i in range(10, 20):
         text = wx.StaticText(scrolledWindow, -1, "------------ %d ------------" % i)
         sizer.Add(text)
 

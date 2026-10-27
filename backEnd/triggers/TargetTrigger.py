@@ -45,7 +45,7 @@ import operator
 # Toolbox imports...
 
 # Local imports...
-from BaseTrigger import BaseTrigger
+from .BaseTrigger import BaseTrigger
 from appCommon.CommonStrings import kSearchViewDefaultRules
 
 ###############################################################
@@ -146,7 +146,7 @@ class TargetTrigger(BaseTrigger):
             objIds = self._dataMgr.getObjectsBetweenTimes(timeStart, timeStop)
             bboxes = self._dataMgr.getObjectBboxesBetweenTimes(
                                                     objIds, timeStart, timeStop)
-            triggered = map(operator.itemgetter(6, 4, 5), bboxes)
+            triggered = list(map(operator.itemgetter(6, 4, 5), bboxes))
 
         # Remove the database filter
         self._dataMgr.setTargetFilter(None)

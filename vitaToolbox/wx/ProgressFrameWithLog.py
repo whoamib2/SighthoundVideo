@@ -44,7 +44,7 @@ import time
 import wx
 
 # Toolbox imports...
-from FontUtils import makeFontDefault
+from .FontUtils import makeFontDefault
 
 # Constants...
 
@@ -354,7 +354,7 @@ def test_main():
         dlg = ProgressFrameWithLog(None, "MyTitle", "My message", 100)
 
         # Loop, showing progress...
-        for i in xrange(100):
+        for i in range(100):
             time.sleep(.1)
 
             shouldContinue, _ = dlg.Update(i)
@@ -382,4 +382,4 @@ if __name__ == '__main__':
     if len(sys.argv) > 1 and sys.argv[1] == "test":
         test_main()
     else:
-        print "Try calling with 'test' as the argument."
+        print("Try calling with 'test' as the argument.")

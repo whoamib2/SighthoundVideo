@@ -38,7 +38,7 @@
 
 # Python imports...
 import re
-import urlparse
+import urllib.parse
 
 # Common 3rd-party imports...
 
@@ -53,7 +53,7 @@ def sanitizeUrl(url):
     @return cleanUrl  A clean version of the URL.
     """
     uriScheme, uriNetloc, uriPath, uriQuery, uriFragment = \
-        urlparse.urlsplit(url)
+        urllib.parse.urlsplit(url)
 
     # Replace any auth information by 'x', and any location information other
     # than . and : with x.
@@ -74,7 +74,7 @@ def sanitizeUrl(url):
 
     uriNetloc = (authPart + atSign + locPart)
 
-    url = urlparse.urlunsplit((uriScheme, uriNetloc, uriPath,
+    url = urllib.parse.urlunsplit((uriScheme, uriNetloc, uriPath,
                                uriQuery, uriFragment))
 
     return url
@@ -133,7 +133,7 @@ def processUrlAuth(url):
     @return cleanUrl  A clean version of the URL that can be used for logging.
     """
     uriScheme, uriNetloc, uriPath, uriQuery, uriFragment = \
-        urlparse.urlsplit(url)
+        urllib.parse.urlsplit(url)
 
     # Replace any auth information by 'x', and any location information other
     # than . and : with x.
@@ -151,7 +151,7 @@ def processUrlAuth(url):
 
     uriNetloc = (authPart + atSign + locPart)
 
-    sanitizedUrl = urlparse.urlunsplit((uriScheme, uriNetloc, uriPath,
+    sanitizedUrl = urllib.parse.urlunsplit((uriScheme, uriNetloc, uriPath,
                                         uriQuery, uriFragment))
 
     # Just put xx in there, rather than trying to keep the same length.

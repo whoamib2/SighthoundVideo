@@ -38,10 +38,10 @@
 
 
 
-from BaseTrigger import BaseTrigger
-from LineTrigger import LineTrigger
-from TriggerLineSegment import TriggerLineSegment
-from TriggerUtils import kTrackPointStrToInt, optimizedIsPointInside, BBOX
+from .BaseTrigger import BaseTrigger
+from .LineTrigger import LineTrigger
+from .TriggerLineSegment import TriggerLineSegment
+from .TriggerUtils import kTrackPointStrToInt, optimizedIsPointInside, BBOX
 from vitaToolbox.math.LineSegment import LineSegment
 
 

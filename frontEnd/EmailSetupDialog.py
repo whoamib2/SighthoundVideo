@@ -120,7 +120,7 @@ _kEncryptionSettingToLabelMap = {
     kEncryptionTls: "TLS",
 }
 _kEncryptionLabelToSettingMap = dict(map(operator.itemgetter(1, 0),
-                                         _kEncryptionSettingToLabelMap.items()))
+                                         list(_kEncryptionSettingToLabelMap.items())))
 _kEncryptionLabelList = [_kEncryptionSettingToLabelMap[setting]
                          for setting in kEncryptionList]
 
@@ -383,7 +383,7 @@ class EmailSetupDialog(wx.Dialog):
         """
         try:
             return self._toAddrField.GetValue().encode('ascii', 'strict').strip()
-        except UnicodeEncodeError, e:
+        except UnicodeEncodeError as e:
             self._notebook.ChangeSelection(0)
             self._toAddrField.SetFocus()
             self._toAddrField.SetSelection(-1, -1)
@@ -429,7 +429,7 @@ class EmailSetupDialog(wx.Dialog):
             field = self._verifyPasswordField
             verifyPassword = field.GetValue().encode('ascii', 'strict').strip()
             emailConfig['imageInline'] = self._inlineImagesCheck.GetValue()
-        except UnicodeEncodeError, e:
+        except UnicodeEncodeError as e:
             assert desc is not None
             self._notebook.ChangeSelection(1)
             field.SetFocus()
@@ -609,7 +609,7 @@ class EmailSetupDialog(wx.Dialog):
                 # show an error message and loop...
                 try:
                     to = dlg.GetValue().encode('ascii', 'strict')
-                except UnicodeEncodeError, e:
+                except UnicodeEncodeError as e:
                     wx.MessageBox(_kBadCharErrorStr % (
                                   _kToAddrDescStr, e.object[e.start:e.start+1]),
                                   _kBadCharErrorTitleStr,
@@ -654,7 +654,7 @@ class EmailSetupDialog(wx.Dialog):
             wx.MessageBox(_kUnknownHostErrorStr % emailConfig['host'],
                           _kUnknownHostErrorTitleStr,
                           wx.OK | wx.ICON_ERROR, self)
-        except Exception, e:
+        except Exception as e:
             progressDlg.Destroy()
 
             # Default: just use string version of error...
@@ -677,9 +677,9 @@ def test_main():
        Contains various self-test code.
     """
     # Ugly test code...
-    from BackEndClient import BackEndClient
+    from .BackEndClient import BackEndClient
 
-    app = wx.PySimpleApp(redirect=False)
+    app = wx.App(redirect=False)
     app.SetAppName(kAppName)
 
     backEndClient = BackEndClient()
@@ -701,4 +701,4 @@ if __name__ == '__main__':
     if len(sys.argv) > 1 and sys.argv[1] == "test":
         test_main()
     else:
-        print "Try calling with 'test' as the argument."
+        print("Try calling with 'test' as the argument.")

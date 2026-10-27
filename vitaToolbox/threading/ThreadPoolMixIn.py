@@ -36,7 +36,7 @@
 
 import sys
 
-from ThreadPool import ThreadPool
+from .ThreadPool import ThreadPool
 
 """ Mixin to handle socket server connection in parallel by using a thread pool.
 """

@@ -95,7 +95,7 @@ def ensureUnicode(strOrUnicode, encoding="utf-8"):
     if strOrUnicode is None:
         return "None"
 
-    if isinstance(strOrUnicode, unicode):
+    if isinstance(strOrUnicode, str):
         return strOrUnicode
     else:
         return strOrUnicode.decode(encoding)

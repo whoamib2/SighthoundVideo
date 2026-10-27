@@ -35,10 +35,10 @@
 #*****************************************************************************
 
 import base64
-import httplib
+import http.client
 import ssl
 import sys
-import urlparse
+import urllib.parse
 
 from vitaToolbox.loggingUtils.LoggingUtils import EmptyLogger
 
@@ -86,7 +86,7 @@ class HttpClient(object):
         @return          Response headers. None on error.
         """
         try:
-            u = urlparse.urlparse(url)
+            u = urllib.parse.urlparse(url)
         except:
             err = "invalid URL '%s' (%s)" % (url, sys.exc_info()[1])
             self._logger.error(err)
@@ -103,10 +103,10 @@ class HttpClient(object):
                     kargs["context"] = ssl._create_unverified_context()
                 except:
                     pass
-                conn = httplib.HTTPSConnection(u.hostname, port, **kargs)
+                conn = http.client.HTTPSConnection(u.hostname, port, **kargs)
             else:
                 port = u.port if u.port else 80
-                conn = httplib.HTTPConnection(u.hostname, port, **kargs)
+                conn = http.client.HTTPConnection(u.hostname, port, **kargs)
             path = u.path if u.path else ""
             if u.query:
                 path += "?" + u.query
@@ -119,7 +119,7 @@ class HttpClient(object):
             conn.request(method, path, body, headers)
             rsp = conn.getresponse()
             try:
-                contLen = int(rsp.getheader("Content-Length"))
+                contLen = int(rsp.get("Content-Length"))
             except:
                 contLen = -1
             if output:

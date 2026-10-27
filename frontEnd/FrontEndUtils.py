@@ -38,7 +38,7 @@
 
 import os
 import wx
-import cPickle
+import pickle
 import sys
 
 from appCommon.CommonStrings import kAppName
@@ -217,15 +217,15 @@ def getRemotePathsFromSettings():
             try:
                 # Load the rule
                 ruleFilePath = os.path.join(ruleDir, fileName)
-                ruleFile = file(ruleFilePath, 'r')
-                rule = cPickle.load(ruleFile)
+                ruleFile = open(ruleFilePath, 'rb')
+                rule = pickle.load(ruleFile)
                 ruleFile.close()
 
                 # Load it's associated query
                 queryFileName = rule.getQueryName()+kQueryExt
                 queryFilePath = os.path.join(ruleDir, queryFileName)
-                queryFile = file(queryFilePath, 'r')
-                queryModel = cPickle.load(queryFile)
+                queryFile = open(queryFilePath, 'rb')
+                queryModel = pickle.load(queryFile)
                 queryFile.close()
 
                 responses = queryModel.getResponses()

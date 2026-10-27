@@ -36,10 +36,11 @@
 #
 #*****************************************************************************
 
-import sys, os, socket, time, subprocess, shutil, hashlib, base64, httplib, re
-import traceback, random, pickle, webstuff, MessageIds, uuid
+import sys, os, socket, time, subprocess, shutil, hashlib, base64, http.client, re
+import traceback, random, pickle, uuid
+from . import webstuff, MessageIds
 import ctypes
-import urllib
+import urllib.request, urllib.parse, urllib.error
 
 from subprocess import Popen, PIPE
 
@@ -68,7 +69,7 @@ from appCommon.CommonStrings import kXNATExeName
 from appCommon.CommonStrings import kNginxMarkerArg
 from appCommon.CommonStrings import kXNATMarkerArg
 from logging import LoggerAdapter
-from DebugLogManager import DebugLogManager
+from .DebugLogManager import DebugLogManager
 
 
 """
@@ -92,7 +93,7 @@ https://vitamind.kilnhg.com/Code/Vitamin-D-Video/scratch/nginxBuild.git.
 
 After a build attempt all of the Windows specific code can be found in
 
-msvc\nginx_win32_sighthound_build\buildenv\build\nginx\src\os\win32
+msvc\\nginx_win32_sighthound_build\\buildenv\\build\\nginx\\src\\os\\win32
 
 The Windows support is (or at least appears) messy at some points. For example
 files are always opened as Unicode (ngx_open_file), with the cstr expected to
@@ -127,7 +128,7 @@ by setting the environment variable SIGHTHOUND_WEBDIR the 'web' folder, usually
 located in the Sighthound user directory, can be placed in a spot so no
 non-ASCII characters will be in the path at all. This seems to work well, thus
 the final approach could be that Sighthound Video creates the web folder
-automatically e.g. in C:\sighthoundvideo_web and then removes it at shutdown.
+automatically e.g. in C:\\sighthoundvideo_web and then removes it at shutdown.
 We haven't decided yet if we want that patchwork or not. Having a more Windows
 empathetical/working nginx would be the actual way to go of course.
 
@@ -285,7 +286,7 @@ http {
         gzip_types text/css text/plain text/xml application/xml application/javascript application/x-javascript text/javascript application/json text/x-json image/x-icon;
         gzip_vary on;
         gzip_comp_level 9;
-        gzip_disable "MSIE [1-6]\.";
+        gzip_disable "MSIE [1-6]\\.";
         location /xmlrpc/ {
             proxy_pass $xmlrpc_url;
             proxy_set_header X-Real-IP $$remote_addr;
@@ -309,7 +310,7 @@ http {
             if_modified_since off;
             alias "$file_ping";
         }
-        location ~ ^/camera/(.*?)/(.*\.jpg)$$ {
+        location ~ ^/camera/(.*?)/(.*\\.jpg)$$ {
             proxy_pass http://127.0.0.1:$$1/$$2$$is_args$$args;
             proxy_set_header X-Real-IP $$remote_addr;
         }$cameraStreams
@@ -471,7 +472,7 @@ def _createKeyPairAndCertificate(basePath, contact, name, logger):
         env2[_kOpenSSLConfEnvVar] = ensureUtf8(conf)
         if _kIsWin:
             env3 = {}
-            for k, v in env2.iteritems():
+            for k, v in env2.items():
                 try:
                     env3[str(k)] = str(v)  # must _not_ be Unicode apparently
                 except:
@@ -699,7 +700,7 @@ class WebServer(object):
         s[kStatusKeyCertificateId] = self._certificateId
         s[kStatusKeyNumber] = self._lastStatus.get(
             kStatusKeyNumber, random.randint(0, 500000))
-        if 0 == cmp(self._lastStatus, s):
+        if self._lastStatus == s:
             return
         tmpfl = os.path.join(self._mainDir,
             "%s.%04x" % (kStatusFile, random.randint(0, 0xffff)))
@@ -878,7 +879,7 @@ class WebServer(object):
     ###########################################################
     def _resetMainDir(self):
         """ Cleans out the whole web server main directory, remove all old
-        work directories, status file(s) etc. Minus the OpenSSL stuff.
+        work directories, status open(s) etc. Minus the OpenSSL stuff.
         """
         if not os.path.exists(self._mainDir):
             try:
@@ -1934,7 +1935,7 @@ class PortOpener:
         timeout = self._timeout + _kPortOpenerCheckExtraSecs
         hc = HttpClient(timeout, self._logger)
         status, doc, _ = hc.get(url)
-        if httplib.OK == status:
+        if http.client.OK == status:
             return doc
         if status:
             self._logger.error("check URL status %d" % status)

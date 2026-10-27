@@ -50,10 +50,10 @@ from vitaToolbox.wx.FixModalDialog import fixModalDialog
 
 # Local imports...
 from appCommon.CommonStrings import kAnyCameraStr
-from QueryConstructionView import checkQueryName
-from QueryConstructionView import QueryConstructionView
-from constructionComponents.ResponseConfigPanel import checkResponses
-from constructionComponents.ResponseConfigPanel import hasResponses
+from .QueryConstructionView import checkQueryName
+from .QueryConstructionView import QueryConstructionView
+from .constructionComponents.ResponseConfigPanel import checkResponses
+from .constructionComponents.ResponseConfigPanel import hasResponses
 from frontEnd.FrontEndUtils import getUserLocalDataDir
 
 # Constants...
@@ -177,10 +177,10 @@ def test_main():
     """
     # Ugly test code to quickly bring up the query editor dialog...
     # ...import all kinda of private / inappropriate stuff...
-    from BackEndClient import BackEndClient
+    from .BackEndClient import BackEndClient
     from appCommon.CommonStrings import kVideoFolder
-    from FrontEndApp import kAppName
-    from FrontEndFrame import _clipDbName, _objDbName
+    from .FrontEndApp import kAppName
+    from .FrontEndFrame import _clipDbName, _objDbName
     from backEnd.ClipManager import ClipManager
     from backEnd.DataManager import DataManager
     from backEnd.SavedQueryDataModel import SavedQueryDataModel
@@ -217,4 +217,4 @@ if __name__ == '__main__':
     if len(sys.argv) > 1 and sys.argv[1] == "test":
         test_main()
     else:
-        print "Try calling with 'test' as the argument."
+        print("Try calling with 'test' as the argument.")

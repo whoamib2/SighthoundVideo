@@ -92,7 +92,7 @@ def handleArmRequest(parent, backEndClient):
     """
     # Get info from back end...
     camLocations = sorted(backEndClient.getCameraLocations(),
-                          cmp=lambda a, b: cmp(a.lower(), b.lower()))
+                          key=lambda a: a.lower())
     armSettings = backEndClient.getArmSettings()
 
     dlg = _ArmDialog(parent, camLocations, armSettings)
@@ -145,7 +145,7 @@ def handleDisarmRequest(parent, backEndClient):
 
     # Get info from back end...
     camLocations = sorted(backEndClient.getCameraLocations(),
-                          cmp=lambda a, b: cmp(a.lower(), b.lower()))
+                          key=lambda a: a.lower())
 
     # Disarm turns off all cameras...
     for camLoc in camLocations:
@@ -411,7 +411,7 @@ def test_main(whatToTest='arm'):
        Contains various self-test code.
     """
     # Ugly test code...
-    from BackEndClient import BackEndClient
+    from .BackEndClient import BackEndClient
     from appCommon.CommonStrings import kAppName
 
     app = wx.App(False)
@@ -426,7 +426,7 @@ def test_main(whatToTest='arm'):
     elif whatToTest == 'disarm':
         handleDisarmRequest(None, backEndClient)
     else:
-        print "ERROR: Don't know how to test %s" % whatToTest
+        print("ERROR: Don't know how to test %s" % whatToTest)
 
 
 ##############################################################################
@@ -434,4 +434,4 @@ if __name__ == '__main__':
     if len(sys.argv) > 1 and sys.argv[1] == "test":
         test_main(*sys.argv[2:])
     else:
-        print "Try calling with 'test' as the argument."
+        print("Try calling with 'test' as the argument.")

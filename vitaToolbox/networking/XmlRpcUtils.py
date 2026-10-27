@@ -34,11 +34,11 @@
 #
 #*****************************************************************************
 
-import xmlrpclib
-import httplib
+import xmlrpc.client
+import http.client
 
 ##############################################################################
-class TimeoutTransport(xmlrpclib.SafeTransport):
+class TimeoutTransport(xmlrpc.client.SafeTransport):
     """An XML-RPC ServerProxy Transport supporting timeouts.
 
     Allows the client to recover if the server is blocking forever as in the
@@ -67,7 +67,7 @@ class TimeoutTransport(xmlrpclib.SafeTransport):
 
         @param  timeout The timeout to use on the socket, or 0
         """
-        xmlrpclib.SafeTransport.__init__(self)
+        xmlrpc.client.SafeTransport.__init__(self)
         self._timeout = timeout
         if self._timeout == 0:
             self._timeout = None
@@ -77,6 +77,6 @@ class TimeoutTransport(xmlrpclib.SafeTransport):
     def make_connection(self, host):
         if self._connection and host == self._connection[0]:
             return self._connection[1]
-        self._connection = host, httplib.HTTPConnection(
+        self._connection = host, http.client.HTTPConnection(
                 self.get_host_info(host)[0], timeout=self._timeout)
         return self._connection[1]

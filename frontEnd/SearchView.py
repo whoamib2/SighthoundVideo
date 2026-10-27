@@ -73,20 +73,20 @@ from backEnd.RealTimeRule import RealTimeRule
 from backEnd.SavedQueryDataModel import SavedQueryDataModel
 from backEnd.VideoMarkupModel import VideoMarkupModel
 
-from DeleteClipDialog import DeleteClipDialog
-import FrontEndEvents
-from FrontEndPrefs import getFrontEndPref
-from FrontEndPrefs import setFrontEndPref
-from LocateVideoDialog import LocateVideoDialog
-from LookForList import LookForList
-from QueryEditorDialog import QueryEditorDialog
-from RemoveCameraDialog import removeCamera
-from SearchResultsDataModel import SearchResultsDataModel
-from SearchResultsList import SearchResultsList
-from SearchResultsPlaybackPanel import SearchResultsPlaybackPanel
-from BaseView import BaseView
+from .DeleteClipDialog import DeleteClipDialog
+from . import FrontEndEvents
+from .FrontEndPrefs import getFrontEndPref
+from .FrontEndPrefs import setFrontEndPref
+from .LocateVideoDialog import LocateVideoDialog
+from .LookForList import LookForList
+from .QueryEditorDialog import QueryEditorDialog
+from .RemoveCameraDialog import removeCamera
+from .SearchResultsDataModel import SearchResultsDataModel
+from .SearchResultsList import SearchResultsList
+from .SearchResultsPlaybackPanel import SearchResultsPlaybackPanel
+from .BaseView import BaseView
 
-import MenuIds
+from . import MenuIds
 
 
 _ctrlPadding = 8
@@ -352,7 +352,7 @@ class SearchView(BaseView):
         self._refreshButton = HoverBitmapButton(
             leftPanel, wx.ID_ANY,
             'frontEnd/bmps/Refresh_enabled.png',
-            wx.EmptyString,
+            "",
             'frontEnd/bmps/Refresh_pressed.png',
             'frontEnd/bmps/Refresh_disabled.png',
             'frontEnd/bmps/Refresh_hover.png',
@@ -364,7 +364,7 @@ class SearchView(BaseView):
         self._resultsSortAscendingButton = HoverBitmapButton(
             leftPanel, wx.ID_ANY,
             'frontEnd/bmps/Sort_Ascending_Enabled.png',
-            wx.EmptyString,
+            "",
             'frontEnd/bmps/Sort_Ascending_Pressed.png',
             'frontEnd/bmps/Sort_Ascending_Disabled.png',
             'frontEnd/bmps/Sort_Ascending_Hover.png',
@@ -378,7 +378,7 @@ class SearchView(BaseView):
         self._resultsSortDescendingButton = HoverBitmapButton(
             leftPanel, wx.ID_ANY,
             'frontEnd/bmps/Sort_Descending_Enabled.png',
-            wx.EmptyString,
+            "",
             'frontEnd/bmps/Sort_Descending_Pressed.png',
             'frontEnd/bmps/Sort_Descending_Disabled.png',
             'frontEnd/bmps/Sort_Descending_Hover.png',
@@ -391,9 +391,9 @@ class SearchView(BaseView):
         )
 
         # Search throbber
-        progBmps = [wx.Bitmap("frontEnd/bmps/prog%d.png" % i) for i in xrange(8)]
+        progBmps = [wx.Bitmap("frontEnd/bmps/prog%d.png" % i) for i in range(8)]
         self._throbberBmps = [FixedStaticBitmap(leftPanel, -1, progBmps[i])
-                                 for i in xrange(8)]
+                                 for i in range(8)]
         self._curThrobberId = 0
 
         # Add to sizer
@@ -1034,7 +1034,7 @@ class SearchView(BaseView):
             )
         ]
         cameraLocations = activeCameras + inactiveCameras
-        cameraLocations.sort(cmp=lambda x,y: cmp(x.lower(), y.lower()))
+        cameraLocations.sort(key=lambda x: x.lower())
 
         return cameraLocations
 
@@ -1280,7 +1280,7 @@ class SearchView(BaseView):
         try:
             self._resultsModel.doSearch(query, cameraList, searchDate,
                                         self._backEndClient.flushVideo)
-        except DatabaseError, e:
+        except DatabaseError as e:
             self._logger.error("Database exception during search.",
                                exc_info=True)
             if e.message in kCorruptDbErrorStrings:
@@ -1887,11 +1887,11 @@ class SearchView(BaseView):
         oldSelected = self._resultsModel.getSelectedIds()
         if oldSelected:
             lastSelected = int(oldSelected[-1])
-            newSelected = range(0, lastSelected) + \
-                          range(lastSelected+1, totalNumClips) + \
+            newSelected = list(range(0, lastSelected)) + \
+                          list(range(lastSelected+1, totalNumClips)) + \
                           [lastSelected]
         else:
-            newSelected = range(0, totalNumClips)
+            newSelected = list(range(0, totalNumClips))
 
         self._resultsModel.setMultipleSelected(True, newSelected)
 
@@ -1929,5 +1929,5 @@ class SearchView(BaseView):
 
 
 if __name__ == '__main__':
-    from FrontEndApp import main
+    from .FrontEndApp import main
     main()

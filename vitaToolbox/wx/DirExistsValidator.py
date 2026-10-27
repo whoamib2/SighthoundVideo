@@ -89,7 +89,7 @@ class DirExistsValidator(wx.Validator):
                         try:
                             os.makedirs(myVal)
                             return True
-                        except Exception, e:
+                        except Exception as e:
                             wx.MessageBox("Failed to create '%s'.\n\n%s" %
                                           (myVal, e),
                                           "Error", wx.OK | wx.ICON_ERROR)

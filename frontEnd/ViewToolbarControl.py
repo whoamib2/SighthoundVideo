@@ -449,7 +449,7 @@ def test_main():
 
     def _emptyBitmap(width, height, color):
         # We'll use this bitmap as a placeholder...
-        img = wx.EmptyImage(width, height)
+        img = wx.Image(width, height)
         img.SetRGBRect(wx.Rect(0, 0, width, height), *color)
         return img.ConvertToBitmap()
 
@@ -498,4 +498,4 @@ if __name__ == '__main__':
     if len(sys.argv) > 1 and sys.argv[1] == "test":
         test_main()
     else:
-        print "Try calling with 'test' as the argument."
+        print("Try calling with 'test' as the argument.")

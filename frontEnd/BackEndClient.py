@@ -38,12 +38,12 @@
 
 
 # Python imports...
-import cPickle
+import pickle
 import os
 import socket
 import sys
 import time
-import xmlrpclib
+import xmlrpc.client
 from xml.parsers.expat import ExpatError
 
 # Common 3rd-party imports...
@@ -242,9 +242,9 @@ class BackEndClient(object):
         @param  origName  The original query name.
         @param  postMessage  True if the back end should be notified.
         """
-        queryPickle = cPickle.dumps(query)
+        queryPickle = pickle.dumps(query)
         self._proxy.editQuery(
-            origName, xmlrpclib.Binary(queryPickle), postMessage
+            origName, xmlrpc.client.Binary(queryPickle), postMessage
         )
 
 
@@ -258,7 +258,7 @@ class BackEndClient(object):
         pickledQuery = self._proxy.getQuery(queryName).data
 
         try:
-            query = cPickle.loads(pickledQuery)
+            query = pickle.loads(pickledQuery)
             return query
         except Exception:
             pass
@@ -274,8 +274,8 @@ class BackEndClient(object):
         @param  enabled  True if the new rule should be enabled.
         @return success  True if hte rule was added successfully.
         """
-        s = cPickle.dumps(query)
-        return self._proxy.addRule(xmlrpclib.Binary(s), enabled)
+        s = pickle.dumps(query)
+        return self._proxy.addRule(xmlrpc.client.Binary(s), enabled)
 
 
     ###########################################################
@@ -306,7 +306,7 @@ class BackEndClient(object):
         pickledRule = self._proxy.getRule(ruleName).data
 
         try:
-            rule = cPickle.loads(pickledRule)
+            rule = pickle.loads(pickledRule)
             return rule
         except Exception:
             pass
@@ -364,7 +364,7 @@ class BackEndClient(object):
         """
         location = self._proxy.getStorageLocation()
 
-        if type(location) == str:
+        if isinstance(location, (bytes, bytearray)):
             location = location.decode('utf-8')
 
         return location
@@ -378,7 +378,7 @@ class BackEndClient(object):
         """
         location = self._proxy.getVideoLocation()
 
-        if type(location) == str:
+        if isinstance(location, (bytes, bytearray)):
             location = location.decode('utf-8')
 
         return location
@@ -631,7 +631,7 @@ class BackEndClient(object):
         """
         # Unpickle from xmlrpclib.Binary, since XMLRPC doesn't support long int.
         pickledResult = self._proxy.getPendingClipInfo(protocol).data
-        return cPickle.loads(pickledResult)
+        return pickle.loads(pickledResult)
 
 
     ###########################################################
@@ -819,7 +819,7 @@ class BackEndClient(object):
                         can be None or integers representing the current state
                         of the pcap process.
         """
-        return cPickle.loads(self._proxy.getPacketCaptureInfo())
+        return pickle.loads(self._proxy.getPacketCaptureInfo())
 
 
     ###########################################################
@@ -1257,7 +1257,7 @@ class BackEndClient(object):
 
 
 ##############################################################################
-class _BackEndTransport(xmlrpclib.Transport):
+class _BackEndTransport(xmlrpc.client.Transport):
     """A subclass of Transport that connects to the right place.
 
     Effectively, we ignore the "host" that is passed into the XMLRPC stuff.
@@ -1278,7 +1278,7 @@ class _BackEndTransport(xmlrpclib.Transport):
         """
         self.__portFilePath = portFilePath
         self.__host = None
-        xmlrpclib.Transport.__init__(self, use_datetime)
+        xmlrpc.client.Transport.__init__(self, use_datetime)
 
         # Call this right now so we throw an exception if there's a problem...
         self.__host = self.__figureOutHost()
@@ -1300,11 +1300,11 @@ class _BackEndTransport(xmlrpclib.Transport):
         assert host == '0.0.0.0:0', "Expected bogus host, not '%s'" % str(host)
 
         try:
-            return xmlrpclib.Transport.request(self, self.__host,
+            return xmlrpc.client.Transport.request(self, self.__host,
                                                *args, **kwargs)
         except socket.error:
             self.__host = self.__figureOutHost()
-            return xmlrpclib.Transport.request(self, self.__host,
+            return xmlrpc.client.Transport.request(self, self.__host,
                                                *args, **kwargs)
 
 
@@ -1317,13 +1317,13 @@ class _BackEndTransport(xmlrpclib.Transport):
         @return host          The host to connect to.
         """
         try:
-            portFile = open(self.__portFilePath, 'r')
+            portFile = open(self.__portFilePath, 'rb')
         except IOError:
             # Give a little nicer error...
             raise RuntimeError("Missing port file opening " + self.__portFilePath)
 
         try:
-            port = cPickle.load(portFile)
+            port = pickle.load(portFile)
         except Exception:
             raise RuntimeError("Bad port file contents")
 
@@ -1350,7 +1350,7 @@ def sendCommand(command='status', portFileDir=None):
     """
     # Need to create a front end app, including giving it a name.  This
     # makes "FrontEndUtils.getUserLocalDataDir()" work properly...
-    from FrontEndApp import kAppName
+    from .FrontEndApp import kAppName
 
     if portFileDir is None:
         app = wx.App(False)
@@ -1361,9 +1361,9 @@ def sendCommand(command='status', portFileDir=None):
 
     if command == 'status':
         if didConnect:
-            print "Back end is running."
+            print("Back end is running.")
         else:
-            print "Back end is not running."
+            print("Back end is not running.")
     elif command == 'quit':
         didQuit = False
 
@@ -1373,21 +1373,21 @@ def sendCommand(command='status', portFileDir=None):
             didQuit = client.quit(15, _simpleProgressPulse)
 
         if didQuit:
-            print "\n...OK, backend was quit."
+            print("\n...OK, backend was quit.")
         else:
             if didConnect:
-                print "\n...WARNING: Backend didn't quit gracefully..."
+                print("\n...WARNING: Backend didn't quit gracefully...")
 
             if didConnect or getBackendProcesses():
                 sys.stdout.write("Forcing stray back end processes to quit...")
                 sys.stdout.flush()
                 didQuit = client.forceQuit(10, _simpleProgressPulse)
                 if didQuit:
-                    print "\n...OK, backend was forced to quit."
+                    print("\n...OK, backend was forced to quit.")
                 else:
-                    print "\n...ERROR: backend failed to quit."
+                    print("\n...ERROR: backend failed to quit.")
             else:
-                print "Back end wasn't running."
+                print("Back end wasn't running.")
 
 
 ##############################################################################

@@ -71,9 +71,9 @@ class ExportSingleClipDialog(wx.Dialog):
 
 
     ###########################################################
-    def __init__(self, parent, title=wx.EmptyString,
-                 message=wx.FileSelectorPromptStr, defaultDir=wx.EmptyString,
-                 defaultFile=wx.EmptyString,
+    def __init__(self, parent, title="",
+                 message=wx.FileSelectorPromptStr, defaultDir="",
+                 defaultFile="",
                  types=None,
                  flags=0,
                  style=wx.DEFAULT_DIALOG_STYLE,  pos=wx.DefaultPosition,

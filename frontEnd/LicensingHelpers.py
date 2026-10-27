@@ -46,12 +46,12 @@ from appCommon.LicenseUtils import kCamerasField, kStarterEdition
 from appCommon.CommonStrings import kAppName
 from appCommon.CommonStrings import kVersionString
 from appCommon.CommonStrings import kMajorVersionString
-from LicenseDialog import doShowLicenseDialog
+from .LicenseDialog import doShowLicenseDialog
 
 
 # Constants...
 _kMessageWrapWidth = 480
-_kActivateLicenseId = wx.NewId()
+_kActivateLicenseId = wx.NewIdRef()
 
 # When you add a wx.StdDialogButtonSizer, you need different borders
 # on Mac vs. PC.

@@ -48,7 +48,7 @@ import wave
 import pyaudio
 
 # Local imports...
-from BaseResponse import BaseResponse
+from .BaseResponse import BaseResponse
 
 from frontEnd.GetLaunchParameters import getLaunchParameters
 
@@ -77,8 +77,8 @@ class SoundResponse(BaseResponse):
 
         # We should always be passing as unicode, but we weren't previously,
         # hence this test.
-        if type(soundPath) == unicode:
-            soundPath = soundPath.encode('utf-8')
+        if isinstance(soundPath, (bytes, bytearray)):
+            soundPath = soundPath.decode('utf-8')
 
         self._popenParamList = getLaunchParameters()
         self._popenParamList.extend(["--sound", soundPath])
@@ -106,8 +106,8 @@ class SoundResponse(BaseResponse):
 
         alert = False
 
-        prevSeenObjs = self._itemDict.keys()
-        curObjs = rangeDict.keys()
+        prevSeenObjs = list(self._itemDict.keys())
+        curObjs = list(rangeDict.keys())
 
         for objId in curObjs:
             numRanges = len(rangeDict[objId])
@@ -170,7 +170,7 @@ def playSound(soundPath, catchExceptions=True):
     @param  catchExceptions  If True exceptions will be caught and ignored.
     """
     try:
-        if type(soundPath) == str:
+        if isinstance(soundPath, (bytes, bytearray)):
             soundPath = soundPath.decode('utf-8')
 
         pyAudioInst = pyaudio.PyAudio()

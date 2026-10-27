@@ -135,7 +135,7 @@ def GetFilesFromDir(dirPath, pattern='*.*', regexp=re.compile(r'.+'), followLink
     res =  [
         f for f in globResults if regexp.match(os.path.basename(f)) is not None
     ]
-    print ("dir=%s, pattern=%s, res=%s re=%s" % (dirPath, pattern, res, regexp.pattern))
+    print(("dir=%s, pattern=%s, res=%s re=%s" % (dirPath, pattern, res, regexp.pattern)))
     return res
 
 if sys.platform == 'darwin':
@@ -165,11 +165,11 @@ if 'SVINSTALLDIR' in os.environ and 'SV3RDPARTYDIR' in os.environ:
     _externalInstallDir =  os.path.abspath(os.environ['SV3RDPARTYDIR'])
     _externalPythonDir =  os.path.join(_externalInstallDir, "lib", "python2.7", "site-packages")
 else:
-    raise RuntimeError(
-        "'SVINSTALLDIR' or 'SV3RDPARTYDIR' environment variable is not set! "
-        "Did you remember to run 'source setupEnvironment' before calling "
-        "this (" + str(os.path.basename(__file__)) + ") script?"
-    )
+    # Import stays possible without a native install tree. main() refuses to
+    # package until the environment is set.
+    _localCppInstall = ""
+    _externalInstallDir = ""
+    _externalPythonDir = ""
 
 
 
@@ -181,7 +181,7 @@ _icons = [
 
 _extraDllDirs = [
     # Windows's extra DLL directories to include...
-    'Microsoft.VC90.CRT.'+os.getenv("SVARCH"),
+    'Microsoft.VC90.CRT.' + (os.getenv("SVARCH") or ""),
 ] if _isWin else [
     # Mac's extra DLL directories to include...
 ]
@@ -253,6 +253,12 @@ def main(settingsName, buildDir='build'):
     @param  settingsName    The name of the settings to use for extraction.
     @param  destinationDir  Directory to place the source in.
     """
+    if not _localCppInstall or not _externalInstallDir:
+        raise RuntimeError(
+            "'SVINSTALLDIR' or 'SV3RDPARTYDIR' environment variable is not set! "
+            "Did you remember to run 'source setupEnvironment' before calling "
+            "this (PackageSources.py) script?"
+        )
     # This is hardcoded (for now)...
     obfuscatedResultsDir = os.path.join(buildDir, "obfuscated-out", "results")
 
@@ -269,7 +275,7 @@ def main(settingsName, buildDir='build'):
                         destinationDir)
 
     # Find dependencies of the top level scripts...
-    print "* Looking for python dependencies..."
+    print("* Looking for python dependencies...")
     dependencies = []
     for targetPath in topLevelScripts:
         sys.stdout.write("  %-65s " % (targetPath + "..."))
@@ -278,10 +284,10 @@ def main(settingsName, buildDir='build'):
                                           obfuscatedResultsDir)
         sys.stdout.write("done!\n")
         sys.stdout.flush()
-    print "  ...done looking for dependencies."
+    print("  ...done looking for dependencies.")
 
     # Copy dependencies + extra files...
-    print "* Copying dependencies and extra files..."
+    print("* Copying dependencies and extra files...")
     for srcPath in dependencies + extraFiles + dataSetFiles:
         # Figure out if the source file came from obfuscation.  If
         # so, take the obfuscation prefix away when deciding on
@@ -298,14 +304,14 @@ def main(settingsName, buildDir='build'):
 
         # print("copyFilePreservingLinks(%s, %s" % (srcPath, dstPath))
         copyFilePreservingLinks(srcPath, dstPath)
-    print "  ...done copying dependencies."
+    print("  ...done copying dependencies.")
 
 
     # Copy any DLLs or .so files that exist in directories corresponding
     # to the destination directories.  This assumption means that there might
     # be files that the user does not want to package.  Make sure we don't
     # search in excluded directories.
-    print "* Finding and copying any shared objects..."
+    print("* Finding and copying any shared objects...")
     for root, dirs, files in os.walk("."):
         dstRoot = os.path.abspath(os.path.join(destinationDir, root))
 
@@ -321,10 +327,10 @@ def main(settingsName, buildDir='build'):
                 srcPath = os.path.join(root, f)
                 dstPath = os.path.join(dstRoot, f)
                 copyFilePreservingLinks(srcPath, dstPath)
-    print "  ...done copying shared objects."
+    print("  ...done copying shared objects.")
 
     # Export directories...
-    print "* Copying whole directories to %s (through svn export if needed)..." % destinationDir
+    print("* Copying whole directories to %s (through svn export if needed)..." % destinationDir)
     for wholeModuleDir in wholeDirs:
         if os.path.isabs(wholeModuleDir):
             dstPath = destinationDir
@@ -340,7 +346,7 @@ def main(settingsName, buildDir='build'):
         os.system("cp -pPR '%s' '%s'" % (wholeModuleDir, dstPath))
         sys.stdout.write("done!\n")
         sys.stdout.flush()
-    print "  ...done copying directories."
+    print("  ...done copying directories.")
 
 
 
@@ -369,7 +375,7 @@ def _findDependencies(targetScript, ignoreDirs, obfuscatedResultsDir):
     )
     mf.run_script(targetScript)
     dependencies = []
-    for (_, module) in mf.modules.iteritems():
+    for (_, module) in mf.modules.items():
         if not module.__file__:
             continue
 
@@ -436,5 +442,5 @@ if __name__ == '__main__':
     else:
         try:
             main(*sys.argv[1:])
-        except Exception, e:
-            print "Error calling main: '%s'" % (str(e))
+        except Exception as e:
+            print("Error calling main: '%s'" % (str(e)))

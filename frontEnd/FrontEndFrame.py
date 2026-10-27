@@ -42,7 +42,7 @@
 import os
 import sys
 import time
-import urllib
+import urllib.request, urllib.parse, urllib.error
 import webbrowser
 
 # Common 3rd-party imports...
@@ -69,22 +69,22 @@ from appCommon.LicenseUtils import kSerialField, kSupportField, kNoValueToken
 from appCommon.LicenseUtils import isLegacyLicense
 from appCommon.LicenseUtils import kStarterEdition
 
-from AboutBox import ShowAboutBox
+from .AboutBox import ShowAboutBox
 
 if not kOpenSourceVersion:
     from AppUpdateDialog import DoAutoUpdateCheck
 
-from ArmCameras import handleArmRequest
-from ArmCameras import handleDisarmRequest
+from .ArmCameras import handleArmRequest
+from .ArmCameras import handleDisarmRequest
 if not kOpenSourceVersion:
     from BugReportDialog import BugReportDialog
-from FrontEndPrefs import getFrontEndPref, setFrontEndPref
-from FtpStatusDialog import FtpStatusDialog
-from LicenseDialog import doShowLicenseDialog
-from LicensingHelpers import SupportExpiredDialog
-from LicensingHelpers import kSupportExpiredChoiceRenew
-from LicensingHelpers import kSupportExpiredChoiceStarter
-from LoginDialog import LoginDialog
+from .FrontEndPrefs import getFrontEndPref, setFrontEndPref
+from .FtpStatusDialog import FtpStatusDialog
+from .LicenseDialog import doShowLicenseDialog
+from .LicensingHelpers import SupportExpiredDialog
+from .LicensingHelpers import kSupportExpiredChoiceRenew
+from .LicensingHelpers import kSupportExpiredChoiceStarter
+from .LoginDialog import LoginDialog
 
 # TODO: As back end evolves, will we continue importing it this way?
 from backEnd.ClipManager import ClipManager
@@ -92,23 +92,27 @@ from backEnd.DataManager import DataManager
 from backEnd.DebugLogManager import DebugLogManager
 import backEnd.MessageIds as MessageIds
 
-from MonitorView import MonitorView
-from GridView import GridView
-from OptionsDialog import OptionsDialog
-from SearchView import SearchView, kCameraNameParam, kQueryNameParam
-from LegacyBanner import LegacyBanner
-from LegacyBanner import EVT_SHOW_LOGIN
-from StarterBanner import StarterBanner
-from TrialBanner import TrialBanner, EVT_DIRECT_PURCHASE
-from UIPrefsDataModel import UIPrefsDataModel
-from ViewToolbarControl import ViewToolbarControl, EVT_VIEW_CHANGED
-from FrontEndUtils import getUserLocalDataDir
+from .MonitorView import MonitorView
+from .GridView import GridView
+from .OptionsDialog import OptionsDialog
+from .SearchView import SearchView, kCameraNameParam, kQueryNameParam
+from .LegacyBanner import LegacyBanner
+from .LegacyBanner import EVT_SHOW_LOGIN
+from .StarterBanner import StarterBanner
+from .TrialBanner import TrialBanner, EVT_DIRECT_PURCHASE
+from .UIPrefsDataModel import UIPrefsDataModel
+from .ViewToolbarControl import ViewToolbarControl, EVT_VIEW_CHANGED
+from .FrontEndUtils import getUserLocalDataDir
 
 from vitaToolbox.wx.ToolbarBitmapTextButton import ToolbarBitmapTextButton
 
-from videoLib2.python.VideoLibUtils import GetVideolibModulesList, GetVideoLibDebugConfigItems, GetVideoLibLogLevels
+from backEnd.native.capture import (
+    GetVideolibModulesList,
+    GetVideoLibDebugConfigItems,
+    GetVideoLibLogLevels,
+)
 
-import MenuIds
+from . import MenuIds
 
 
 def OB_ASID(a): return a
@@ -233,8 +237,8 @@ class FrontEndFrame(wx.Frame):
         self._lastAuthPromptSeconds = 0
 
         # Any IDs that we need to be constant...
-        self._armCamerasId = wx.NewId()
-        self._allCamerasOffId = wx.NewId()
+        self._armCamerasId = wx.NewIdRef()
+        self._allCamerasOffId = wx.NewIdRef()
 
         # Initialize everything
         self._initMenus()
@@ -610,7 +614,7 @@ class FrontEndFrame(wx.Frame):
                 )
                 self._backEndClient.forceQuit(_kForceQuitTimeout,
                                               progDlg.Pulse)
-        except Exception, e:
+        except Exception as e:
             self._logger.error("Quitting failed with exception %s" % str(e))
         finally:
             #self._logger.info("about to destroy progDlg...")
@@ -696,9 +700,9 @@ class FrontEndFrame(wx.Frame):
             # No window menu...
             windowMenuData = []
 
-        self._monitorViewMenuId = wx.NewId()
-        self._searchViewMenuId = wx.NewId()
-        self._gridViewMenuId = wx.NewId()
+        self._monitorViewMenuId = wx.NewIdRef()
+        self._searchViewMenuId = wx.NewIdRef()
+        self._gridViewMenuId = wx.NewIdRef()
 
         # Data structure for the contents of the menus and menu items
         conditionalAny = wx.ID_NONE if kOpenSourceVersion else wx.ID_ANY
@@ -1244,7 +1248,7 @@ class FrontEndFrame(wx.Frame):
         elif menuId == self._searchViewMenuId:
             self._switchView(self._searchView)
         else:
-            assert False, "Unknown view %d" % selection
+            assert False, "Unknown view %d" % menuId
 
 
     ############################################################
@@ -1264,7 +1268,7 @@ class FrontEndFrame(wx.Frame):
         elif newView == self._searchView:
             self._viewControl.setSelection(2)
         else:
-            assert False, "Unknown view %d" % selection
+            assert False, "Unknown view %r" % (newView,)
 
         menu = self.GetMenuBar()
         menu.Enable(self._monitorViewMenuId, newView != self._monitorView)
@@ -1429,7 +1433,7 @@ class FrontEndFrame(wx.Frame):
 
                 self._logger.info("License changed from %s to %s" %
                         (msg[1][kEditionField], newLic[kEditionField]))
-            except Exception, e:
+            except Exception as e:
                 self._logger.error("License change error: " + str(e))
         elif msgId == MessageIds.msgIdLicenseSupportExpired:
             lem = self._lastSupportExpiredMessage
@@ -1463,7 +1467,7 @@ class FrontEndFrame(wx.Frame):
             # *BEFORE* it gets destroyed.
             choice = dlg.GetChoiceSelection()
 
-        except Exception, e:
+        except Exception as e:
             self._logger.error("Couldn't show support expired dialog: " + str(e))
 
             # Assuming the dialog did not show since we're in this block, change
@@ -1513,7 +1517,7 @@ class FrontEndFrame(wx.Frame):
                     # If the user has at one point logged in previously and we aren't
                     # prompting for auth due to an auth error, return.
                     return
-            except Exception, e:
+            except Exception as e:
                 self._logger.error("Login status query failed: " + str(e))
 
         if authError:
@@ -1550,7 +1554,7 @@ class FrontEndFrame(wx.Frame):
                 result = dlg.ShowModal()
             else:
                 result = wx.OK
-        except Exception, e:
+        except Exception as e:
             self._logger.error("Couldn't show login dialog: " + str(e))
         finally:
             self._showingLoginDialog = False
@@ -1614,7 +1618,7 @@ class FrontEndFrame(wx.Frame):
         if serial == kNoValueToken:
             serial = ""
         elif serial:
-            serial = urllib.quote(serial)
+            serial = urllib.parse.quote(serial)
         webbrowser.open(kRenewSupportUrl % serial)
 
 
@@ -1685,7 +1689,7 @@ class FrontEndFrame(wx.Frame):
             toolbar.AddControl(self._renewButton)
             toolbar.Realize()
 
-        except Exception, e:
+        except Exception as e:
             self._logger.error("Exception adding renewal button: " + str(e))
 
 

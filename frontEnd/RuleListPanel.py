@@ -72,8 +72,8 @@ from appCommon.CommonStrings import kSoundResponse
 from appCommon.CommonStrings import kFtpResponse
 from appCommon.CommonStrings import kLocalExportResponse
 from backEnd.SavedQueryDataModel import SavedQueryDataModel
-from QueryEditorDialog import QueryEditorDialog
-from RuleScheduleDialog import RuleScheduleDialog
+from .QueryEditorDialog import QueryEditorDialog
+from .RuleScheduleDialog import RuleScheduleDialog
 
 
 _kCtrlPadding = 8
@@ -171,14 +171,14 @@ class RuleListPanel(BorderImagePanel):
         self._recordingEnabledButton = \
             HoverBitmapButton(self, wx.ID_ANY,
                                 'frontEnd/bmps/Monitor_On_Enabled.png',
-                                wx.EmptyString,
+                                "",
                                 'frontEnd/bmps/Monitor_On_Pressed.png',
                                 'frontEnd/bmps/Monitor_Off_Enabled.png',
                                 'frontEnd/bmps/Monitor_On_Hover.png')
         self._recordingDisabledButton = \
             HoverBitmapButton(self, wx.ID_ANY,
                                 'frontEnd/bmps/Monitor_Off_Enabled.png',
-                                wx.EmptyString,
+                                "",
                                 'frontEnd/bmps/Monitor_Off_Pressed.png',
                                 'frontEnd/bmps/Monitor_Off_Enabled.png',
                                 'frontEnd/bmps/Monitor_Off_Hover.png')
@@ -269,9 +269,9 @@ class RuleListPanel(BorderImagePanel):
 
         # The following will be used for the popup menu we create when
         # the user selects a rule.
-        self._editId = wx.NewId()
-        self._newId = wx.NewId()
-        self._deleteId = wx.NewId()
+        self._editId = wx.NewIdRef()
+        self._newId = wx.NewIdRef()
+        self._deleteId = wx.NewIdRef()
         self.Bind(wx.EVT_MENU, self.OnEdit, id=self._editId)
         self.Bind(wx.EVT_MENU, self.OnNew, id=self._newId)
         self.Bind(wx.EVT_MENU, self.OnDelete, id=self._deleteId)
@@ -364,7 +364,7 @@ class RuleListPanel(BorderImagePanel):
         # Create a shortcut to the search
         searchIcon = HoverBitmapButton(self._ruleWin, wx.ID_ANY,
                                    'frontEnd/bmps/Search_link_enabled.png',
-                                    wx.EmptyString,
+                                    "",
                                    'frontEnd/bmps/Search_link_pressed.png',
                                    'frontEnd/bmps/Search_link_disabled.png',
                                    'frontEnd/bmps/Search_link_hover.png',
@@ -397,7 +397,7 @@ class RuleListPanel(BorderImagePanel):
         for response in responses:
             enabledBmp, disabledBmp = _kResponseBitmapMap[response]
             if ((enabledBmp, disabledBmp)) not in alreadyAdded:
-                button = HoverBitmapButton(self._ruleWin, wx.ID_ANY, enabledBmp, wx.EmptyString,
+                button = HoverBitmapButton(self._ruleWin, wx.ID_ANY, enabledBmp, "",
                                            bmpDisabled=disabledBmp, useMask=False)
                 button.Enable(enabled)
                 responseControls.append(button)
@@ -422,8 +422,8 @@ class RuleListPanel(BorderImagePanel):
         """Add all controls to the list in a sorted order."""
         self._ruleSizer.Clear(False)
 
-        names = self._controls.keys()
-        names.sort(cmp=lambda x,y: cmp(x.lower(), y.lower()))
+        names = list(self._controls.keys())
+        names.sort(key=lambda x: x.lower())
 
         enabled = []
         disabled = []

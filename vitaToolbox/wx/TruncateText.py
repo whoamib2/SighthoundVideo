@@ -113,7 +113,7 @@ def truncateStaticText(win):
     if textWidth <= availableWidth:
         return
 
-    for i in xrange(len(text)):
+    for i in range(len(text)):
         partialLineWidth, _ = win.GetTextExtent(text[:i])
         if partialLineWidth > (availableWidth - ellipsisWidth):
             i = max(0, i - 1)

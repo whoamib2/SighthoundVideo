@@ -42,7 +42,7 @@ Contains the license manager and utilities.
 """
 
 import os, sys, copy, time
-import StringIO
+import io
 
 from vitaToolbox.strUtils import Obfuscate
 from vitaToolbox.sysUtils.FileUtils import writeStringToFile
@@ -57,9 +57,9 @@ from appCommon.CommonStrings import kLoginStatusFailed
 from appCommon.CommonStrings import kLoginStatusLastUser
 from appCommon.CommonStrings import kLoginStatusMachineId
 from appCommon.CommonStrings import kLoginStatusToken
-from MessageIds import msgIdNeedRelogin
-from MessageIds import msgIdLicenseChanged
-from MessageIds import msgIdLicenseSupportExpired
+from .MessageIds import msgIdNeedRelogin
+from .MessageIds import msgIdLicenseChanged
+from .MessageIds import msgIdLicenseSupportExpired
 
 
 ###############################################################################

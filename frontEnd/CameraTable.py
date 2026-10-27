@@ -2376,7 +2376,7 @@ if kWantOtherCamOption:
 # that we have a generic for every manufacturer...
 kUpnpManufactrers = sorted(
     set(kTypeToManufacturer[__camType] for __camType in                        #PYCHECKER gets confused by genexpr
-        itertools.chain(*kUpnpModelMap.values())       ) |
+        itertools.chain(*list(kUpnpModelMap.values()))       ) |
     set(kTypeToManufacturer[__camType] for __, __camType in kUpnpGenericList)  #PYCHECKER gets confused by genexpr
 )
 if kWantOtherCamOption:
@@ -2388,27 +2388,27 @@ if kWantOtherCamOption:
 # ...these should effectively manifest themselves as compile-time errors, since
 # you won't even be able to pycheck this module without hitting them...
 assert (set(__x[1] for __x in kUpnpGenericList) <=                             #PYCHECKER gets confused by genexpr
-        set(kCameraDescriptions.iterkeys())      ), \
+        set(kCameraDescriptions.keys())      ), \
        "UPNP generics must all have descriptions: %s" % str(
             set(__x[1] for __x in kUpnpGenericList) -                          #PYCHECKER gets confused by genexpr
-            set(kCameraDescriptions.iterkeys())
+            set(kCameraDescriptions.keys())
         )
-assert (set(kCameraDescriptions.iterkeys()) <=
-        set(kTypeToStreamPath.iterkeys())      ), \
+assert (set(kCameraDescriptions.keys()) <=
+        set(kTypeToStreamPath.keys())      ), \
        "Some described cameras not in kTypeToStreamPath: %s" % str(
-            set(kCameraDescriptions.iterkeys()) -
-            set(kTypeToStreamPath.iterkeys())
+            set(kCameraDescriptions.keys()) -
+            set(kTypeToStreamPath.keys())
         )
-assert (set(itertools.chain(*kUpnpModelMap.values())) <=
-        set(kTypeToStreamPath.iterkeys())               ), \
+assert (set(itertools.chain(*list(kUpnpModelMap.values()))) <=
+        set(kTypeToStreamPath.keys())               ), \
        "Some UPNP models not in kTypeToStreamPath: %s" % str(
-            set(itertools.chain(*kUpnpModelMap.values())) -
-            set(kTypeToStreamPath.iterkeys())
+            set(itertools.chain(*list(kUpnpModelMap.values()))) -
+            set(kTypeToStreamPath.keys())
         )
-assert [__path for __, __path, __ in kTypeToStreamPath.itervalues()            #PYCHECKER __ doesn't need to be used.
+assert [__path for __, __path, __ in kTypeToStreamPath.values()            #PYCHECKER __ doesn't need to be used.
         if not __path.startswith('/')                              ] == [], \
        "All paths in kTypeToStreamPath should start with '/': %s" % str(
-            [__path for __, __path, __ in kTypeToStreamPath.itervalues()
+            [__path for __, __path, __ in kTypeToStreamPath.values()
              if not __path.startswith('/')                              ]
         )
 assert set(kUpnpManufactrers) <= set(kCameraManufacturers), \
@@ -2416,9 +2416,9 @@ assert set(kUpnpManufactrers) <= set(kCameraManufacturers), \
             set(kUpnpManufactrers) - set(kCameraManufacturers)
         )
 
-assert set(kOldCameraNameMap.itervalues()) <= set(kIpCameraTypes), \
+assert set(kOldCameraNameMap.values()) <= set(kIpCameraTypes), \
        "New names for old cameras must be valid cameras: %s" % str(
-            set(kOldCameraNameMap.itervalues()) - set(kIpCameraTypes)
+            set(kOldCameraNameMap.values()) - set(kIpCameraTypes)
         )
 
 
@@ -2442,7 +2442,7 @@ def test_main():
             if currManufacturer:
                 if not models:
                     models.append("Various")
-                print "<strong>%s</strong><br />\n%s<br />\n<br />" % (currManufacturer, ', '.join(models))
+                print("<strong>%s</strong><br />\n%s<br />\n<br />" % (currManufacturer, ', '.join(models)))
             currManufacturer = manufacturer
             models = []
 
@@ -2458,4 +2458,4 @@ if __name__ == '__main__':
     if len(sys.argv) > 1 and sys.argv[1] == "test":
         test_main()
     else:
-        print "Try calling with 'test' as the argument."
+        print("Try calling with 'test' as the argument.")

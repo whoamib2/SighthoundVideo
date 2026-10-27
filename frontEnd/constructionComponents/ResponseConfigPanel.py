@@ -78,7 +78,7 @@ from frontEnd.EmailSetupDialog import EmailSetupDialog
 from frontEnd.FtpSetupDialog import FtpSetupDialog
 from frontEnd.OptionsDialog import OptionsDialog
 from frontEnd.FrontEndUtils import promptUserIfRemotePathEvtHandler
-from ConfigPanel import ConfigPanel
+from .ConfigPanel import ConfigPanel
 
 # Constants...
 
@@ -121,9 +121,9 @@ _kIftttHelpStr = "IFTTT event"
 _kIftttTestStr = "Test"
 
 _kCustomSoundLabel = "Custom"
-_kSoundChoiceDict = {"Bells"            : u"frontEnd/sounds/Bells.wav",
-                     "Person Detected"  : u"frontEnd/sounds/Person Detected.wav",
-                     "Ping"             : u"frontEnd/sounds/Ping.wav"}
+_kSoundChoiceDict = {"Bells"            : "frontEnd/sounds/Bells.wav",
+                     "Person Detected"  : "frontEnd/sounds/Person Detected.wav",
+                     "Ping"             : "frontEnd/sounds/Ping.wav"}
 
 
 _kNoEmailAddrTitleStr = "Email notification"
@@ -303,10 +303,10 @@ class WebhookEditor(wx.Dialog):
         # Reference:
         # https://www.cl.cam.ac.uk/~mgk25/ucs/quotes.html
         # https://stackoverflow.com/questions/28977618/how-to-convert-utf-8-fancy-quotes-to-neutral-quotes
-        content = re.sub(u'\u201c','"',content)
-        content = re.sub(u'\u201d','"',content)
+        content = re.sub('\u201c','"',content)
+        content = re.sub('\u201d','"',content)
         # And we'll do a '-', too, but only because Kevin ran into it
-        content = re.sub(u'\u2014','-',content)
+        content = re.sub('\u2014','-',content)
         # Blanket replace things we do not understand with question marks
         content = content.encode('ascii', 'replace')
         return content
@@ -604,7 +604,7 @@ class ResponseConfigPanel(ConfigPanel):
                 try:
                     from backEnd.responses.SoundResponse import playSound
                     playSound(soundPath, False)
-                except Exception, e:
+                except Exception as e:
                     wx.MessageBox("The sound file could not be played.",
                                   "Error", wx.OK | wx.ICON_ERROR,
                                   self.GetTopLevelParent())
@@ -999,8 +999,8 @@ class ResponseConfigPanel(ConfigPanel):
                           wx.OK | wx.ICON_ERROR, self.GetTopLevelParent())
             return
 
-        if type(command) == unicode:
-            command = command.encode('utf-8')
+        if isinstance(command, (bytes, bytearray)):
+            command = command.decode('utf-8')
 
         # Since shlex.split only supports POSIX parsing, we
         # recreate that function manually here, but setting the
@@ -1083,7 +1083,7 @@ def checkResponses(dataModel, backEndClient, topLevelParent):
             contentType = config.get('webhookContentType', '')
             error = _validateWebhook(uri, contentType, content)
             if error is not None:
-                wx.MessageBox(error, "Invalid webhook params", wx.OK | wx.ICON_ERROR, self)
+                wx.MessageBox(error, "Invalid webhook params", wx.OK | wx.ICON_ERROR, topLevelParent)
                 return False
         elif (responseName == kEmailResponse) and config.get('isEnabled'):
             # Get address, handling old-style rules...
@@ -1095,7 +1095,7 @@ def checkResponses(dataModel, backEndClient, topLevelParent):
 
             try:
                 toAddrs = toAddrs.encode('ascii', 'strict')
-            except UnicodeEncodeError, e:
+            except UnicodeEncodeError as e:
                 wx.MessageBox(_kBadEmailAddrStr % (e.object[e.start:e.start+1]),
                               _kBadEmailAddrTitleStr,
                               wx.OK | wx.ICON_ERROR, topLevelParent)
@@ -1162,7 +1162,7 @@ def test_main():
     """OB_REDACT
        Contains various self-test code.
     """
-    print "NO TESTS"
+    print("NO TESTS")
 
 
 ##############################################################################
@@ -1170,4 +1170,4 @@ if __name__ == '__main__':
     if len(sys.argv) > 1 and sys.argv[1] == "test":
         test_main()
     else:
-        print "Try calling with 'test' as the argument."
+        print("Try calling with 'test' as the argument.")

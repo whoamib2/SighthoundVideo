@@ -46,7 +46,7 @@ import wx
 # Toolbox imports...
 from vitaToolbox.wx.BackgroundStyleUtils import kBackgroundStyle
 from vitaToolbox.image.BorderImage import loadBorderImage
-from BitmapFromFile import bitmapFromFile
+from .BitmapFromFile import bitmapFromFile
 
 # Local imports...
 
@@ -647,7 +647,7 @@ def test_main():
     """OB_REDACT
        Contains various self-test code.
     """
-    from GradientPanel import GradientPanel
+    from .GradientPanel import GradientPanel
     app = wx.App(False)
 
     frame = wx.Frame(None)
@@ -729,4 +729,4 @@ if __name__ == '__main__':
     if len(sys.argv) > 1 and sys.argv[1] == "test":
         test_main()
     else:
-        print "Try calling with 'test' as the argument."
+        print("Try calling with 'test' as the argument.")

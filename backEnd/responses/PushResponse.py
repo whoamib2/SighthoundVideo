@@ -42,7 +42,7 @@
 # Local imports...
 from appCommon.SearchUtils import kFrameTolerance
 from backEnd import MessageIds
-from BaseResponse import BaseResponse
+from .BaseResponse import BaseResponse
 
 # Arbitrary, but must be negative value. The first frame we get could be any
 # positive number, and we must guarantee it isn't flagged as a continuation.
@@ -137,7 +137,7 @@ class PushResponse(BaseResponse):
         # Combine overlapping ranges
         rawList.sort()
         spanList = [rawList[0]]
-        for i in xrange(1, len(rawList)):
+        for i in range(1, len(rawList)):
             prevStart, prevMs, prevStop = spanList[len(spanList)-1]
             start, ms, stop = rawList[i]
 
@@ -158,7 +158,7 @@ class PushResponse(BaseResponse):
             self._stopFrame = stop
 
         # If an object hasn't been seen in > self._padding, remove it.
-        for objId in self._objLookup.keys():
+        for objId in list(self._objLookup.keys()):
             if self._objLookup[objId][3] < (ms-self._padding):
                 del self._objLookup[objId]
 

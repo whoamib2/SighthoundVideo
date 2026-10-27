@@ -264,7 +264,7 @@ class TimedCursor(sql.Cursor):
 
 
     ###########################################################
-    def next(self):
+    def __next__(self):
         """Wrapper for next.
 
         We treat this just like fetchone(), but with a slightly different stop
@@ -276,7 +276,7 @@ class TimedCursor(sql.Cursor):
 
         try:
             # Call the original...
-            result = super(TimedCursor, self).next()
+            result = next(super(TimedCursor, self))
         except StopIteration:
             # If fetchone is returning None, then we must be done fetching.  See
             # how long since execute finished...

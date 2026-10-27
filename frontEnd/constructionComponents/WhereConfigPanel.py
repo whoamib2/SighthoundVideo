@@ -48,7 +48,7 @@ from vitaToolbox.path.PathUtils import normalizePath
 from vitaToolbox.wx.FontUtils import makeFontDefault
 
 # Local imports...
-from ConfigPanel import ConfigPanel
+from .ConfigPanel import ConfigPanel
 
 ###############################################################
 # Where constants
@@ -82,7 +82,7 @@ _kStandardRegionMapping = [
     ("Entering or Exiting", 'crosses'),
     ("On top of", 'ground'),
 ]
-_kStandardRegionLabels = map(operator.itemgetter(0), _kStandardRegionMapping)
+_kStandardRegionLabels = list(map(operator.itemgetter(0), _kStandardRegionMapping))
 _kStandardRegionLabelToSetting = dict(_kStandardRegionMapping)
 _kStandardRegionSettingToLabel = dict(map(operator.itemgetter(1, 0),
                                           _kStandardRegionMapping))
@@ -93,7 +93,7 @@ _kDoorRegionMapping = [
     ("Leaving scene", 'exiting'),
     ("Entering or leaving", 'any'),
 ]
-_kDoorRegionLabels = map(operator.itemgetter(0), _kDoorRegionMapping)
+_kDoorRegionLabels = list(map(operator.itemgetter(0), _kDoorRegionMapping))
 _kDoorRegionLabelToSetting = dict(_kDoorRegionMapping)
 _kDoorRegionSettingToLabel = dict(map(operator.itemgetter(1, 0),
                                       _kDoorRegionMapping))
@@ -517,7 +517,7 @@ def test_main():
     """OB_REDACT
        Contains various self-test code.
     """
-    print "NO TESTS"
+    print("NO TESTS")
 
 
 ##############################################################################
@@ -525,4 +525,4 @@ if __name__ == '__main__':
     if len(sys.argv) > 1 and sys.argv[1] == "test":
         test_main()
     else:
-        print "Try calling with 'test' as the argument."
+        print("Try calling with 'test' as the argument.")

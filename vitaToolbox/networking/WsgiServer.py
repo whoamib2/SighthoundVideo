@@ -166,7 +166,7 @@ class WsgiServer(threading.Thread):
             # get the next address to try to open, plus the time we should wait
             # if that doesn't work out
             try:
-                serverAddressInfo = self._addressInfos.next()
+                serverAddressInfo = next(self._addressInfos)
             except StopIteration:
                 self._logger.warn("no more server addresses!?")
                 return

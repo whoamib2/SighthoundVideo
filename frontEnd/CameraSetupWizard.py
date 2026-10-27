@@ -39,15 +39,15 @@
 
 
 # Python imports...
-import cPickle
+import pickle
 import mmap
 import operator
 import os
 import sys
 import re
 import time
-import urllib
-import urlparse
+import urllib.request, urllib.parse, urllib.error
+import urllib.parse
 
 # Common 3rd-party imports...
 import wx
@@ -84,35 +84,36 @@ from appCommon.CommonStrings import kDefaultRecordSize, kMaxRecordSize
 from appCommon.CommonStrings import kMatchSourceSize, kDefaultRecordAudio
 from appCommon.CommonStrings import kRecordResponse
 from appCommon.CommonStrings import kTestLiveFileName, kTestLiveHeaderSize
+from appCommon.LiveViewBuffer import parse_test_live_header
 from appCommon.CommonStrings import kObjDbFile
 from appCommon.LicenseUtils import hasPaidEdition
 from backEnd.SavedQueryDataModel import SavedQueryDataModel
 from backEnd.SavedQueryDataModel import WhereBlockDataModel
 from backEnd.SavedQueryDataModel import DurationBlockDataModel
 from backEnd.SavedQueryDataModel import kDefaultResponseList
-from CameraTable import kOtherIpCamType
-from CameraTable import kWebcamCamType
-from CameraTable import kOtherCameraManufacturer
-from CameraTable import kResMaps
-from CameraTable import kDeprecatedSettings
-from CameraTable import kOldCameraNameMap
-from CameraTable import kGenericIndicator
-from CameraTable import kUpnpModelMap
-from CameraTable import kUpnpGenericList
-from CameraTable import kCameraDescriptions
-from CameraTable import kCameraGenericDescriptions
-from CameraTable import kTypeToStreamPath
-from CameraTable import kTypeToManufacturer
-from CameraTable import kIpCameraTypes
-from CameraTable import kCameraTypes
-from CameraTable import kCameraManufacturers
-from CameraTable import kUpnpManufactrers
+from .CameraTable import kOtherIpCamType
+from .CameraTable import kWebcamCamType
+from .CameraTable import kOtherCameraManufacturer
+from .CameraTable import kResMaps
+from .CameraTable import kDeprecatedSettings
+from .CameraTable import kOldCameraNameMap
+from .CameraTable import kGenericIndicator
+from .CameraTable import kUpnpModelMap
+from .CameraTable import kUpnpGenericList
+from .CameraTable import kCameraDescriptions
+from .CameraTable import kCameraGenericDescriptions
+from .CameraTable import kTypeToStreamPath
+from .CameraTable import kTypeToManufacturer
+from .CameraTable import kIpCameraTypes
+from .CameraTable import kCameraTypes
+from .CameraTable import kCameraManufacturers
+from .CameraTable import kUpnpManufactrers
 from appCommon.CommonStrings import kAppName, kCameraConfigUrl
-import FrontEndEvents
+from . import FrontEndEvents
 from frontEnd.FrontEndUtils import getUserLocalDataDir
 
-from LicensingHelpers import checkForMaxCameras
-from LicensingHelpers import showResolutionWarning
+from .LicensingHelpers import checkForMaxCameras
+from .LicensingHelpers import showResolutionWarning
 
 
 # Globals...
@@ -159,7 +160,7 @@ _kRecordSizes = [
     ("WXGA (1920x1200)", (1920, 1200)),
     ("Match source", kMatchSourceSize),
 ]
-_kRecordSizeStrs = map(operator.itemgetter(0), _kRecordSizes)
+_kRecordSizeStrs = list(map(operator.itemgetter(0), _kRecordSizes))
 _kRecordSizeStrToNums = dict(map(operator.itemgetter(0, 1), _kRecordSizes))
 _kRecordSizeNumsToStr = dict(map(operator.itemgetter(1, 0), _kRecordSizes))
 
@@ -614,7 +615,7 @@ class CameraSetupWizard(wxWizard.Wizard):
         oldRevNum = self.upnpDataModel.getUpnpRevNum()
         if revNum != oldRevNum:
             try:
-                upnpDeviceDict = cPickle.loads(backEndClient.getUpnpDevices())
+                upnpDeviceDict = pickle.loads(backEndClient.getUpnpDevices())
             except:
                 upnpDeviceDict = {}
             self.upnpDataModel.setUpnpDeviceDict(revNum, upnpDeviceDict)
@@ -623,7 +624,7 @@ class CameraSetupWizard(wxWizard.Wizard):
         revNum = backEndClient.getOnvifDictRevNum()
         oldRevNum = self.onvifDataModel.getOnvifRevNum()
         if revNum != oldRevNum:
-            onvifDeviceDict = cPickle.loads(backEndClient.getOnvifDevices())
+            onvifDeviceDict = pickle.loads(backEndClient.getOnvifDevices())
             self.onvifDataModel.setOnvifDeviceDict(revNum, onvifDeviceDict)
 
         # Set the local cams; this will send an update if they are different...
@@ -904,7 +905,7 @@ class _WelcomeScreen(_BasePage):
         camUri = self.wizard.cameraUri
         camType = self.wizard.cameraType
         if camType == kWebcamCamType:
-            reResult = re.match("(device):(\d+):(.*)", camUri)
+            reResult = re.match(r"(device):(\d+):(.*)", camUri)
             if reResult:
                 _, deviceIdx, deviceName = reResult.groups()
                 deviceIdx = int(deviceIdx)
@@ -915,7 +916,7 @@ class _WelcomeScreen(_BasePage):
                         tuple(self.wizard.camExtras.get('recordSize', None))
 
         caption = wx.StaticText(
-            self, -1, u"Select which kind of camera you would like to set up:",
+            self, -1, "Select which kind of camera you would like to set up:",
             style=wx.ST_NO_AUTORESIZE
         )
 
@@ -1208,7 +1209,7 @@ class _WelcomeScreen(_BasePage):
             self._cameraStyleChoice.SetStringSelection(_kCameraStyleLocal)
 
             # Initialize self._selectedDeviceId based on the URI...
-            reResult = re.match("(device):(\d+):(.*)", camUri)
+            reResult = re.match(r"(device):(\d+):(.*)", camUri)
             if reResult:
                 _, deviceIdx, deviceName = reResult.groups()
                 deviceIdx = int(deviceIdx)
@@ -1441,7 +1442,7 @@ class _LocationScreen(_BasePage):
         # Prevent non-UTF8 characters in location names
         try:
             newLocation.encode('utf-8', 'strict')
-        except UnicodeEncodeError, e:
+        except UnicodeEncodeError as e:
             wx.MessageBox(("The camera name cannot contain the "
                           "character \"%s\". "
                           "Please choose a different name.") %
@@ -1520,7 +1521,7 @@ class _OfferHelpScreen(_BasePage):
         )
 
         textA = wx.StaticText(
-            self, -1, u"I would like to:", style=wx.ST_NO_AUTORESIZE
+            self, -1, "I would like to:", style=wx.ST_NO_AUTORESIZE
         )
 
         self._alreadyRadio = wx.RadioButton(self, -1,
@@ -1831,10 +1832,10 @@ class _DetectedCamerasScreen(_BasePage):
             upnpDeviceDict = self.wizard.upnpDataModel.getUpnpDeviceDict()
             onvifDeviceDict = self.wizard.onvifDataModel.getOnvifDeviceDict()
 
-            for _, dev in upnpDeviceDict.iteritems():
-                print str(dev)
-            for _, dev in onvifDeviceDict.iteritems():
-                print str(dev)
+            for _, dev in upnpDeviceDict.items():
+                print(str(dev))
+            for _, dev in onvifDeviceDict.items():
+                print(str(dev))
 
             wx.MessageBox("UPNP and ONVIF data has been dumped to the log.",
                           kAppName, wx.OK | wx.ICON_INFORMATION,
@@ -1927,7 +1928,7 @@ class _DetectedCamerasScreen(_BasePage):
             # We strip out all routers, non-presentable UPNP devices, and wrong-
             # manufacturer devices...
             deviceList = [(dev.getFriendlyName(True)+" [UPnP]", devUsn)
-                          for (devUsn, dev) in upnpDeviceDict.iteritems()
+                          for (devUsn, dev) in upnpDeviceDict.items()
                           if (not dev.isRouter()) and
                              dev.isPresentable(True) and
                              self._isManufacturerMatch(dev.getModelName()) and
@@ -1937,7 +1938,7 @@ class _DetectedCamerasScreen(_BasePage):
             # Make a sorted list of tuples: (name, identifier)
             # ...where identifier is a UUID...
             deviceList = [(dev.getFriendlyName(True)+" [ONVIF]", devUuid)
-                          for (devUuid, dev) in onvifDeviceDict.iteritems()
+                          for (devUuid, dev) in onvifDeviceDict.items()
                           if ((devUuid not in configuredDevIds) and
                               (len(dev.validOnvifIpAddrs) > 0))
                           ]
@@ -2230,18 +2231,18 @@ class _DetectedCamerasScreen(_BasePage):
             # with a real path...  Note: we also put a username/password in
             # so that if the user typed it in, it gets kept.
             self.wizard.cameraType = ""
-            splitResult = urlparse.urlsplit(self.wizard.cameraUri)
+            splitResult = urllib.parse.urlsplit(self.wizard.cameraUri)
 
             # Unquote before passing in to constructUpnpUrl, which requires
             # unquoted username and password...
             username = splitResult.username
             if username:
-                username = urllib.unquote(username)
+                username = urllib.parse.unquote(username)
             else:
                 username = ''
             password = splitResult.password
             if password:
-                password = urllib.unquote(password)
+                password = urllib.parse.unquote(password)
             else:
                 password = ''
 
@@ -2472,19 +2473,19 @@ class _UpnpSettingsScreen(_BasePage):
             return
 
         # Split the URI...
-        splitResult = urlparse.urlsplit(self.wizard.cameraUri)
+        splitResult = urllib.parse.urlsplit(self.wizard.cameraUri)
 
         # Parse out any current username and password, and pathPart...
         username = splitResult.username
         if not username:
             username = ""
         else:
-            username = urllib.unquote(username)
+            username = urllib.parse.unquote(username)
         password = splitResult.password
         if not password:
             password = ""
         else:
-            password = urllib.unquote(password)
+            password = urllib.parse.unquote(password)
 
         port = ""
         try:
@@ -2756,9 +2757,9 @@ class _UpnpSettingsScreen(_BasePage):
 
         if url:
             # Strip out username and password from the URL...
-            scheme, netloc, path, query, fragment = urlparse.urlsplit(url)
+            scheme, netloc, path, query, fragment = urllib.parse.urlsplit(url)
             netloc = netloc.split('@', 1)[-1]
-            url = urlparse.urlunsplit((scheme, netloc, path, query, fragment))
+            url = urllib.parse.urlunsplit((scheme, netloc, path, query, fragment))
 
             # It seems important to escape out the ampersand.  Weird.
             url = url.replace('&', '&&')
@@ -2956,9 +2957,9 @@ class _OnvifCredentialsScreen(_BasePage):
 
         # This is the spinner we'll be showing while the user waits for the
         # app to authenticate their credentials.
-        progBmps = [wx.Bitmap("frontEnd/bmps/prog%d.png" % i) for i in xrange(8)]
+        progBmps = [wx.Bitmap("frontEnd/bmps/prog%d.png" % i) for i in range(8)]
         self._spinnerBmps = [FixedStaticBitmap(self, -1, progBmps[i])
-                                 for i in xrange(8)]
+                                 for i in range(8)]
         self._curSpinnerId = 0
 
         self._userLabel = wx.StaticText(self, -1, "User name:")
@@ -3055,19 +3056,19 @@ class _OnvifCredentialsScreen(_BasePage):
         self._streamUrisRetrieved = False
 
         # Split the URI...
-        splitResult = urlparse.urlsplit(self.wizard.cameraUri)
+        splitResult = urllib.parse.urlsplit(self.wizard.cameraUri)
 
         # Parse out any current username and password, and pathPart...
         username = splitResult.username
         if not username:
             username = ""
         else:
-            username = urllib.unquote(username)
+            username = urllib.parse.unquote(username)
         password = splitResult.password
         if not password:
             password = ""
         else:
-            password = urllib.unquote(password)
+            password = urllib.parse.unquote(password)
 
         self._userCtrl.SetValue(ensureUnicode(username))
         self._passCtrl.SetValue(ensureUnicode(password))
@@ -3307,7 +3308,7 @@ class _OnvifCredentialsScreen(_BasePage):
 
     ###########################################################
     def _log(self, strmsg):
-        print >> sys.stderr, strmsg
+        print(strmsg, file=sys.stderr)
 
     ###########################################################
     def _checkForOnvifAuthentication(self):
@@ -3544,7 +3545,7 @@ class _OnvifSettingsScreen(_BasePage):
         cameraUri = self.wizard.cameraUri
         if cameraUri and isOnvifUrl(cameraUri):
 
-            result = urlparse.urlsplit(cameraUri)
+            result = urllib.parse.urlsplit(cameraUri)
             pathPart = "%s%s%s" % (result.path.strip('/'), result.query,
                                    result.fragment)
             self._selectedStreamUri = cameraUri
@@ -3555,7 +3556,7 @@ class _OnvifSettingsScreen(_BasePage):
                 # to "Custom", unless we can find a better match from the list.
                 self._onvifUriCtrl.SetSelection(self._onvifUriCtrl.GetCount()-1)
 
-                for selection in xrange(0, self._onvifUriCtrl.GetCount()):
+                for selection in range(0, self._onvifUriCtrl.GetCount()):
 
                     streamUri = self._onvifUriCtrl.GetClientData(selection)
 
@@ -3707,7 +3708,7 @@ class _OnvifSettingsScreen(_BasePage):
             urlControl.Show(showUrlControls)
 
         # Split the URI...
-        splitResult = urlparse.urlsplit(streamUri)
+        splitResult = urllib.parse.urlsplit(streamUri)
 
         port = ""
         try:
@@ -3756,7 +3757,7 @@ class _OnvifSettingsScreen(_BasePage):
 
             devId = self.wizard.onvifSettings.get('uuid')
             device = onvifDeviceDict.get(devId)
-            print str(device)
+            print(str(device))
 
             wx.MessageBox("ONVIF device data has been dumped to the log.",
                           kAppName, wx.OK | wx.ICON_INFORMATION,
@@ -3806,7 +3807,7 @@ class _OnvifSettingsScreen(_BasePage):
             return (None, cameraUri)
 
         # Split the URI...
-        splitResult = urlparse.urlsplit(self.wizard.cameraUri)
+        splitResult = urllib.parse.urlsplit(self.wizard.cameraUri)
 
         # Get the hostname...
         hostname = splitResult.hostname
@@ -3818,12 +3819,12 @@ class _OnvifSettingsScreen(_BasePage):
         if not username:
             username = ""
         else:
-            username = urllib.unquote(username)
+            username = urllib.parse.unquote(username)
         password = splitResult.password
         if not password:
             password = ""
         else:
-            password = urllib.unquote(password)
+            password = urllib.parse.unquote(password)
 
         portStr = self._otherPortCtrl.GetValue().strip()
         try:
@@ -3934,7 +3935,7 @@ class _OnvifSettingsScreen(_BasePage):
                        streamUri)
                       for ((profileName, profileToken, encoding, resolution),
                            (streamUri, transportType))
-                      in device.streamUris.iteritems()
+                      in device.streamUris.items()
         ]
         streamUris.sort()
         # Make sure we add the "Custom" option. We add "Custom" as client data
@@ -3981,9 +3982,9 @@ class _OnvifSettingsScreen(_BasePage):
         """
         if url:
             # Strip out username and password from the URL...
-            scheme, netloc, path, query, fragment = urlparse.urlsplit(url)
+            scheme, netloc, path, query, fragment = urllib.parse.urlsplit(url)
             netloc = netloc.split('@', 1)[-1]
-            url = urlparse.urlunsplit((scheme, netloc, path, query, fragment))
+            url = urllib.parse.urlunsplit((scheme, netloc, path, query, fragment))
         return url
 
 
@@ -4018,21 +4019,21 @@ class _BadUpnpScreen(_BasePage):
         )
 
         textA = wx.StaticText(
-            self, -1, u"We detected this device on the network, but were "
-            u"unable to communicate with it.  This could be for a number of "
-            u"reasons, including:\n"
-            u"\n"
-            u"\u2022 The device may be on a different IP subnet than your "
-                    u"computer.  You may need to temporarily change the IP "
-                    u"address of your computer to talk to the device and "
-                    u"reconfigure it.\n"
-            u"\n"
-            u"\u2022 The device may be in a bad state.  Try unplugging the "
-                    u"device and plugging it back in.\n"
-            u"\n"
-            u"\n"
-            u"Once this device is communicating properly, return to the "
-            u"previous page and select it again.",
+            self, -1, "We detected this device on the network, but were "
+            "unable to communicate with it.  This could be for a number of "
+            "reasons, including:\n"
+            "\n"
+            "\u2022 The device may be on a different IP subnet than your "
+                    "computer.  You may need to temporarily change the IP "
+                    "address of your computer to talk to the device and "
+                    "reconfigure it.\n"
+            "\n"
+            "\u2022 The device may be in a bad state.  Try unplugging the "
+                    "device and plugging it back in.\n"
+            "\n"
+            "\n"
+            "Once this device is communicating properly, return to the "
+            "previous page and select it again.",
             style=wx.ST_NO_AUTORESIZE
         )
         textA.SetMinSize((_kTextWrap, -1))
@@ -4349,19 +4350,19 @@ class _ManualSettingsScreen(_BasePage):
             ctrl.SetValue('')
 
         # Split the URI...  (TODO: don't think the 'http' is really needed)
-        splitResult = urlparse.urlsplit(self.wizard.cameraUri, 'rtsp')
+        splitResult = urllib.parse.urlsplit(self.wizard.cameraUri, 'rtsp')
 
         # Parse out any current username and password, and pathPart...
         username = splitResult.username
         if not username:
             username = ""
         else:
-            username = urllib.unquote(username)
+            username = urllib.parse.unquote(username)
         password = splitResult.password
         if not password:
             password = ""
         else:
-            password = urllib.unquote(password)
+            password = urllib.parse.unquote(password)
 
         port = ""
         try:
@@ -4447,9 +4448,9 @@ class _ManualSettingsScreen(_BasePage):
 
         # Get settings out of UI...
         username = ensureUtf8(self._userCtrl.GetValue().strip())
-        username = urllib.quote(username, "")
+        username = urllib.parse.quote(username, "")
         password = ensureUtf8(self._passCtrl.GetValue().strip())
-        password = urllib.quote(password, "")
+        password = urllib.parse.quote(password, "")
         scheme   = "%s://" % ensureUtf8(self._getStreamType())
         hostname = ensureUtf8(self._ipCtrl.GetValue().strip())
         pathPart = ensureUtf8(self._streamPathCtrl.GetValue().strip())
@@ -4478,12 +4479,12 @@ class _ManualSettingsScreen(_BasePage):
                 self._ipCtrl.SetFocus()
                 return ("The IP address field must not start with \"rtsp://\".",
                         None, None)
-            elif re.search("[^A-Za-z0-9\.\-]", hostname):
+            elif re.search(r"[^A-Za-z0-9.\-]", hostname):
                 self._ipCtrl.SetFocus()
                 return ("The IP address field must contain a valid IP address "
                         "or host name.",
                         None, None)
-        elif re.search("[^A-Za-z0-9\.\-]", hostname) and \
+        elif re.search(r"[^A-Za-z0-9.\-]", hostname) and \
              (ignoreErrors == 'most'):
             # Handles hitting 'back' and not having junk in the hostname.
             hostname = ""
@@ -4588,9 +4589,9 @@ class _ManualSettingsScreen(_BasePage):
         assert url, "Should always get a valid URL when ignoring all errors."
         if url:
             # Strip out username and password from the URL...
-            scheme, netloc, path, query, fragment = urlparse.urlsplit(url)
+            scheme, netloc, path, query, fragment = urllib.parse.urlsplit(url)
             netloc = netloc.split('@', 1)[-1]
-            url = urlparse.urlunsplit((scheme, netloc, path, query, fragment))
+            url = urllib.parse.urlunsplit((scheme, netloc, path, query, fragment))
 
             # It seems important to escape out the ampersand.  Weird.
             url = url.replace('&', '&&')
@@ -4684,36 +4685,36 @@ class _DiscoverHelpScreen(_BasePage):
 
         if _isOemVersion:
             textA = wx.StaticText(self, -1,
-                u"\u2022 Try unplugging and plugging in your camera, or "
-                u"disconnecting and reconnecting your computer from your "
-                u"network, then click Back.\n"
-                u"\n"
-                u"\u2022 Check that your camera's \"UPnP\" feature is enabled. "
-                u"This is necessary for it to be seen in the list.\n"
-                u"\n"
-                u"\u2022 Check if your network setup is preventing your PC "
-                u"from seeing your camera.\n"
-                u"\n"
-                u"\u2022 Use your router to find the IP address.  Then click "
-                u"Next to enter this information in the next screen.",
+                "\u2022 Try unplugging and plugging in your camera, or "
+                "disconnecting and reconnecting your computer from your "
+                "network, then click Back.\n"
+                "\n"
+                "\u2022 Check that your camera's \"UPnP\" feature is enabled. "
+                "This is necessary for it to be seen in the list.\n"
+                "\n"
+                "\u2022 Check if your network setup is preventing your PC "
+                "from seeing your camera.\n"
+                "\n"
+                "\u2022 Use your router to find the IP address.  Then click "
+                "Next to enter this information in the next screen.",
                 style=wx.ST_NO_AUTORESIZE
             )
         else:
             textA = wx.StaticText(self, -1,
-                u"\u2022 Try unplugging and plugging in your camera, or "
-                u"disconnecting and reconnecting your computer from your "
-                u"network, then click Back.\n"
-                u"\n"
-                u"\u2022 Check if your camera supports \"UPnP\" and has the "
-                u"feature enabled.  This is necessary for it to be seen in the "
-                u"list.\n"
-                u"\n"
-                u"\u2022 Check if your network setup is preventing your PC "
-                u"from seeing your camera.\n"
-                u"\n"
-                u"\u2022 Use the software that came with your camera, or your "
-                u"router software, to find the IP address.  Then click Next to "
-                u"enter this information in the next screen.",
+                "\u2022 Try unplugging and plugging in your camera, or "
+                "disconnecting and reconnecting your computer from your "
+                "network, then click Back.\n"
+                "\n"
+                "\u2022 Check if your camera supports \"UPnP\" and has the "
+                "feature enabled.  This is necessary for it to be seen in the "
+                "list.\n"
+                "\n"
+                "\u2022 Check if your network setup is preventing your PC "
+                "from seeing your camera.\n"
+                "\n"
+                "\u2022 Use the software that came with your camera, or your "
+                "router software, to find the IP address.  Then click Next to "
+                "enter this information in the next screen.",
                 style=wx.ST_NO_AUTORESIZE
             )
         textA.SetMinSize((1, -1))
@@ -5011,17 +5012,17 @@ class _WifiSsidHelpScreen(_BasePage):
 
         if not _isOemVersion:
             textA = wx.StaticText(self, -1,
-                u"On your camera's configuration website, look for a screen where "
-                u"you can enter settings for your camera to connect to your "
-                u"network (often labeled \"Wireless\" or \"Network\"):\n"
-                u"\n"
-                u"\u2022 Network name (\"SSID\")\n"
-                u"\u2022 Type of security (e.g., WEP, WPA or none)\n"
-                u"\u2022 Password (or \"key\")\n"
-                u"\n"
-                u"Click the button on your website to save these settings for your "
-                u"camera (usually labeled \"Save\" or \"Apply\").  But don't close "
-                u"your browser yet.",
+                "On your camera's configuration website, look for a screen where "
+                "you can enter settings for your camera to connect to your "
+                "network (often labeled \"Wireless\" or \"Network\"):\n"
+                "\n"
+                "\u2022 Network name (\"SSID\")\n"
+                "\u2022 Type of security (e.g., WEP, WPA or none)\n"
+                "\u2022 Password (or \"key\")\n"
+                "\n"
+                "Click the button on your website to save these settings for your "
+                "camera (usually labeled \"Save\" or \"Apply\").  But don't close "
+                "your browser yet.",
                 style=wx.ST_NO_AUTORESIZE
             )
             makeFontDefault(textA)
@@ -5133,7 +5134,7 @@ class _WifiSsidHelpScreen(_BasePage):
         if device is not None:
             # Get the presentation URL.
             presentationUrl, _ = device.getPresentationUrl()
-            url = urlparse.urljoin(presentationUrl, "/asante/wireless.asp")
+            url = urllib.parse.urljoin(presentationUrl, "/asante/wireless.asp")
             self._addressLink.SetURL(url)
         else:
             self._addressLink.SetURL(_kBadLink)
@@ -5170,7 +5171,7 @@ class _WifiSsidHelpScreen(_BasePage):
         if device is not None:
             # Get the base URL.
             baseUrl, _ = device.validOnvifIpAddrs[-1]
-            url = urlparse.urljoin(baseUrl, "/asante/wireless.asp")
+            url = urllib.parse.urljoin(baseUrl, "/asante/wireless.asp")
             self._addressLink.SetURL(url)
         else:
             self._addressLink.SetURL(_kBadLink)
@@ -5493,7 +5494,7 @@ class _TestScreen(_BasePage):
             bmpFont.SetPointSize(10)
 
         # Import here to avoid circular dependencies...
-        from MonitorView import makeVideoStatusBitmap
+        from .MonitorView import makeVideoStatusBitmap
         self._connectingBmp = makeVideoStatusBitmap("Connecting...", bmpFont,
                                                     False,
                                                     width=_kTestVideoSize[0],
@@ -5693,7 +5694,7 @@ class _TestScreen(_BasePage):
                 # Make a new URL with just the hostname and port...
                 # ...we'll also force to http port 80 (as a guess) if the URL
                 # is non-http...
-                splitResult = urlparse.urlsplit(url)
+                splitResult = urllib.parse.urlsplit(url)
                 scheme = splitResult.scheme
                 netloc = splitResult.hostname
 
@@ -5712,7 +5713,7 @@ class _TestScreen(_BasePage):
                     # Http, and there's a port.  Add it in...
                     netloc += ':%d' % port
 
-                linkStr = urlparse.urlunsplit((scheme, netloc, "/", "", ""))
+                linkStr = urllib.parse.urlunsplit((scheme, netloc, "/", "", ""))
 
         self._viewLink.SetURL(linkStr)
 
@@ -5773,8 +5774,9 @@ class _TestScreen(_BasePage):
             if self._mmap is not None:
                 # In case old files are stuck around we wait until we actually
                 # witness the frame number change before displaying any images.
-                header = str(self._mmap[:kTestLiveHeaderSize])
-                headerNum = int(header[0])
+                headerNum, width, height = parse_test_live_header(
+                    self._mmap[:kTestLiveHeaderSize]
+                )
                 if self._lastFrame == -1:
                     self._lastFrame = headerNum
                     return
@@ -5785,8 +5787,6 @@ class _TestScreen(_BasePage):
                 try:
                     # Find the size of the image we are looking for, grab
                     # the image data and update the video window.
-                    width = int(header[1:5])
-                    height = int(header[5:9])
                     if width > 0 and height > 0:
                         bmpData = self._mmap[kTestLiveHeaderSize:]
                         bmp = wx.Bitmap.FromBuffer(width, height, bmpData)
@@ -5979,7 +5979,7 @@ class _LocalCamDataModel(AbstractModel):
     def getLocalCamNamesWithDeviceIDs(self):
         """
         """
-        return [(camData.getCamName(), deviceId) for (deviceId, camData) in self._localCamData.items()]
+        return [(camData.getCamName(), deviceId) for (deviceId, camData) in list(self._localCamData.items())]
 
 
     ###########################################################
@@ -5999,7 +5999,7 @@ class _LocalCamDataModel(AbstractModel):
 
         @return localCameras  The local cameras.
         """
-        return self._localCamData.values()
+        return list(self._localCamData.values())
 
     ###########################################################
     def getDefaultResolutionsStr(self):
@@ -6182,8 +6182,8 @@ def _compareUris(uri1, uri2):
     if not uri2:
         uri2 = ''
 
-    uri1Result = urlparse.urlsplit(str(uri1))
-    uri2Result = urlparse.urlsplit(str(uri2))
+    uri1Result = urllib.parse.urlsplit(str(uri1))
+    uri2Result = urllib.parse.urlsplit(str(uri2))
 
     scheme1, _, path1, query1, fragment1 = uri1Result
     port1 = uri1Result.port
@@ -6408,8 +6408,8 @@ def _vetoIfResolutionLocked(event, wizard, selectedResStr):
     try:
         showResolutionWarning(wizard.GetTopLevelParent(), _kMaxRecordSizeStr,
                 wizard.backEndClient)
-    except Exception, e:
-        print e
+    except Exception as e:
+        print(e)
 
     return True
 
@@ -6439,8 +6439,8 @@ def _stripLegacyTcpOverride(url):
             # and the following &. Leave the lead char, it may be either ? or &
             index = url.index(_kLegacyTcpFlag)
             url = url[:index]+url[index+len(_kLegacyTcpFlag)+1:]
-    except Exception, e:
-        print e
+    except Exception as e:
+        print(e)
 
     return hadTcpFlag, url
 
@@ -6466,7 +6466,7 @@ def _testStripLegacyTcp():
     ]
 
     for (url, good, stripped) in testVals:
-        print "Checking " + url
+        print("Checking " + url)
         strip, new = _stripLegacyTcpOverride(url)
         assert good == new and strip == stripped, \
                 "TCP strip failed %s -> %s (%s)" % (url, new, good)
@@ -6477,7 +6477,7 @@ def test_main(testType="full"):
     """OB_REDACT
        Contains various self-test code.
     """
-    from BackEndClient import BackEndClient
+    from .BackEndClient import BackEndClient
     from backEnd.DataManager import DataManager
 
     # A list of 3-tuples used for testing the _compareUris().
@@ -6526,4 +6526,4 @@ if __name__ == '__main__':
     elif len(sys.argv) > 1 and sys.argv[1] == "tcp":
         _testStripLegacyTcp()
     else:
-        print "Try calling with 'test' as the argument."
+        print("Try calling with 'test' as the argument.")

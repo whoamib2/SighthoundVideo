@@ -43,7 +43,7 @@ import time
 import weakref
 
 # Local imports
-from TimedCursor import TimedCursor
+from .TimedCursor import TimedCursor
 
 kDefaultArraySize=1000
 
@@ -121,7 +121,7 @@ class TimedConnection(sql.Connection):
         # Notify cursors, deleting stale references...
         # ...and keep a list of commands that modified the database...
         modifyExecs = []
-        for i in xrange(len(self._cursors)-1, -1, -1):
+        for i in range(len(self._cursors)-1, -1, -1):
             cursor = self._cursors[i]()
             if cursor is None:
                 del self._cursors[i]

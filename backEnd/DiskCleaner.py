@@ -66,13 +66,13 @@ from vitaToolbox.profiling.MarkTime import TimerLogger
 
 # Local imports...
 from appCommon.CommonStrings import kCorruptDbErrorStrings, kMinFreeSysDriveSpaceMB, kThumbsSubfolder
-from ClipManager import kCacheStatusNonCache
-from ClipManager import ClipManager
-from DataManager import DataManager
-from DebugLogManager import DebugLogManager
-import MessageIds
-from videoLib2.python.ClipReader import ClipReader, getMsList, getDuration
-import videoLib2.python.ClipUtils as ClipUtils
+from .ClipManager import kCacheStatusNonCache
+from .ClipManager import ClipManager
+from .DataManager import DataManager
+from .DebugLogManager import DebugLogManager
+from . import MessageIds
+from backEnd.native.capture import ClipReader, getMsList, getDuration
+from backEnd.native.capture import clip_utils as ClipUtils
 
 # Constants...
 
@@ -246,9 +246,9 @@ class DiskCleaner(object):
         self._dataMgr.open(dataMgrPath, _kDatabaseTimeoutSecs)
 
         self._logger.info("DiskCleaner initialized, pid: %d" % os.getpid())
-        assert type(self._videoDir) == unicode
-        assert type(self._tmpDir) == unicode
-        assert type(self._logDir) == unicode
+        assert type(self._videoDir) == str
+        assert type(self._tmpDir) == str
+        assert type(self._logDir) == str
 
         self._debugLogManager = DebugLogManager("DiskCleaner", self._configDir)
 
@@ -305,7 +305,7 @@ class DiskCleaner(object):
                         timeout = 30
                 else:
                     timeout = _kInitialDelaySeconds - timeSinceStart
-            except DatabaseError, e:
+            except DatabaseError as e:
                 if e.message in kCorruptDbErrorStrings:
                     # If the database is corrupt, notify the back end and exit.
                     self._backEndQueue.put([MessageIds.msgIdDatabaseCorrupt])
@@ -462,7 +462,7 @@ class DiskCleaner(object):
                     self._tmpFileDict[filename] = now
 
         # Add old files to the pending deletes list
-        dictFiles = self._tmpFileDict.keys()
+        dictFiles = list(self._tmpFileDict.keys())
         for filename in dictFiles:
             filesScanned += 1
             if self._tmpFileDict[filename]+_kTmpFileLifespan < now:
@@ -1049,7 +1049,7 @@ class DiskCleaner(object):
         self._removeRemoteFiles()
 
         # Attempt to remove any pending deletes before calculating disk space.
-        for i in xrange(len(self._pendingDeletes)-1, -1, -1):
+        for i in range(len(self._pendingDeletes)-1, -1, -1):
             try:
                 os.remove(self._pendingDeletes[i])
                 self._pendingDeletes.pop(i)

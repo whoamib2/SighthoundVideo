@@ -42,7 +42,7 @@ import time
 from vitaToolbox.sysUtils.TimeUtils import formatTime
 
 # Local imports...
-from BaseResponse import BaseResponse
+from .BaseResponse import BaseResponse
 
 from backEnd import MessageIds
 
@@ -107,7 +107,7 @@ class WebhookResponse(BaseResponse):
     def _activeObjectsGC(self):
         """ Garbage-collect object IDs that had timed out, to prevent an ever-growing list
         """
-        activeObjects = self._objIdsProcessed.keys()
+        activeObjects = list(self._objIdsProcessed.keys())
         currentTime = int(time.time()*1000)
         for objId in activeObjects:
             if currentTime - self._objIdsProcessed[objId] > _kObjTimeoutMs:

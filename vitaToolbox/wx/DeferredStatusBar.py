@@ -71,7 +71,7 @@ class DeferredStatusBar(wx.StatusBar):
         self.SetStatusStyles([wx.SB_FLAT]*numFields)
         self.SetStatusWidths(fieldWidths)
 
-        self._labels = [wx.StaticText(self) for _ in xrange(numFields)]
+        self._labels = [wx.StaticText(self) for _ in range(numFields)]
 
         # Register for resizes
         self.Bind(wx.EVT_SIZE, self.OnSize)

@@ -40,10 +40,10 @@ import os
 import sys
 import threading
 import time
-import xmlrpclib
+import xmlrpc.client
 
-from SimpleXMLRPCServer import SimpleXMLRPCServer
-from SimpleXMLRPCServer import SimpleXMLRPCRequestHandler
+from xmlrpc.server import SimpleXMLRPCServer
+from xmlrpc.server import SimpleXMLRPCRequestHandler
 
 from xml.parsers.expat import ExpatError
 
@@ -119,7 +119,7 @@ class _ServerProxyLocalStorage(threading.local):
         self.requestNum = 0;
 
 
-class ServerProxyWithClientId(xmlrpclib.ServerProxy):
+class ServerProxyWithClientId(xmlrpc.client.ServerProxy):
     """Wrap xmlrpclib.ServerProxy to send retry info.
 
     Basically, we have to know that we're talking to a XMLRPCServerWithClientId.
@@ -151,7 +151,7 @@ class ServerProxyWithClientId(xmlrpclib.ServerProxy):
         self.__isCompatibleServer = None
 
         self.__local = _ServerProxyLocalStorage()
-        xmlrpclib.ServerProxy.__init__(self, *args, **kwargs)
+        xmlrpc.client.ServerProxy.__init__(self, *args, **kwargs)
 
 
     ###########################################################
@@ -173,9 +173,8 @@ class ServerProxyWithClientId(xmlrpclib.ServerProxy):
                 else:
                     # Should never have the function and have it return False.
                     assert False
-            except xmlrpclib.Fault, e:
-                print >>sys.stderr, \
-                    "Not talking to a server that supports retries: %s" % str(e)
+            except xmlrpc.client.Fault as e:
+                print("Not talking to a server that supports retries: %s" % str(e), file=sys.stderr)
         return self.__isCompatibleServer
 
 
@@ -186,7 +185,7 @@ class ServerProxyWithClientId(xmlrpclib.ServerProxy):
         This function is supposed to return a function pointer that will
         call the remote server.  We override to add the retry info to all calls.
         """
-        superfn = xmlrpclib.ServerProxy.__getattr__(self, attrName)
+        superfn = xmlrpc.client.ServerProxy.__getattr__(self, attrName)
 
         if self.__checkIsCompatibleServer():
             def fn(*args):
@@ -195,16 +194,16 @@ class ServerProxyWithClientId(xmlrpclib.ServerProxy):
                 requestNum = self.__local.requestNum
                 self.__local.requestNum += 1
 
-                for retryNum in xrange(kNumTries):
+                for retryNum in range(kNumTries):
                     try:
                         retval = superfn("%s%s %d" % (kRetryPrefix, clientId, requestNum), *args)
                         duration = time.time()-start
                         if duration > _kExecAlertThreshold:
-                            print >>sys.stderr, "XMLRPC request %s took %.2f sec in %d tries" % (str(attrName), duration, retryNum)
+                            print("XMLRPC request %s took %.2f sec in %d tries" % (str(attrName), duration, retryNum), file=sys.stderr)
                         return retval
-                    except (ExpatError, xmlrpclib.ProtocolError), e:
+                    except (ExpatError, xmlrpc.client.ProtocolError) as e:
                         if retryNum == kNumTries-1:
-                            print >>sys.stderr, "Client %s giving up: %s" % (clientId, str(e))
+                            print("Client %s giving up: %s" % (clientId, str(e)), file=sys.stderr)
                             raise
                         else:
                             # Don't print an error for ping, since we call
@@ -215,11 +214,11 @@ class ServerProxyWithClientId(xmlrpclib.ServerProxy):
                             if attrName not in ('quit', 'ping'):
                                 time.sleep(.05)
 
-                                print >>sys.stderr, "Client %s retry #%d: %s" % (clientId, retryNum, str(e))
+                                print("Client %s retry #%d: %s" % (clientId, retryNum, str(e)), file=sys.stderr)
 
                                 # Print out a stack trace so we can debug
                                 # if we get this unexpectedly.
-                                print >>sys.stderr, formatStackConcisely()
+                                print(formatStackConcisely(), file=sys.stderr)
                             else:
                                 # For ignored errors we just raise what we got.
                                 raise
@@ -314,11 +313,10 @@ class XMLRPCServerWithClientId(SimpleXMLRPCServer):
             # the retry info.  This could happen because an old version is
             # talking with a new version or because some 3rd party app is
             # running...
-            if not (args and isinstance(args[0], basestring) and
+            if not (args and isinstance(args[0], str) and
                     args[0].startswith(kRetryPrefix)):
                 if fnName not in self.__warnedAbout:
-                    print >>sys.stderr, \
-                          "Missing retry info for call to %s" % fnName
+                    print("Missing retry info for call to %s" % fnName, file=sys.stderr)
                     self.__warnedAbout.add(fnName)
                 return fn(*args)
 
@@ -328,16 +326,15 @@ class XMLRPCServerWithClientId(SimpleXMLRPCServer):
             if clientId in _cache:
                 cachedRequestId, cachedResult, isException, _ = _cache[clientId]
                 if cachedRequestId == requestId:
-                    print >>sys.stderr, \
-                        "Received duplicate request for %s, %s" % \
-                        (clientId, cachedRequestId)
+                    print("Received duplicate request for %s, %s" % \
+                        (clientId, cachedRequestId), file=sys.stderr)
                     if isException:
                         raise cachedResult
                     return cachedResult
 
             self.__numCalls += 1
             if (self.__numCalls % kCleanEvery) == 0:
-                for thisClientId in _cache.keys():
+                for thisClientId in list(_cache.keys()):
                     _, _, _, lastTime = _cache[thisClientId]
                     timeDelta = time.time() - lastTime
                     if timeDelta > kCacheExpireTime:
@@ -347,7 +344,7 @@ class XMLRPCServerWithClientId(SimpleXMLRPCServer):
                 result = fn(*args)
                 _cache[clientId] = (requestId, result, False, time.time())
                 return result
-            except BaseException, e:
+            except BaseException as e:
                 _cache[clientId] = (requestId, e, True, time.time())
                 raise
 

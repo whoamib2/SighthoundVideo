@@ -46,7 +46,7 @@ import sys
 # we shut it down to avoid out-of-memory issues.
 # Windows 32-bit processes start experiencing issues at about 1.8GB, so let us restart
 # well before that -- at, say, 1.5GB.
-if sys.maxint == 2147483647:
+if sys.maxsize == 2147483647:
     # On 32-bit, keep the limit below 1.5GB
     _kMemoryDieKB = 1500 * 1000
 else:
@@ -130,28 +130,45 @@ class VS_FIXEDFILEINFO(ctypes.Structure):
 
 # "import" the calls that we need for easier access below...
 
+def _windows_only(*_args, **_kwargs):
+    raise OSError("this process helper is only available on Windows")
+
+
 # MS docs seem to indicate that some functions moved to kernel32 in Windows 7.
 # I don't have Windows 7 to test on, but seems like it's better to be safe...
-try:
-    enumProcesses = ctypes.windll.psapi.EnumProcesses
-    enumProcessModules = ctypes.windll.psapi.EnumProcessModules
-    getModuleBaseName = ctypes.windll.psapi.GetModuleBaseNameW
-    getModuleFileNameEx = ctypes.windll.psapi.GetModuleFileNameExW
-    getProcessMemoryInfo = ctypes.windll.psapi.GetProcessMemoryInfo
-except AttributeError:
-    enumProcesses = ctypes.windll.kernel32.EnumProcesses
-    enumProcessModules = ctypes.windll.kernel32.EnumProcessModules
-    getModuleBaseName = ctypes.windll.kernel32.GetModuleBaseNameW
-    getModuleFileNameEx = ctypes.windll.kernel32.GetModuleFileNameExW
-    getProcessMemoryInfo = ctypes.windll.kernel32.GetProcessMemoryInfo
+if sys.platform == "win32":
+    try:
+        enumProcesses = ctypes.windll.psapi.EnumProcesses
+        enumProcessModules = ctypes.windll.psapi.EnumProcessModules
+        getModuleBaseName = ctypes.windll.psapi.GetModuleBaseNameW
+        getModuleFileNameEx = ctypes.windll.psapi.GetModuleFileNameExW
+        getProcessMemoryInfo = ctypes.windll.psapi.GetProcessMemoryInfo
+    except AttributeError:
+        enumProcesses = ctypes.windll.kernel32.EnumProcesses
+        enumProcessModules = ctypes.windll.kernel32.EnumProcessModules
+        getModuleBaseName = ctypes.windll.kernel32.GetModuleBaseNameW
+        getModuleFileNameEx = ctypes.windll.kernel32.GetModuleFileNameExW
+        getProcessMemoryInfo = ctypes.windll.kernel32.GetProcessMemoryInfo
 
-openProcess = ctypes.windll.kernel32.OpenProcess
-closeHandle = ctypes.windll.kernel32.CloseHandle
-terminateProcess = ctypes.windll.kernel32.TerminateProcess
+    openProcess = ctypes.windll.kernel32.OpenProcess
+    closeHandle = ctypes.windll.kernel32.CloseHandle
+    terminateProcess = ctypes.windll.kernel32.TerminateProcess
 
-getFileVersionInfoSize = ctypes.windll.version.GetFileVersionInfoSizeW
-getFileVersionInfo = ctypes.windll.version.GetFileVersionInfoW
-verQueryValue = ctypes.windll.version.VerQueryValueW
+    getFileVersionInfoSize = ctypes.windll.version.GetFileVersionInfoSizeW
+    getFileVersionInfo = ctypes.windll.version.GetFileVersionInfoW
+    verQueryValue = ctypes.windll.version.VerQueryValueW
+else:
+    enumProcesses = _windows_only
+    enumProcessModules = _windows_only
+    getModuleBaseName = _windows_only
+    getModuleFileNameEx = _windows_only
+    getProcessMemoryInfo = _windows_only
+    openProcess = _windows_only
+    closeHandle = _windows_only
+    terminateProcess = _windows_only
+    getFileVersionInfoSize = _windows_only
+    getFileVersionInfo = _windows_only
+    verQueryValue = _windows_only
 
 
 ##############################################################################
@@ -184,7 +201,7 @@ def listProcesses():
             break
         tableSize *= 2
 
-    numEntries = bytesNeeded.value / ctypes.sizeof(DWORD)
+    numEntries = bytesNeeded.value // ctypes.sizeof(DWORD)
     return processTable[:numEntries]
 
 
@@ -355,7 +372,7 @@ def getOpenModuleInfoList(processId):
             tableSize *= 2
 
         # Loop over all of them, getting information...
-        for i in xrange(bytesNeeded.value / ctypes.sizeof(HMODULE)):
+        for i in range(bytesNeeded.value // ctypes.sizeof(HMODULE)):
             fileName = ctypes.create_unicode_buffer(MAX_PATH)
 
             numChars = getModuleFileNameEx(processHandle, moduleHandles[i],
@@ -376,7 +393,7 @@ def getOpenModuleInfoList(processId):
                     pass
 
                 # Try to get version information...
-                verInfo = _getFileVersionInfoDict(path, [u'FileVersion'])
+                verInfo = _getFileVersionInfoDict(path, ['FileVersion'])
 
 
                 openModules.append({
@@ -392,18 +409,18 @@ def getOpenModuleInfoList(processId):
 
 # Hardcode MS predefined things to query in _getFileVersionInfoDict...
 _kVersionAttrNames = [
-    u'Comments',
-    u'InternalName',
-    u'ProductName',
-    u'CompanyName',
-    u'LegalCopyright',
-    u'ProductVersion',
-    u'FileDescription',
-    u'LegalTrademarks',
-    u'PrivateBuild',
-    u'FileVersion',
-    u'OriginalFilename',
-    u'SpecialBuild',
+    'Comments',
+    'InternalName',
+    'ProductName',
+    'CompanyName',
+    'LegalCopyright',
+    'ProductVersion',
+    'FileDescription',
+    'LegalTrademarks',
+    'PrivateBuild',
+    'FileVersion',
+    'OriginalFilename',
+    'SpecialBuild',
 ]
 
 ###########################################################
@@ -439,7 +456,7 @@ def _getFileVersionInfoDict(path, attrNames=_kVersionAttrNames):
     # ...this will return lcpArray, which will be a pointer into verInfo...
     lcpArray = ctypes.POINTER(LANGANDCODEPAGE)()
     lcpNumBytes = DWORD(0)
-    success = verQueryValue(verInfo, u"\\VarFileInfo\\Translation",
+    success = verQueryValue(verInfo, "\\VarFileInfo\\Translation",
                             ctypes.byref(lcpArray), ctypes.byref(lcpNumBytes))
     if not success:
         return verInfoDict
@@ -447,7 +464,7 @@ def _getFileVersionInfoDict(path, attrNames=_kVersionAttrNames):
     # Query for each code page supported...
     # NOTE: We don't really know what to do if more than one, so this loop
     # will actually only run once (!?!?)
-    for i in xrange(lcpNumBytes.value / ctypes.sizeof(lcpArray[0])):
+    for i in range(lcpNumBytes.value // ctypes.sizeof(lcpArray[0])):
         # Get current language and code page...
         lcp = lcpArray[i]
 
@@ -455,7 +472,7 @@ def _getFileVersionInfoDict(path, attrNames=_kVersionAttrNames):
         # Walk through and query each...
         for attrName in attrNames:
             # Build the query...
-            queryString = u"\\StringFileInfo\\%04x%04x\\%s" % (
+            queryString = "\\StringFileInfo\\%04x%04x\\%s" % (
                 lcp.language, lcp.codePage, attrName
             )
 

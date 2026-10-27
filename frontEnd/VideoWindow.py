@@ -314,7 +314,7 @@ class VideoWindow(wx.Control):
         # this menu--we have to manually add them to our accelerator table.
         # ...also note that the accelerator table ignores whether these menu
         # items are enabled / disabled...
-        self._deletePointId = wx.NewId()
+        self._deletePointId = wx.NewIdRef()
         menuData = (
             ("&Undo\tCtrl+Z", "", wx.ID_UNDO, self.OnAccelerator),
             ("&Redo\tCtrl+Y", "", wx.ID_REDO, self.OnAccelerator),
@@ -1052,7 +1052,7 @@ class VideoWindow(wx.Control):
         for triggerRegion in self._triggerRegions:
             points = triggerRegion.getPoints(self._coordSpace)
             numPoints = len(points)
-            for i in xrange(numPoints):
+            for i in range(numPoints):
                 x1, y1 = points[i-1]
                 x2, y2 = points[i]
                 lineSeg = LineSegment(x1, y1, x2, y2)
@@ -1400,4 +1400,4 @@ if __name__ == '__main__':
     if len(sys.argv) > 1 and sys.argv[1] == "test":
         test_main()
     else:
-        print "Try calling with 'test' as the argument."
+        print("Try calling with 'test' as the argument.")

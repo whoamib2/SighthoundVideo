@@ -37,7 +37,7 @@
 import time
 import threading
 import traceback
-import Queue
+import queue
 
 kMaxLogDistance = 60.0 # log at least every 60 seconds
 kMaxDurationWithoutLog = 0.5 # force log if scan took longer than that
@@ -56,7 +56,7 @@ class NetworkScanner(threading.Thread):
         self._event = threading.Event()
         self._lastLogTime = time.time()
         self._skippedLogs = 0
-        self._requestQueue = Queue.Queue()
+        self._requestQueue = queue.Queue()
         self.start()
 
 
