@@ -65,6 +65,8 @@ def test_windows_build_prefers_python_314_and_names_the_ceiling():
     assert "cp315" in build
     assert "3.11" in build
     assert 'print("%d.%d"' not in build
+    assert "--tb=short" in build
+    assert "build\\pytest.log" in build or "pytest.log" in build
 
 
 def test_pyproject_pins_discovery_and_spdx_license():
