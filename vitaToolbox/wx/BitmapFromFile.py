@@ -44,6 +44,10 @@ from PIL import Image
 import wx
 
 # Local imports...
+from appCommon.resources import install_resource_hooks
+from appCommon.resources import resource_path
+
+install_resource_hooks()
 
 # Constants...
 
@@ -70,6 +74,10 @@ def bitmapFromFile(f, platformBmps=True):
     """
     if isinstance(f, (bytes, bytearray)):
         f = f.decode('utf-8')
+    if isinstance(f, str):
+        # Platform-specific siblings are chosen after this, so the check has
+        # to see the bundled directory rather than the process working directory.
+        f = resource_path(f)
 
     if platformBmps and isinstance(f, str):
         platformExt = ""

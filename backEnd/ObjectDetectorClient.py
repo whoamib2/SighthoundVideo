@@ -43,7 +43,6 @@ from PIL import ImageDraw, ImageFont
 from io import BytesIO
 import base64
 import http.client
-import sys
 import json
 import os
 import ssl
@@ -62,6 +61,7 @@ from backEnd.native.detector import (
     parse_rgb_body,
 )
 from vitaToolbox.path.PathUtils import safeMkdir
+from appCommon.resources import model_dir
 
 
 _kGreen = (0, 255, 0)
@@ -78,19 +78,7 @@ _kCloud = False
 ################################################################################
 # TODO: duplicated into ObjectDetectorClient.py, too small for its own module ... resolve the redundancy
 def _getModelDir():
-    if hasattr(sys, 'frozen'):
-        path = os.path.dirname(sys.executable)
-        if sys.platform == 'darwin':
-            return os.path.join(path, "..", "Resources", "models" )
-        return os.path.join(path, "models" )
-    else:
-        devLibFolder = os.getenv("SV_DEVEL_LIB_FOLDER_CONAN")
-        if devLibFolder is not None and devLibFolder != "":
-            res = os.path.join(devLibFolder, "..", "models")
-            if os.path.isdir(res):
-                return res
-        # This likely won't work
-        return os.path.join("..", "models")
+    return model_dir()
 
 ##############################################################################
 class ObjectDetectorClient(threading.Thread):

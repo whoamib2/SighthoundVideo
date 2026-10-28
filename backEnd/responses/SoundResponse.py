@@ -46,6 +46,7 @@ import time
 import wave
 
 # Local imports...
+from appCommon.resources import resource_path
 from .BaseResponse import BaseResponse
 
 from frontEnd.GetLaunchParameters import getLaunchParameters
@@ -170,6 +171,7 @@ def playSound(soundPath, catchExceptions=True):
     try:
         if isinstance(soundPath, (bytes, bytearray)):
             soundPath = soundPath.decode('utf-8')
+        soundPath = resource_path(soundPath)
 
         # PyAudio has no Windows wheel for Python 3.14. The standard library
         # plays the same wave file on each desktop platform.

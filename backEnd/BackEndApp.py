@@ -3568,7 +3568,6 @@ def main(userDataDir, *otherArgs):
             # We always want the back end to restart, so ignore any exceptions.
             getLogger(_kLogName, None, _kLogSize).error("Unhandled exception in cleanup", exc_info=True)
 
-        sys.exc_clear()
         _app = None
 
     # make sure logging and all of its resources get closed properly
