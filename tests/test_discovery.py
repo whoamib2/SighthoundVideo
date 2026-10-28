@@ -219,9 +219,14 @@ def test_analytics_does_not_require_intel_redist(monkeypatch):
     assert os.environ.get("PATH") == original
 
     if sys.platform != "darwin":
-        monkeypatch.setenv("INTEL_DEV_REDIST", "/opt/intel")
+        intel = "/opt/intel"
+        expected = os.path.normpath(
+            os.path.join(intel, "redist", "intel64", "compiler")
+        )
+        monkeypatch.setenv("INTEL_DEV_REDIST", intel)
         jumper.startPlatformHTTPWrapper("analytics").start()
-        assert seen["path"].startswith("/opt/intel/redist/intel64/compiler")
+        head = seen["path"].split(os.pathsep, 1)[0]
+        assert os.path.normpath(head) == expected
         assert os.environ.get("PATH") == original
 
 
