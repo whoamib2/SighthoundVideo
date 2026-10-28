@@ -42,6 +42,17 @@ import sys, hashlib
 
 _kMachineID = None
 
+
+def _hash_machine_id(mid):
+    """SHA-1 hex digest. Registry and IOKit values may be text or bytes."""
+    if isinstance(mid, str):
+        data = mid.encode("utf-8")
+    elif isinstance(mid, (bytes, bytearray)):
+        data = bytes(mid)
+    else:
+        data = str(mid).encode("utf-8")
+    return hashlib.sha1(data).hexdigest()
+
 ###############################################################################
 
 def _machine_id_osx():
@@ -93,11 +104,14 @@ def _machine_id_win():
     @return The machine identifier, None if the registry didn't yield anything.
     """
     from winreg import OpenKey, QueryValueEx, CloseKey
-    from winreg import HKEY_LOCAL_MACHINE, KEY_READ
+    from winreg import HKEY_LOCAL_MACHINE, KEY_READ, KEY_WOW64_64KEY
     try:
         key = OpenKey(HKEY_LOCAL_MACHINE, r"SOFTWARE\Microsoft\Cryptography", 0,
-          KEY_READ | 0x0100) # _winreg.KEY_WOW64_64KEY is Python 2.7
-        return QueryValueEx(key, "MachineGuid")[0]
+          KEY_READ | KEY_WOW64_64KEY)
+        value = QueryValueEx(key, "MachineGuid")[0]
+        if isinstance(value, (bytes, bytearray)):
+            value = bytes(value).decode("utf-8", errors="replace")
+        return value
     finally:
         if key is not None:
             try:
@@ -161,7 +175,7 @@ def machineId(force=True,logger=None):
                 mid = _machine_id_win().lower()
             else:
                 mid = _machine_id_osx().lower()
-            _kMachineID = hashlib.sha1(mid).hexdigest()
+            _kMachineID = _hash_machine_id(mid)
         except:
             if logger is not None:
                 import traceback

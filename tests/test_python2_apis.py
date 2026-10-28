@@ -36,6 +36,8 @@ _PATTERNS = (
     r"\bstring\.lowercase\b",
     r"\bstring\.uppercase\b",
     r"\bos\.getcwdu\b",
+    r"\bos\.path\.splitunc\b",
+    r"\b_winreg\b",
     r"\bxrange\s*\(",
     r"\bbasestring\b",
     r"\braw_input\s*\(",
