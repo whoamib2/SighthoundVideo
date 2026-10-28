@@ -244,6 +244,49 @@ def test_upnp_url_round_trip_is_text():
     assert extractUsnFromUpnpUrl(old) == "uuid:camera-1"
 
 
+def test_upnp_notify_decodes_nts_and_ignores_unknown():
+    import io
+    import http.client
+    from vitaToolbox.networking.Upnp import ControlPointManager
+
+    class _Log:
+        def __init__(self):
+            self.debugs = []
+
+        def debug(self, msg, *args, **_kwargs):
+            self.debugs.append(msg % args if args else msg)
+
+    manager = ControlPointManager.__new__(ControlPointManager)
+    manager._logger = _Log()
+
+    def headers(raw):
+        return http.client.parse_headers(io.BytesIO(raw))
+
+    search = headers(
+        b"CACHE-CONTROL: max-age=1800\r\n"
+        b"ST: uuid:camera-1\r\n"
+        b"USN: uuid:camera-1\r\n"
+        b"\r\n"
+    )
+    assert manager._getStatusType(search) == "uuid:camera-1"
+    assert manager._logger.debugs == []
+
+    alive = {"nt": b"uuid:camera-1", "nts": b"SSDP:alive", "usn": b"uuid:camera-1"}
+    assert manager._getStatusType(alive) == "uuid:camera-1"
+
+    update = headers(
+        b"NT: uuid:camera-1\r\n"
+        b"NTS: ssdp:update\r\n"
+        b"USN: uuid:camera-1\r\n"
+        b"\r\n"
+    )
+    assert manager._getStatusType(update) == ""
+    assert manager._logger.debugs == ["Ignoring UPnP notification sub type ssdp:update"]
+
+    bye = {"nts": b"ssdp:byebye", "usn": b"uuid:camera-1"}
+    assert ControlPointManager._checkForByebye(bye) == "uuid:camera-1"
+
+
 def test_missing_port_file_says_backend_is_starting(tmp_path):
     from frontEnd.BackEndClient import BackendNotReady, _BackEndTransport
 

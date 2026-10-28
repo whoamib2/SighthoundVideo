@@ -123,6 +123,30 @@ def _datagram(packet):
         return bytes(packet)
     return str(packet).encode("utf-8")
 
+
+def _header_text(value):
+    """SSDP header values are text. Sockets and old parsers may hand back bytes."""
+    if isinstance(value, (bytes, bytearray)):
+        value = bytes(value).decode("utf-8", "replace")
+    return str(value).strip()
+
+
+def _header(httpMessage, name):
+    """Return one SSDP header as text, or None when it is absent.
+
+    Python 2's HTTPMessage raised KeyError for a missing header. Python 3's
+    email message returns None, which must not be compared to 'ssdp:alive'.
+    """
+    try:
+        if name not in httpMessage:
+            return None
+        value = httpMessage[name]
+    except (KeyError, TypeError):
+        return None
+    if value is None:
+        return None
+    return _header_text(value)
+
 # HTTP over UDP must fit within a single packet.  Spec says that requests
 # should really fit in 512 bytes, but I decided to be a little more
 # conservative.  Note that mirandy code uses 1024.
@@ -693,12 +717,13 @@ class ControlPointManager(object):
         @return goneUsn      The USN that's gone; or None if nothing's gone.
         """
         try:
-            if httpMessage['nts'].lower() == 'ssdp:byebye':
+            nts = _header(httpMessage, 'nts')
+            if nts is not None and nts.lower() == 'ssdp:byebye':
                 # Try to take out of new devices (if there).  If it's
                 # not there, try get from deviceDict.  If it's not
                 # there, we'll just fail, but isGone will be set.  Note:
                 # we'll remove from deviceDict at end of func..
-                return httpMessage['usn']
+                return _header(httpMessage, 'usn')
         except Exception:
             pass
 
@@ -807,28 +832,27 @@ class ControlPointManager(object):
 
 
     ###########################################################
-    @staticmethod
-    def _getStatusType(httpMessage):
+    def _getStatusType(self, httpMessage):
         """Get the status type (search type or notification type) from message.
 
         @param  httpMessage  The httplib.HTTPMessage object.
         @return statusType   The status type, like "uuid:....".  If this
                              is not a valid UPNP message, we'll return ""
         """
-        try:
-            # Try looking at notification type first...
-            statusType = httpMessage['nt']
-            assert httpMessage['nts'] == 'ssdp:alive', \
-                   "Unexpected notification sub type"
-        except KeyError:
-            try:
-                # Next, try the search target...
-                statusType = httpMessage['st']
-            except KeyError:
-                # Upon failure, just do the empty string...
-                statusType = ""
+        # A NOTIFY carries NTS. Search replies only carry ST. Missing NTS is
+        # not an error. Anything other than ssdp:alive (ssdp:update, and so
+        # on) is ignored.
+        nts = _header(httpMessage, 'nts')
+        if nts is not None:
+            nts = nts.lower()
+            if nts != 'ssdp:alive':
+                self._logger.debug(
+                    "Ignoring UPnP notification sub type %s" % nts
+                )
+                return ""
+            return _header(httpMessage, 'nt') or ""
 
-        return statusType
+        return _header(httpMessage, 'st') or ""
 
 
     ###########################################################
