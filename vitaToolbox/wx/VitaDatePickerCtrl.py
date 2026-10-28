@@ -327,8 +327,8 @@ class VitaDatePickerCtrl(wx.Panel):
             # Put the dialog at the right place...
             dlgWidth, _ = dlg.GetSize()
             myWidth, myHeight = self.GetSize()
-            topCenterX, topCenterY = self.ClientToScreen((myWidth/2, 0))
-            dlg.SetPosition((topCenterX - dlgWidth/2, topCenterY))
+            topCenterX, topCenterY = self.ClientToScreen((myWidth//2, 0))
+            dlg.SetPosition((topCenterX - dlgWidth//2, topCenterY))
 
             # Show it...
             dlg.ShowModal()

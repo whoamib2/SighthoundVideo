@@ -206,7 +206,7 @@ class LoginDialog(wx.Dialog):
 
             # Fill the field sizer
             fieldSizer = wx.BoxSizer(wx.VERTICAL)
-            gridSizer = wx.FlexGridSizer(rows=0, cols=2, vgap=_kPadding/2,
+            gridSizer = wx.FlexGridSizer(rows=0, cols=2, vgap=_kPadding//2,
                     hgap=4)
             gridSizer.Add(userLabel, 0, wx.ALIGN_CENTER_VERTICAL)
             gridSizer.Add(self._userField)

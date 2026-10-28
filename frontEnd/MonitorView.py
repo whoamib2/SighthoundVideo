@@ -1016,7 +1016,7 @@ class MonitorView(BaseMonitorView):
             overlapSizer.Add(recordOn)
             overlapSizer.Add(recordOff)
             labelSizer.Add(overlapSizer, 0, wx.ALL | wx.ALIGN_CENTER_VERTICAL,
-                           _kCtrlPadding/2)
+                           _kCtrlPadding//2)
             labelSizer.Add(nameLabel, 1, wx.ALIGN_CENTER_VERTICAL)
 
             # ...extra craziness to make sure that the warning takes up space
@@ -1027,7 +1027,7 @@ class MonitorView(BaseMonitorView):
             labelSizer.Add(warningSizer, 0, wx.ALIGN_CENTER_VERTICAL)
 
             cameraSizer.Add(labelSizer, 0, wx.TOP | wx.EXPAND,
-                            _kCtrlPadding/2)
+                            _kCtrlPadding//2)
 
             self._previewSizer.Add(cameraSizer, 0)
 

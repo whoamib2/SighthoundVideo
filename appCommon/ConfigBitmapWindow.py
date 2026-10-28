@@ -66,7 +66,7 @@ class ConfigBitmapWindow( object ):
             return
 
         pathConfigFile  = os.path.join( '.', ConfigBitmapWindow.kConfigFilename )
-        parser          = configparser.SafeConfigParser()
+        parser          = configparser.ConfigParser()
         parser.read( pathConfigFile )
         if not parser.has_section( ConfigBitmapWindow.kSectionTop ):
             parser.add_section( ConfigBitmapWindow.kSectionTop )
@@ -74,7 +74,7 @@ class ConfigBitmapWindow( object ):
         try:
             self._foundMode             = parser.get( ConfigBitmapWindow.kSectionTop,
                                                   ConfigBitmapWindow.kFieldMode,
-                                                  ConfigBitmapWindow.kConfigDefaultsTop[ ConfigBitmapWindow.kFieldMode ])
+                                                  fallback=ConfigBitmapWindow.kConfigDefaultsTop[ ConfigBitmapWindow.kFieldMode ])
         except configparser.NoOptionError:
             # No Mode?
             self._foundMode             = ConfigBitmapWindow.kConfigDefaultsTop[ ConfigBitmapWindow.kFieldMode ]

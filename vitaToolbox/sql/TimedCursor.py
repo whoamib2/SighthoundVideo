@@ -275,8 +275,11 @@ class TimedCursor(sql.Cursor):
         self._fetchCount += 1
 
         try:
-            # Call the original...
-            result = next(super(TimedCursor, self))
+            # sqlite3.Cursor is iterable, but it is not itself an iterator:
+            # it has no __next__. fetchone() is the same step the iterator takes.
+            result = self.fetchone()
+            if result is None:
+                raise StopIteration
         except StopIteration:
             # If fetchone is returning None, then we must be done fetching.  See
             # how long since execute finished...
