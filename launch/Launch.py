@@ -104,20 +104,35 @@ _kServiceAvailable = None
 
 ###############################################################################
 def serviceAvailable():
-    """ Checks whether the service is expected to be present and that we should
-    use it, for at least determining the work directory. Whether it does the
-    job of launching the back-end is a different decision.
+    """ Checks whether the launch service is actually reachable.
 
-    @return  True if the service is available to us.
+    A frozen app used to assume the service existed. The current Windows
+    installer does not register that service, and treating the app as frozen
+    was enough to make startup quit before opening a window.
+
+    @return  True if the service accepted a connection.
     """
     global _kServiceAvailable
     if _kServiceAvailable is None:
-        _kServiceAvailable = hasattr(sys, 'frozen')
-        if _kServiceAvailable:
+        _kServiceAvailable = False
+        if hasattr(sys, 'frozen'):
             try:
-                _kServiceAvailable = 0 == int(os.getenv("SV_NO_SERVICE", "0"))
-            except:
-                pass
+                disabled = int(os.getenv("SV_NO_SERVICE", "0"))
+            except Exception:
+                disabled = 0
+            if disabled == 0:
+                probe = None
+                try:
+                    probe = Launch()
+                    _kServiceAvailable = bool(probe.open())
+                except Exception:
+                    _kServiceAvailable = False
+                finally:
+                    try:
+                        if probe is not None:
+                            probe.close()
+                    except Exception:
+                        pass
     return _kServiceAvailable
 
 

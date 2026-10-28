@@ -46,6 +46,7 @@ from subprocess import Popen, PIPE
 import sys
 import tempfile
 import time
+import traceback
 
 # Common 3rd-party imports...
 import wx
@@ -63,6 +64,11 @@ from vitaToolbox.sysUtils.FileUtils import safeRemove
 from .BackEndClient import BackEndClient
 from .DbCorruptedDialog import DbCorruptedDialog
 
+from appCommon.startuplog import console_requested
+from appCommon.startuplog import log_startup
+from appCommon.startuplog import log_startup_exception
+from appCommon.startuplog import show_fatal
+from appCommon.startuplog import startup_log_path
 from appCommon.CommonStrings import kAppName
 from appCommon.CommonStrings import kFrontEndLogName
 from appCommon.CommonStrings import kMaxRecordSize, kMatchSourceSize
@@ -233,6 +239,8 @@ class FrontEndApp(wx.App):
 
         self._closingApp = False
         self._closedWins = []
+        self._quietExit = False
+        self._fatalShown = False
 
         return True
 
@@ -248,6 +256,10 @@ class FrontEndApp(wx.App):
         @return success  True if the post-init was successful
         """
         isOSX = sys.platform == "darwin"
+        log_startup(
+            "PostInit frozen=%s service=%s platform=%s"
+            % (hasattr(sys, "frozen"), serviceAvailable(), sys.platform)
+        )
 
         if isOSX and \
            (sys.argv[0].startswith("/Volumes/") or sys.argv[0].startswith("/private/")):
@@ -279,12 +291,20 @@ class FrontEndApp(wx.App):
                         return False
                 else:
                     if not launchCheckWin():
+                        log_startup("launch service check failed")
                         wx.MessageBox(_kServiceMissingWin32, "Error",
                                       wx.ICON_ERROR | wx.OK, None)
+                        self._fatalShown = True
                         return False
-            except:
+            except Exception:
+                log_startup_exception("launch service check raised")
                 launchLog("UNCAUGHT LAUNCH CHECK ERROR (%s)" %
                           sys.exc_info()[1])
+                show_fatal(
+                    "Sighthound Video could not check the launch service.\n\n%s"
+                    % startup_log_path()
+                )
+                self._fatalShown = True
                 return False
 
         if isOSX:
@@ -307,7 +327,11 @@ class FrontEndApp(wx.App):
         if (wx.Platform == "__WXMSW__"):
             self._singleInstanceChecker = lookForOtherInstances()
             if self._singleInstanceChecker is None:
-                return True
+                # The other window was raised. Do not enter MainLoop with no
+                # frame of our own: wx then returns immediately and the
+                # process exits 0 with nothing on screen.
+                self._quietExit = True
+                return False
 
         self._startDlg = DelayedProgressDialog(_kStartDialogWait,
                                     "Starting %s..." % (kAppName),
@@ -369,7 +393,9 @@ class FrontEndApp(wx.App):
                 os.dup2(self._cStdStreams.fileno(), 2)
 
             def showStartError():
+                log_startup("backend did not become ready")
                 wx.MessageBox(_kStartError, "Error", wx.ICON_ERROR|wx.OK, None)
+                self._fatalShown = True
 
             # For now, service on Windows is unable to reach any network paths
             # (whether it is by UNC or letter drive), so if any of the settings
@@ -435,6 +461,7 @@ class FrontEndApp(wx.App):
                 elif pid == 0:
                     self._logger.info("launching backend...")
                     openParams = getLaunchParameters()
+                    log_startup("launching backend: %s" % openParams)
                     openParams.extend(["--backEnd",
                                        userLocalDataDir,
                     # mark the backend progress via an argument which is not
@@ -453,8 +480,11 @@ class FrontEndApp(wx.App):
                     # important on Mac now that we're running from a fork, but
                     # I don't think it hurts...
                     self._logger.disableDiskLogging()
+                    launchCwd = None
+                    if not hasattr(sys, "frozen") and len(openParams) > 1:
+                        launchCwd = os.path.dirname(openParams[1])
                     subProc = Popen(openParams, stdin=PIPE, stdout=PIPE,
-                                    stderr=PIPE,
+                                    stderr=PIPE, cwd=launchCwd,
                                     close_fds=(wx.Platform == "__WXMAC__"))
                     self._logger.enableDiskLogging()
                     subProc.stdin.close()
@@ -528,9 +558,17 @@ class FrontEndApp(wx.App):
         # TODO: OK?
         lic = getLicense(backEndClient, None, _kLicenseLoadTimeout)
         if not lic:
+            log_startup("backend did not provide license data; leaving the window closed")
+            wx.MessageBox(
+                "Sighthound Video could not read a license from the local backend.\n\n%s"
+                % startup_log_path(),
+                "Cannot start Sighthound Video",
+                wx.OK | wx.ICON_ERROR,
+            )
+            self._fatalShown = True
             backEndClient.quit(_kQuitTimeout)
             backEndClient.forceQuit(_kForceQuitTimeout)
-            return True
+            return False
 
         # Check for any previous crashes and prompt user to send any
         # available logs.
@@ -550,6 +588,7 @@ class FrontEndApp(wx.App):
         self.SetTopWindow(frame)
 
         frame.Show(True)
+        log_startup("main window shown")
 
         setFrontEndPref('launchFailures', 0)
 
@@ -991,29 +1030,63 @@ def main():
     # Grab the standard streams before creating the app.  This seems to be
     # needed on Windows.  Note that we can't give a log directory yet because
     # we can't use getUserLocalDataDir() until after the app is created...
+    # --console keeps the real stderr so a windowed build can show tracebacks.
+    log_startup("FrontEndApp.main argv=%s" % (sys.argv,))
     logger = getLogger(kFrontEndLogName)
-    logger.grabStdStreams()
+    if not console_requested():
+        logger.grabStdStreams()
 
-
-    # If OnInit() returns false, the app will automatically exit.
-    app = FrontEndApp(logger)
+    try:
+        # If OnInit() returns false, the app will automatically exit.
+        app = FrontEndApp(logger)
+    except Exception:
+        log_startup_exception("FrontEndApp constructor failed")
+        show_fatal(
+            "Sighthound Video failed before the window opened.\n\n%s"
+            % startup_log_path()
+        )
+        return
 
     try:
         if not validateOSVersion(logger):
+            log_startup("OS version check rejected this system")
             return
-    except:
-        import traceback
+    except Exception:
+        log_startup_exception("OS version check failed")
         traceback.print_exc()
 
     # Immediately call PostInit() so that we perform our checks before the
     # application is started. If True is returned, start the MainLoop to begin
     # processing GUI events.  If false, log as an error.
-    if app.PostInit():
+    try:
+        started = app.PostInit()
+    except Exception:
+        log_startup_exception("PostInit failed")
+        show_fatal(
+            "Sighthound Video failed during startup.\n\n%s" % startup_log_path()
+        )
+        return
+
+    if started:
+        windows = wx.GetTopLevelWindows()
+        log_startup("PostInit returned true, top-level windows=%d" % len(windows))
+        if not windows:
+            show_fatal(
+                "Sighthound Video did not open a window.\n\n%s" % startup_log_path()
+            )
+            return
+        log_startup("entering MainLoop")
         app.MainLoop()
+        log_startup("MainLoop returned")
     else:
         # When OnInit() returns false, we get a similar message, so I copied
         # that, and applied it here for when PostInit returns false.
         logger.error("PostInit returned false, exiting...")
+        log_startup("PostInit returned false, exiting")
+        if not getattr(app, "_quietExit", False) and not getattr(app, "_fatalShown", False):
+            show_fatal(
+                "Sighthound Video could not start.\n\n%s" % startup_log_path()
+            )
     logger.info("Front end application closed...")
 
 
