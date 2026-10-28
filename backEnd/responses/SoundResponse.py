@@ -39,13 +39,11 @@
 
 # Python imports...
 import os
+import shutil
 from subprocess import Popen, PIPE
 import sys
 import time
 import wave
-
-# Common 3rd-party imports...
-import pyaudio
 
 # Local imports...
 from .BaseResponse import BaseResponse
@@ -173,21 +171,18 @@ def playSound(soundPath, catchExceptions=True):
         if isinstance(soundPath, (bytes, bytearray)):
             soundPath = soundPath.decode('utf-8')
 
-        pyAudioInst = pyaudio.PyAudio()
-        waveFile = wave.open(soundPath, 'rb')
-
-        channels, width, framerate, _, _, _ = waveFile.getparams()
-        format = pyAudioInst.get_format_from_width(width)
-        stream = pyAudioInst.open(rate=framerate, channels=channels, format=format,
-                                  output=True)
-
-        data = waveFile.readframes(4096)
-        while data:
-            stream.write(data)
-            data = waveFile.readframes(4096)
-
-        stream.close()
-        pyAudioInst.terminate()
+        # PyAudio has no Windows wheel for Python 3.14. The standard library
+        # plays the same wave file on each desktop platform.
+        if sys.platform == "win32":
+            import winsound
+            winsound.PlaySound(soundPath, winsound.SND_FILENAME)
+        elif sys.platform == "darwin":
+            Popen(["afplay", soundPath])
+        else:
+            for player in ("paplay", "aplay"):
+                if shutil.which(player):
+                    Popen([player, soundPath])
+                    break
     except:
         if not catchExceptions:
             raise

@@ -199,7 +199,6 @@ BUILD_EXE_OPTIONS = {
     'packages': [
         'OpenGL',
         'PIL',
-        'pyaudio',
         'requests',
         'wx',
         'wx.adv',
