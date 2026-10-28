@@ -35,6 +35,10 @@ def test_coco_labels_map_onto_rule_types_and_yolox_nano_grid():
     assert grids is not None and strides is not None
     assert grids.shape == (3549, 2)
     assert strides.shape == (3549, 1)
+    # Stride 8 is 52 columns. x increases across the row; y increases after that.
+    assert list(grids[0]) == [0, 0]
+    assert list(grids[1]) == [1, 0]
+    assert list(grids[52]) == [0, 1]
 
 
 def test_provider_order_prefers_directml_on_windows_and_cuda_on_linux():
@@ -111,3 +115,54 @@ def test_http_post_uses_the_onnx_detector(tmp_path):
     finally:
         server.shutdown()
         thread.join(timeout=5)
+
+
+def _yolox_nano_path():
+    import os
+    from scripts.fetch_detector_model import YOLOX_NANO, fetch
+
+    root = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
+    path = os.path.join(root, "models", YOLOX_NANO["filename"])
+    if not os.path.isfile(path):
+        fetch(YOLOX_NANO, path)
+    return path
+
+
+def _yolox_dog_image():
+    import os
+    import urllib.request
+
+    root = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
+    path = os.path.join(root, "models", "yolox_dog.jpg")
+    if not os.path.isfile(path):
+        urllib.request.urlretrieve(
+            "https://github.com/Megvii-BaseDetection/YOLOX/raw/main/assets/dog.jpg",
+            path,
+        )
+    return path
+
+
+def test_real_yolox_nano_finds_the_dog_and_the_bicycle():
+    """Megvii's demo photo: a dog, a bicycle, and a truck."""
+    from PIL import Image
+
+    from backEnd.native.onnx_detector import create_detector
+
+    image = Image.open(_yolox_dog_image()).convert("RGB")
+    width, height = image.size
+    detector = create_detector(None, model_path=_yolox_nano_path(), enable_gpu=False)
+    found = detector.detect_rgb(image.tobytes(), width, height)
+    animals = [item for item in found if item.type == "animal"]
+    vehicles = [item for item in found if item.type == "vehicle"]
+    assert animals, [(item.type, item.score) for item in found]
+    assert vehicles, [(item.type, item.score) for item in found]
+    dog = max(animals, key=lambda item: item.score)
+    box = dog.bounding_box
+    assert dog.score > 0.5
+    # The dog sits in the lower-left half of the 768x576 frame, not the trees.
+    assert box.y > height // 4
+    assert box.x < width // 2
+    assert box.width > 80 and box.height > 150
+    bike = max(vehicles, key=lambda item: item.bounding_box.width)
+    assert bike.bounding_box.width > 200
+    assert bike.score > 0.4

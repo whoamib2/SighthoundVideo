@@ -88,6 +88,19 @@ def parse_test_live_header(header: bytes | bytearray | memoryview | str) -> tupl
     return int(text[0]), int(text[1:5]), int(text[5:9])
 
 
+def _fit_header_fps(value):
+    """``%7.2f`` holds at most 9999.99. A faster rate must not widen the field."""
+    try:
+        value = float(value)
+    except (TypeError, ValueError):
+        return 0.0
+    if value < 0.0:
+        return 0.0
+    if value > 9999.99:
+        return 9999.99
+    return value
+
+
 def format_live_header(
     frame_id: int,
     width: int,
@@ -100,8 +113,8 @@ def format_live_header(
         int(frame_id),
         int(width),
         int(height),
-        float(request_fps),
-        float(capture_fps),
+        _fit_header_fps(request_fps),
+        _fit_header_fps(capture_fps),
     )
     if len(text) != LIVE_HEADER_SIZE:
         raise ValueError(
@@ -133,8 +146,12 @@ def parse_live_header(
     frame_id = int(text[0:9])
     width = int(text[9:13])
     height = int(text[13:17])
-    request_fps_text, capture_fps_text = text[17:].split()
-    return frame_id, width, height, float(request_fps_text), float(capture_fps_text)
+    # The two rates are fixed 7-character fields. split() merges them when a
+    # rate is 1000 or higher, because %7.2f then has no leading space.
+    fps_text = text[17:31]
+    if len(fps_text) < 14:
+        raise ValueError("live header fps fields are short")
+    return frame_id, width, height, float(fps_text[:7]), float(fps_text[7:14])
 
 
 def parse_live_footer(footer: bytes | bytearray | memoryview | str) -> tuple[int, int]:

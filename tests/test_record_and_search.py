@@ -20,7 +20,7 @@ from backEnd.QueuedDataManagerCloud import QueuedDataManagerCloud
 from backEnd.VideoPipeline import VideoPipeline
 from backEnd.native.capture import StreamReader
 from backEnd.triggers.TargetTrigger import TargetTrigger
-from tests.open_backend_support import Log, write_moving_rect
+from tests.open_backend_support import Log
 
 pytest.importorskip("av")
 pytest.importorskip("numpy")
@@ -63,19 +63,57 @@ def _apply(data_mgr: DataManager, messages: list) -> None:
             data_mgr.addFrame(db_id, frame, frame_time, bbox, obj_type, action)
 
 
-def test_detected_clip_is_playable_and_searchable(tmp_path, monkeypatch):
-    from backEnd.native.test_detector_model import build_bright_blob_model
+def _yolox_nano_path():
+    from scripts.fetch_detector_model import YOLOX_NANO, fetch
 
-    bundled = os.path.join(os.path.dirname(__file__), "..", "models", "yolox_nano.onnx")
-    if os.path.isfile(bundled):
-        model = bundled
-    else:
-        model = str(tmp_path / "blob.onnx")
-        build_bright_blob_model(model)
+    root = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
+    path = os.path.join(root, "models", YOLOX_NANO["filename"])
+    if not os.path.isfile(path):
+        fetch(YOLOX_NANO, path)
+    return path
+
+
+def _dog_image():
+    import urllib.request
+
+    root = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
+    path = os.path.join(root, "models", "yolox_dog.jpg")
+    if not os.path.isfile(path):
+        urllib.request.urlretrieve(
+            "https://github.com/Megvii-BaseDetection/YOLOX/raw/main/assets/dog.jpg",
+            path,
+        )
+    return path
+
+
+def _write_panning_photo(path, image_path, frames=10, fps=10):
+    import av
+    import numpy as np
+    from PIL import Image
+
+    image = np.asarray(Image.open(image_path).convert("RGB"))
+    height, width = image.shape[:2]
+    container = av.open(str(path), mode="w")
+    stream = container.add_stream("libx264", rate=fps)
+    stream.width = width
+    stream.height = height
+    stream.pix_fmt = "yuv420p"
+    for index in range(frames):
+        shifted = np.roll(image, index * 6, axis=1)
+        video = av.VideoFrame.from_ndarray(shifted, format="rgb24")
+        for packet in stream.encode(video):
+            container.mux(packet)
+    for packet in stream.encode():
+        container.mux(packet)
+    container.close()
+
+
+def test_detected_clip_is_playable_and_searchable(tmp_path, monkeypatch):
+    model = _yolox_nano_path()
     monkeypatch.setenv("SIGHTHOUND_DETECTOR_MODEL", model)
 
     video = tmp_path / "driveway.mp4"
-    write_moving_rect(video, frames=16, fps=10)
+    _write_panning_photo(video, _dog_image())
     archive = tmp_path / "video"
     archive.mkdir()
     logger = Log()

@@ -1093,6 +1093,7 @@ class BackEndApp(object):
                             self._responseRunnerProc.terminate()
                             self._logger.warn("terminated ResponseRunner")
                         else:
+                            self._note_child_exit("ResponseRunner", self._responseRunnerProc)
                             self._logger.info("ResponseRunner not alive, restarting")
                         self._initResponseRunner()
 
@@ -1102,6 +1103,8 @@ class BackEndApp(object):
                             if p.is_alive():
                                 self._terminateCameraProcess(p)
                                 self._logger.warn("terminated %s" % ensureUtf8(location))
+                            else:
+                                self._note_child_exit(location, p)
                             self._delCaptureStream(location)
                             deadCameras.append(location)
                             self._logger.info("%s not alive, restarting" % ensureUtf8(location))
@@ -1125,12 +1128,15 @@ class BackEndApp(object):
 
                     # Ensure that the disk cleaner is still running
                     if not self._diskCleanupProc.is_alive():
+                        self._note_child_exit("DiskCleaner", self._diskCleanupProc)
                         self._logger.warn("Disk cleaner not running, restarting")
                         self._initDiskCleanup(self._maxStorage)
 
                     # Ensure that the platform wrapper is still running
                     if not self._platformHTTPWrapperProc or \
                         not self._platformHTTPWrapperProc.is_alive():
+                        if self._platformHTTPWrapperProc is not None:
+                            self._note_child_exit("PlatformHTTPWrapper", self._platformHTTPWrapperProc)
                         now = time.time()
                         last = getattr(self, "_platformWrapperRestartAt", 0)
                         if now - last >= 30:
@@ -2049,6 +2055,32 @@ class BackEndApp(object):
             self._enableDiskLogging(True)
             if len(error) > 0:
                 self._logger.error("Failed to launch platform HTTP wrapper:" + error)
+
+    ###########################################################
+    def _child_exit_reason(self, name, proc):
+        """Text for BackEndApp.log when a child has stopped."""
+        pid = getattr(proc, "pid", None)
+        code = getattr(proc, "exitcode", None)
+        if code is None:
+            return "%s pid %s stopped with no exit code" % (name, pid)
+        if isinstance(code, int) and code < 0:
+            return "%s pid %s killed by signal %s" % (name, pid, -code)
+        return "%s pid %s exit code %s" % (name, pid, code)
+
+    ###########################################################
+    def _note_child_exit(self, name, proc):
+        """Log each child death once, including the exit code."""
+        if proc is None:
+            return
+        key = (str(name), getattr(proc, "pid", None), getattr(proc, "exitcode", None))
+        seen = getattr(self, "_loggedChildExits", None)
+        if seen is None:
+            seen = set()
+            self._loggedChildExits = seen
+        if key in seen:
+            return
+        seen.add(key)
+        self._logger.error(self._child_exit_reason(name, proc))
 
     ###########################################################
     def _initDiskCleanup(self, maxStorage):

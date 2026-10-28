@@ -103,6 +103,9 @@ class ObjectDetectorClient(threading.Thread):
 
         self._httpTimeout = 20
         self._lastHttpRequest = time.time() - 2*self._httpTimeout
+        # YOLOX was trained on a full scene, not a 300px crop. Local and
+        # in-process clients set this so boxes stay in the tracker frame.
+        self._full_frame = False
 
     #---------------------------------------------------------------------------
     def setDebugFolder(self, folder):
@@ -292,19 +295,29 @@ class ObjectDetectorClient(threading.Thread):
             outputFileBase = os.path.join(self._outputFolderBoxes, str(timestamp))
 
         output = []
-        for obj, id, box in scaledUpBoxes:
-            cropRect, sentryRectInCrop = self._getCropRect(image.size, box)
-            imageCrop = image.crop(cropRect)
-            objects = self._processSingleImage(imageCrop)
-            cropOutput = self._processJSONResult(objects, (obj,id,sentryRectInCrop))
+        if self._full_frame:
+            objects = self._processSingleImage(image)
+            for obj, id, box in scaledUpBoxes:
+                matched = self._processJSONResult(objects, (obj, id, box))
+                if matched:
+                    for match in matched:
+                        allTypes = allTypes + "-" + match[1]
+                        output.append(match)
+        else:
+            objects = []
+            for obj, id, box in scaledUpBoxes:
+                cropRect, sentryRectInCrop = self._getCropRect(image.size, box)
+                imageCrop = image.crop(cropRect)
+                objects = self._processSingleImage(imageCrop)
+                cropOutput = self._processJSONResult(objects, (obj,id,sentryRectInCrop))
 
-            if cropOutput:
-                for match in cropOutput:
-                    allTypes = allTypes + "-" + match[1]
-                    output.append(match)
+                if cropOutput:
+                    for match in cropOutput:
+                        allTypes = allTypes + "-" + match[1]
+                        output.append(match)
 
-            if self._visualizeDebug:
-                self._visualizeResults(image, box, objects, (cropRect[0], cropRect[1]))
+                if self._visualizeDebug:
+                    self._visualizeResults(image, box, objects, (cropRect[0], cropRect[1]))
 
         detCallTime = int((time.time() - start)*1000)
 
@@ -508,6 +521,7 @@ class ObjectDetectorClientLocal(ObjectDetectorClient):
     #---------------------------------------------------------------------------
     def __init__(self, id, logger):
         super(ObjectDetectorClientLocal, self).__init__(id, logger)
+        self._full_frame = True
         self._skippedDetections = 0
         self._analyticsPort = None
         self._nextAnalyticsPort = None
@@ -566,6 +580,7 @@ class ObjectDetectorClientInProcess(ObjectDetectorClient):
     #---------------------------------------------------------------------------
     def __init__(self, id, logger):
         super(ObjectDetectorClientInProcess, self).__init__(id, logger)
+        self._full_frame = True
         self._detector = create_detector(self._logger, _getModelDir(), enable_gpu=False)
 
     def set_gallery_db(self, path):
