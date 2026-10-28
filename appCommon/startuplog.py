@@ -13,15 +13,38 @@ import time
 import traceback
 
 
-def startup_log_dir() -> str:
-    """Directory that receives startup.log. On Windows this is LocalAppData."""
+APP_DIR_NAME = "VigilCam"
+LEGACY_DIR_NAME = "Sighthound Video"
+
+
+def user_data_parent() -> str:
+    """Folder that contains the per-user VigilCam directory."""
     if sys.platform == "win32":
-        root = os.environ.get("LOCALAPPDATA") or os.path.expanduser("~")
-        return os.path.join(root, "Sighthound Video", "logs")
-    root = os.environ.get("XDG_DATA_HOME") or os.path.join(
+        return os.environ.get("LOCALAPPDATA") or os.path.expanduser("~")
+    return os.environ.get("XDG_DATA_HOME") or os.path.join(
         os.path.expanduser("~"), ".local", "share"
     )
-    return os.path.join(root, "Sighthound Video", "logs")
+
+
+def migrate_legacy_data_dir(parent: str | None = None) -> str:
+    """Rename a previous Sighthound Video data folder to VigilCam once.
+
+    If VigilCam already exists, the old folder is left in place.
+    """
+    parent = user_data_parent() if parent is None else parent
+    new_dir = os.path.join(parent, APP_DIR_NAME)
+    old_dir = os.path.join(parent, LEGACY_DIR_NAME)
+    if os.path.isdir(old_dir) and not os.path.lexists(new_dir):
+        try:
+            os.rename(old_dir, new_dir)
+        except OSError:
+            pass
+    return new_dir
+
+
+def startup_log_dir() -> str:
+    """Directory that receives startup.log. On Windows this is LocalAppData."""
+    return os.path.join(migrate_legacy_data_dir(), "logs")
 
 
 def startup_log_path() -> str:
@@ -82,9 +105,9 @@ def instance_lock_name(app_name: str, user_id: str) -> str:
     wx.GetUserId can contain a domain backslash. SingleInstanceChecker then
     fails to create its lock and reports that another copy is running.
     """
-    raw = "%s-%s" % (app_name or "SighthoundVideo", user_id or "user")
+    raw = "%s-%s" % (app_name or "VigilCam", user_id or "user")
     cleaned = "".join(ch if ch.isalnum() or ch in "-_." else "_" for ch in raw)
-    return cleaned or "SighthoundVideo"
+    return cleaned or "VigilCam"
 
 
 def show_fatal(message: str) -> None:
@@ -94,7 +117,7 @@ def show_fatal(message: str) -> None:
         try:
             import ctypes
             # MB_OK | MB_ICONERROR | MB_SETFOREGROUND
-            ctypes.windll.user32.MessageBoxW(None, message, "Sighthound Video", 0x00000010 | 0x00010000)
+            ctypes.windll.user32.MessageBoxW(None, message, "VigilCam", 0x00000010 | 0x00010000)
             return
         except Exception:
             pass
@@ -102,6 +125,6 @@ def show_fatal(message: str) -> None:
         import wx
         if wx.GetApp() is None:
             wx.App(False)
-        wx.MessageBox(message, "Sighthound Video", wx.OK | wx.ICON_ERROR)
+        wx.MessageBox(message, "VigilCam", wx.OK | wx.ICON_ERROR)
     except Exception:
         log_startup_exception("could not show the startup error dialog")

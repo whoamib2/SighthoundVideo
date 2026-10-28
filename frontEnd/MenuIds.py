@@ -67,8 +67,8 @@ kExportClipForBugReportMenuEx      = "Export Clip for &Bug Report..."
 kExportClipForBugReportMenu        = _removeSpecialChars(kExportClipForBugReportMenuEx)
 kExportFrame                       = "Export Frame..."
 kExportAllWithinTimeRangeMenu      = "Export All Clips Within Time Range..."
-kSubmitClipForAnalysis             = "Submit Clip To Sighthound..."
-kSubmitClipForAnalysisWithNote     = "Submit Clip To Sighthound (with note)..."
+kSubmitClipForAnalysis             = "Submit Clip for Analysis..."
+kSubmitClipForAnalysisWithNote     = "Submit Clip for Analysis (with note)..."
 
 def getMenuItem(menu, submenu, item):
     return menu.FindItemById( menu.FindMenuItem(submenu, item) )

@@ -403,7 +403,7 @@ if __name__ == '__main__':
         # what to build
         script = "FrontEndLaunchpad.py",
         other_resources = [(RT_MANIFEST, 1, manifest_template % dict(prog=kExeName, arch=processorArchitecture, comctlasm=comCtl))],
-        icon_resources = [(0, "icons/SmartVideoApp.ico")],
+        icon_resources = [(0, "icons/VigilCam.ico")],
         dest_base = kExeName)
 
     setup(

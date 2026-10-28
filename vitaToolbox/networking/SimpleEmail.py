@@ -158,7 +158,7 @@ def sendSimpleEmail(message, fromAddr, toAddrs, subject, #PYCHECKER OK: Too many
     if progressFn is None:
         progressFn = lambda val, msg: True
     if messageId is None:
-        messageId = make_msgid("SighthoundVideo")
+        messageId = make_msgid("VigilCam")
 
     if sendTextInline:
         textDisposition = _kInline
@@ -195,7 +195,7 @@ def sendSimpleEmail(message, fromAddr, toAddrs, subject, #PYCHECKER OK: Too many
     msg["To"] = ", ".join(toAddrs)
     msg["Subject"] = subject
     msg["Date"] = formatdate()
-    msg["X-Mailer"] = "SighthoundVideo"
+    msg["X-Mailer"] = "VigilCam"
     msg["Message-ID"] = messageId
 
     # Start up a server...

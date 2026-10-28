@@ -125,7 +125,7 @@ def test_frozen_app_reads_models_beside_the_executable(tmp_path, monkeypatch):
     models.mkdir()
     weight = models / "yolox_nano.onnx"
     weight.write_bytes(b"x")
-    exe = tmp_path / "SighthoundVideo.exe"
+    exe = tmp_path / "VigilCam.exe"
     exe.write_bytes(b"")
     monkeypatch.setattr(sys, "frozen", True, raising=False)
     monkeypatch.setattr(sys, "executable", str(exe))

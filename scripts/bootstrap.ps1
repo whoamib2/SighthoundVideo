@@ -1,4 +1,5 @@
-# Clone or update Sighthound Video, then run scripts\build_windows.ps1.
+# Clone or update VigilCam, then run scripts\build_windows.ps1.
+# The GitHub repository name is still SighthoundVideo.
 #
 # From a checkout:
 #   powershell -NoProfile -ExecutionPolicy Bypass -File scripts\bootstrap.ps1

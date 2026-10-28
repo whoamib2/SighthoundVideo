@@ -14,7 +14,7 @@ from appCommon.startuplog import log_startup
 def run_startup_probe() -> None:
     log_startup("startup probe creating wx.App")
     app = wx.App(False)
-    frame = wx.Frame(None, title="Sighthound Video startup probe")
+    frame = wx.Frame(None, title="VigilCam startup probe")
     frame.Show()
     entered = {"ok": False}
 

@@ -57,7 +57,7 @@ def getLaunchParameters(name=kBackendExeName):
 
     # Launch the back end application
     if frozen is not None:
-        # The packaged Windows app is SighthoundVideo.exe. Re-launch that
+        # The packaged Windows app is VigilCam.exe. Re-launch that
         # executable. There is no separate "Sighthound Agent" binary.
         if sys.platform == 'darwin':
             exeDir = os.path.split(sys.executable)[0]

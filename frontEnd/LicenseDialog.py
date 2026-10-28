@@ -138,7 +138,7 @@ _kUnavailableText = "No"
 _kActiveText = "Active"
 
 
-_kStatusEditionText = "Sighthound Video %s"
+_kStatusEditionText = "VigilCam %s"
 _kStatusUserText = "Licensed To: %s"
 _kStatusSerialText = "Serial Number: %s"
 _kLicenseErrorText = "Current license could not be loaded."
@@ -153,10 +153,10 @@ _kUnlinkingContent = "Contacting server, just a moment..."
 # Information text
 _kLegacyWarning = (
 """Note: You are currently using a legacy license. You must create a """
-"""Sighthound Account and activate a license below to continue """
+"""VigilCam account and activate a license below to continue """
 """receiving updates. Paid licenses should be linked and activated """
 """automatically after signing in but can also be manually linked in your """
-"""account page at https://www.sighthound.com.""")
+"""account page at https://vigilcam.ai.""")
 
 _kCantActivate = (
 """This license cannot be automatically transferred to this machine. """
@@ -192,7 +192,7 @@ _kConfirmUnlink = (
 
 _kConfirmLogoutTitle = "Account Disconnect"
 _kConfirmLogout = (
-"""Disconnecting your Sighthound account will unlink any activated license """
+"""Disconnecting your VigilCam account will unlink any activated license """
 """and prevent you from using the application until you have signed in """
 """again. Are you sure you would like to disconnect your current account?""")
 
@@ -250,9 +250,8 @@ class LicenseDialog(wx.Dialog):
             self.Bind(wx.EVT_TIMER, self.OnRefreshTimer, self._refreshTimer)
             self.Bind(wx.EVT_WINDOW_DESTROY, self.OnDestroy)
 
-            # Icon and user information/messages/blah
-            badgeBmp = wx.Bitmap("frontEnd/bmps/Sighthound_Badge.png")
-            badge = wx.StaticBitmap(self, -1, badgeBmp)
+            # The old badge was a Sighthound logo. Right-click still disconnects.
+            badge = wx.StaticText(self, -1, "VigilCam")
             badge.Bind(wx.EVT_CONTEXT_MENU, self.OnBadgeMenu)
             self._statusEditionLabel = wx.StaticText(self, -1, " ")
             self._statusUserLabel = wx.StaticText(self, -1, " ")

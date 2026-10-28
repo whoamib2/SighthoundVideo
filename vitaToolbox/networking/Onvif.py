@@ -57,7 +57,7 @@ from xml.dom import minidom
 
 from collections import defaultdict
 
-import netifaces
+from vitaToolbox.sysUtils.interfaces import ipv4_addresses
 
 from vitaToolbox.strUtils.EnsureUnicode import ensureUnicode, ensureUtf8
 from vitaToolbox.loggingUtils.LoggingUtils import MsgPrefixLogger
@@ -1640,17 +1640,7 @@ class OnvifDiscovery(object):
         """
         addrs = []
         try:
-            for ifName in netifaces.interfaces():
-                ifAddresses = netifaces.ifaddresses(ifName)
-                if netifaces.AF_INET in ifAddresses:
-                    for inetAddress in ifAddresses[netifaces.AF_INET]:
-                        addr = inetAddress.get('addr')
-                        if addr != '0.0.0.0':
-                            try:
-                                socket.inet_aton(addr) # IP4 for now
-                            except:
-                                continue
-                            addrs.append(inetAddress)
+            addrs = ipv4_addresses()
         except:
             self._logger.error(
                 "Could not retrieve local IP addresses!", exc_info=True

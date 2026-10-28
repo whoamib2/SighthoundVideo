@@ -1,16 +1,18 @@
-# Sighthound Video
+# VigilCam
 
-Sighthound Video is the open-source legacy release of Sighthound's intelligent video management system (VMS). It combines camera management, recording, search, rule-based alerts, and computer-vision-assisted object detection in a desktop application for Windows and macOS.
+VigilCam is a desktop video management system for Windows and macOS: camera management, recording, search, rule-based alerts, and computer-vision-assisted object detection. The product site is [vigilcam.ai](https://vigilcam.ai).
+
+VigilCam is based on the Sighthound Video open-source release. That original work is copyright Sighthound, Inc. and licensed under the GNU GPLv3, as described in `COPYING`. This tree keeps that license. It does not use Sighthound trademarks or logos in the application UI.
 
 ## Project status
 
-Sighthound Video is a legacy product and is no longer under active development as a packaged commercial application. The latest packaged legacy release referenced by the public Sighthound support knowledgebase is Sighthound Video 7.0.16.
+The packaged legacy release referenced by the public Sighthound support knowledgebase is Sighthound Video 7.0.16. Those notes describe the original product, not the VigilCam name or installer.
 
 This repository is best understood as a source release for preservation, reference, experimentation, and community maintenance. It may require additional work to build or run on modern systems.
 
 Useful public resources:
 
-* Sighthound Video knowledgebase: https://support.sighthound.com/kb/section/39/
+* Original Sighthound Video knowledgebase: https://support.sighthound.com/kb/section/39/
 * Release notes: https://support.sighthound.com/kb/article/148-release-notes/
 * System requirements: https://support.sighthound.com/kb/article/71-system-requirements/
 * Getting started: https://support.sighthound.com/kb/article/18-getting-started/
@@ -34,7 +36,7 @@ What works in the open backend:
 
 ### Windows installer
 
-End users run `dist\SighthoundVideo-Setup.exe`. A developer produces it on a Windows PC. From a checkout of this branch:
+End users run `dist\VigilCam-Setup.exe`. A developer produces it on a Windows PC. From a checkout of this branch:
 
 ```powershell
 powershell -NoProfile -ExecutionPolicy Bypass -File scripts\bootstrap.ps1 -Package
@@ -46,9 +48,9 @@ The build prefers Python 3.14 (`py -3.14`). Checked on PyPI on 2026-10-27: wxPyt
 
 `scripts\build_windows.ps1` is safe to re-run. It reuses `.venv` when that environment is already the chosen Python, downloads YOLOX-Nano, the plate OCR model, YuNet, and SFace when those files are missing, runs ruff, compileall, and pytest, and builds the CMake projects when MSVC 2022 is installed. With `-Package` it installs PyInstaller and, through winget, Inno Setup when that compiler is missing. The compiler search includes `%LOCALAPPDATA%\Programs\Inno Setup 6\ISCC.exe` (where a per-user winget install lands), the uninstall registry `InstallLocation`, Program Files, and PATH, and it searches again after winget. If winget itself is missing, the script says so and stops before the installer step. MSVC 2022 is optional: when it is absent the script prints a message and continues. The native projects are `optsearches`, `launch`, and `xnat`.
 
-The package is a PyInstaller one-folder bundle. Python, wxPython, PyAV/FFmpeg, and ONNX Runtime DirectML are inside the folder, so the installed app does not need Python. Inno Setup adds Start menu and desktop shortcuts, an uninstaller, and an optional "start with Windows" task. The finished file is `dist\SighthoundVideo-Setup.exe`, and the script prints that path.
+The package is a PyInstaller one-folder bundle. Python, wxPython, PyAV/FFmpeg, and ONNX Runtime DirectML are inside the folder, so the installed app does not need Python. Inno Setup adds Start menu and desktop shortcuts, an uninstaller, and an optional "start with Windows" task. The finished file is `dist\VigilCam-Setup.exe`, and the script prints that path.
 
-Startup always appends to `%LOCALAPPDATA%\Sighthound Video\logs\startup.log`. A fatal error also opens a message box. The installed app is windowed; `SighthoundVideo.exe --console` allocates a console, and `SighthoundVideo-Debug.cmd` in the install folder launches it that way. A frozen build starts the backend itself unless the legacy launch service is actually reachable.
+Startup always appends to `%LOCALAPPDATA%\VigilCam\logs\startup.log`. On first launch, an existing `%LOCALAPPDATA%\Sighthound Video` folder is renamed to `VigilCam` when that new folder is not already there. A fatal error also opens a message box. The installed app is windowed; `VigilCam.exe --console` allocates a console, and `VigilCam-Debug.cmd` in the install folder launches it that way. A frozen build starts the backend itself unless the legacy launch service is actually reachable.
 
 The Windows build depends on `onnxruntime-directml` and not the CPU `onnxruntime` wheel. Those two distributions own the same `onnxruntime` package directory, so the script removes any CPU or CUDA wheel and force-reinstalls DirectML, then checks `get_available_providers`. The analytics process uses the GPU when DirectML is available and the CPU otherwise. YOLOX-Nano, plate OCR, YuNet, and SFace are fetched at build time and copied into the app folder, so the installed program works offline. Together those weights are about 45 MB, small enough to ship in the installer. A carrier file is not downloaded. The color heuristic runs until you train `models\carrier.onnx`.
 
@@ -93,7 +95,7 @@ The Tools menu item "Face Gallery & Plate Watchlist" enrolls a person from image
 
 What is left:
 
-* The wxPython UI, including the gallery dialog and the attribute controls on the query builder, has not been launched against these backends. `scripts\build_windows.ps1 -Package` writes `dist\SighthoundVideo-Setup.exe` on a Windows PC.
+* The wxPython UI, including the gallery dialog and the attribute controls on the query builder, has not been launched against these backends. `scripts\build_windows.ps1 -Package` writes `dist\VigilCam-Setup.exe` on a Windows PC.
 * Real-camera accuracy for plates, faces, and delivery trucks has not been measured.
 * Packet capture returns "driver not available" (`-2`). There is no pcap backend.
 * Clip playback does not draw the old on-frame box and zone overlays.
@@ -101,7 +103,7 @@ What is left:
 
 ### Windows setup
 
-* Python 3.14 is what `scripts\build_windows.ps1` selects on the build PC. 3.13, 3.12, and 3.11 are fallbacks. People who run `dist\SighthoundVideo-Setup.exe` do not install Python.
+* Python 3.14 is what `scripts\build_windows.ps1` selects on the build PC. 3.13, 3.12, and 3.11 are fallbacks. People who run `dist\VigilCam-Setup.exe` do not install Python.
 * `python -m pip install -e ".[dev]"` installs Pillow, requests, wxPython, numpy, PyAV, pytest, ruff, and the `onnx` package used to build the tiny test detector. On Windows the runtime is `onnxruntime-directml`. On other platforms it is the CPU `onnxruntime` wheel. Do not install both. `scripts\build_windows.ps1` also force-reinstalls DirectML and checks `get_available_providers`.
 * wxPython wheels need the Visual C++ runtime that the wheel documents. Capture itself does not need Visual Studio once PyAV is installed.
 * CPU inference needs no GPU. `onnxruntime-directml` uses the GPU when DirectML is available and the CPU otherwise.
@@ -124,7 +126,7 @@ The repository includes Git LFS pointers for large files such as platform depend
 
 ## Original project goals and capabilities
 
-Sighthound Video was designed to:
+The original Sighthound Video release was designed to:
 
 * Run on x64 Windows and macOS.
 * Support common IP cameras and USB webcams.
@@ -138,9 +140,9 @@ Some future-facing integrations mentioned in older project materials may not be 
 
 ## Source package
 
-The Sighthound Video source package is organized around three major components:
+The source package is organized around three major components:
 
-* `source.zip` / repository source - Sighthound Video source code.
+* `source.zip` / repository source - application source code.
 * `libs.zip` / `libs.tgz` - packaged binary dependencies.
 * `tools.zip` / `tools.tgz` - Python 2.7.18 runtime and supporting Python packages.
 
@@ -219,7 +221,7 @@ bash ./buildSV.sh
 
 ## Licensing
 
-Sighthound Video is licensed under the GNU GPLv3 license as described in `COPYING`.
+VigilCam is licensed under the GNU GPLv3 license as described in `COPYING`. That is the same license as the original Sighthound Video open-source release.
 
 Alternative licensing may be available from Sighthound, Inc. by contacting opensource@sighthound.com.
 

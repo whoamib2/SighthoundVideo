@@ -248,7 +248,7 @@ class FrontEndFrame(wx.Frame):
         # Set the app icons.  On Mac, the icon is set implicitly.
         if (wx.Platform == "__WXMSW__"):
             icons = wx.IconBundle()
-            icons.AddIcon(os.path.join("icons", "SmartVideoApp.ico"), wx.BITMAP_TYPE_ICO)
+            icons.AddIcon(os.path.join("icons", "VigilCam.ico"), wx.BITMAP_TYPE_ICO)
             self.SetIcons(icons)
 
         self.Bind(wx.EVT_CLOSE, self.OnClose)
@@ -1026,7 +1026,7 @@ class FrontEndFrame(wx.Frame):
         #
         # We call Close with a CallAfter, which hopefully helps make the app
         # quit more cleanly on Mac on 10.5 if you do the following applescript:
-        #   tell application "Sighthound Video" to quit
+        #   tell application "VigilCam" to quit
         #
         # Note: this function is not intended for other code to call--it is
         # only called in response to the menu item (or similar cases)...
