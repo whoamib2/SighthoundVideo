@@ -1,3 +1,8 @@
+models/*.onnx
+models/*.onnx.json
+models/*.jpg
+models/*.pt
+models/*.pth
 *.bak
 *.iss
 !installer/*.iss
