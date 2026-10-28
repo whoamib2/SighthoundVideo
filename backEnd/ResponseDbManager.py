@@ -215,8 +215,12 @@ class ResponseDbManager(object):
         if not self._curDbPath:
             return None
 
-        connection = sql.connect(self._curDbPath.encode('utf-8'), timeout,
-                factory=TimedConnection, check_same_thread=False)
+        connection = sql.connect(
+            self._curDbPath.encode('utf-8'),
+            timeout=timeout,
+            factory=TimedConnection,
+            check_same_thread=False,
+        )
         connection.setParameters(self._logger, float(kSqlAlertThreshold), os.path.exists(self._curDbPath+".debug"))
 
         return connection
