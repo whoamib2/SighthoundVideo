@@ -192,8 +192,12 @@ def _yolox_grids(count: int, size: int):
                 total = -1
                 break
             total += cells_h * cells_w
-            ys, xs = np.meshgrid(np.arange(cells_w), np.arange(cells_h))
-            grid = np.stack((xs, ys), axis=2).reshape(-1, 2).astype(np.float32)
+            # Same order as torch.meshgrid(arange(h), arange(w), indexing="ij"):
+            # x is the column and increases across each row.
+            yv, xv = np.meshgrid(
+                np.arange(cells_h), np.arange(cells_w), indexing="ij",
+            )
+            grid = np.stack((xv, yv), axis=2).reshape(-1, 2).astype(np.float32)
             grids.append(grid)
             expanded.append(np.full((grid.shape[0], 1), stride, dtype=np.float32))
         if total == count:
@@ -244,7 +248,7 @@ def _decode_predictions(array, layout: str, input_size: int):
             pred = rows.copy()
             if grids is not None:
                 pred[:, 0:2] = (pred[:, 0:2] + grids) * strides
-                pred[:, 2:4] = np.exp(pred[:, 2:4]) * strides
+                pred[:, 2:4] = np.exp(np.clip(pred[:, 2:4], -8.0, 8.0)) * strides
             boxes = _cxcywh_to_xyxy(pred[:, 0:4])
             objectness = pred[:, 4:5]
             class_scores = pred[:, 5:]
