@@ -43,10 +43,10 @@ import time
 import threading
 
 from backEnd.native.detector import (
-    SIOObjectDetector,
     encode_detection_response,
     parse_rgb_body,
 )
+from backEnd.native.onnx_detector import create_detector
 
 
 #from DebugLogManager import DebugLogManager
@@ -142,6 +142,16 @@ def HandlerFactory(logger, detector):
     return PlatformHTTPWrapperHandler
 
 
+class _EmptyDetector:
+    """Keeps the analytics process up when no ONNX file is installed."""
+
+    def detect_rgb(self, rgb, width, height):
+        return []
+
+    def set_gallery_db(self, path):
+        return None
+
+
 ################################################################################
 class PlatformHTTPWrapper(object):
     _kLogName = "PlatformHTTPWrapper.log"
@@ -163,8 +173,15 @@ class PlatformHTTPWrapper(object):
         self._logger.grabStdStreams()
         self._msgQ = msgQ
 
-        enableGpu = True  # until we decide to make configurable
-        self._detector = SIOObjectDetector(self._logger, _getModelDir(), enable_gpu=enableGpu)
+        enableGpu = True  # DirectML or CUDA when that provider is installed; CPU otherwise.
+        try:
+            self._detector = create_detector(self._logger, _getModelDir(), enable_gpu=enableGpu)
+        except Exception:
+            self._logger.error(
+                "Analytics detector failed to start. Detections stay empty until "
+                "models/yolox_nano.onnx is next to the app.\n%s" % traceback.format_exc()
+            )
+            self._detector = _EmptyDetector()
 
         HandlerClass = HandlerFactory(self._logger, self._detector)
         HTTPServer.allow_reuse_address = True

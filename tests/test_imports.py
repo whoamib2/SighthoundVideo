@@ -59,6 +59,9 @@ _ALLOWED_MISSING = {
     "fcntl",
     "winreg",
     "requests",
+    "av",
+    "onnxruntime",
+    "onnx",
 }
 
 

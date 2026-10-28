@@ -81,6 +81,6 @@ def test_pyproject_pins_discovery_and_spdx_license():
     assert "backEnd*" in text
     assert "[tool.setuptools.packages.find]" in text
     if "onnxruntime>=" in text:
-        assert 'onnxruntime>=1.18; sys_platform != "win32"' in text
-        assert 'onnxruntime-directml>=1.18; sys_platform == "win32"' in text
+        assert "onnxruntime>=1.18; sys_platform != 'win32'" in text
+        assert "onnxruntime-directml>=1.18; sys_platform == 'win32'" in text
         assert '"onnxruntime>=1.18"' not in text

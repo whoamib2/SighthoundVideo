@@ -6,7 +6,7 @@
 #   powershell -NoProfile -ExecutionPolicy Bypass -File scripts\bootstrap.ps1 -Package
 #
 # From an empty directory, after you have this file:
-#   powershell -NoProfile -ExecutionPolicy Bypass -File .\bootstrap.ps1 -Branch cursor/python3-port-phase1-0735 -Package
+#   powershell -NoProfile -ExecutionPolicy Bypass -File .\bootstrap.ps1 -Branch cursor/python3-port-phase2-0735 -Package
 
 [CmdletBinding()]
 param(

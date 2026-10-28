@@ -84,7 +84,7 @@ class ThreadPool:
             for thread in self._threads:
                 thread.join()
         for thread in self._threads:
-            if thread.isAlive():
+            if thread.is_alive():
                 return False
         return True
 

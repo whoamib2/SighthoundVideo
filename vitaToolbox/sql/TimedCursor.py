@@ -275,11 +275,15 @@ class TimedCursor(sql.Cursor):
         self._fetchCount += 1
 
         try:
-            # sqlite3.Cursor is iterable, but it is not itself an iterator:
-            # it has no __next__. fetchone() is the same step the iterator takes.
-            result = self.fetchone()
-            if result is None:
-                raise StopIteration
+            # sqlite3.Cursor stopped implementing the iterator protocol directly.
+            # fetchone() returning None is the supported end-of-results signal.
+            parent_next = getattr(super(TimedCursor, self), "__next__", None)
+            if parent_next is not None:
+                result = parent_next()
+            else:
+                result = super(TimedCursor, self).fetchone()
+                if result is None:
+                    raise StopIteration
         except StopIteration:
             # If fetchone is returning None, then we must be done fetching.  See
             # how long since execute finished...

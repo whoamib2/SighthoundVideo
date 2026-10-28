@@ -1,17 +1,16 @@
 """Capture and decode interface.
 
-The historical implementation is the closed ``videoLib2`` extension
-(``StreamReader``, ``ClipReader``, ``ClipUtils``, ffmpeg logging and the
-video-lib debug helpers). This module is the only place that imports it.
-
-A later backend can provide the same names with PyAV or OpenCV. The symbols
-below stay stable so camera, clip and debug call sites do not need to know
-which backend is loaded.
+The open implementation is PyAV (FFmpeg) plus optional OpenCV for USB
+cameras. See :mod:`backEnd.native.open_capture`. The closed ``videoLib2``
+extension is loaded only when ``SIGHTHOUND_USE_CLOSED_CAPTURE=1`` and that
+module imports. These names stay stable so camera, clip, and debug call
+sites do not need to know which backend is loaded.
 """
 
 from __future__ import annotations
 
 import importlib
+import os
 from typing import Any, Callable
 
 from backEnd.native.errors import NativeDependencyError
@@ -40,13 +39,21 @@ def _load(module_name: str) -> Any:
     return module
 
 
+def _use_closed_capture() -> bool:
+    return os.environ.get("SIGHTHOUND_USE_CLOSED_CAPTURE") == "1"
+
+
 def native_capture_available() -> bool:
-    """True when the closed videoLib2 extension imported successfully."""
-    try:
-        _load(_STREAM)
-    except NativeDependencyError:
-        return False
-    return True
+    """True when PyAV is installed, or the closed extension was requested and loaded."""
+    if _use_closed_capture():
+        try:
+            _load(_STREAM)
+        except NativeDependencyError:
+            return False
+        return True
+    from backEnd.native.open_capture import av_available
+
+    return av_available()
 
 
 def _class(module_name: str, class_name: str) -> type:
@@ -111,26 +118,43 @@ class _LazyModule:
         return getattr(_load(self._module_name), name)
 
 
-StreamReader = _class(_STREAM, "StreamReader")
-ClipReader = _class(_CLIP_READER, "ClipReader")
-FFmpegLog = _class(_FFMPEG_LOG, "FFmpegLog")
-
-getLocalCameraNames = _function(_STREAM, "getLocalCameraNames")
-getHardwareDevicesList = _function(_STREAM, "getHardwareDevicesList")
-kPacketCaptureErrCodes = _constant(_STREAM, "kPacketCaptureErrCodes", {})
-
-getMsList = _function(_CLIP_READER, "getMsList")
-getDuration = _function(_CLIP_READER, "getDuration")
-
-clip_utils = _LazyModule(_CLIP_UTILS)
-remuxClip = _function(_CLIP_UTILS, "remuxClip")
-getRealClipSize = _function(_CLIP_UTILS, "getRealClipSize")
-
-getTimestampFlags = _function(_VIDEO_LIB_UTILS, "getTimestampFlags")
-GetVideolibModulesList = _list_or_empty(_VIDEO_LIB_UTILS, "GetVideolibModulesList")
-GetVideoLibDebugConfigItems = _list_or_empty(_VIDEO_LIB_UTILS, "GetVideoLibDebugConfigItems")
-GetVideoLibLogLevels = _list_or_empty(_VIDEO_LIB_UTILS, "GetVideoLibLogLevels")
-SetVideoLibDebugConfig = _function(_VIDEO_LIB_UTILS, "SetVideoLibDebugConfig")
-SetVideoLibDebugConfigSimple = _function(
-    _VIDEO_LIB_UTILS, "SetVideoLibDebugConfigSimple"
-)
+if _use_closed_capture():
+    StreamReader = _class(_STREAM, "StreamReader")
+    ClipReader = _class(_CLIP_READER, "ClipReader")
+    FFmpegLog = _class(_FFMPEG_LOG, "FFmpegLog")
+    getLocalCameraNames = _function(_STREAM, "getLocalCameraNames")
+    getHardwareDevicesList = _function(_STREAM, "getHardwareDevicesList")
+    kPacketCaptureErrCodes = _constant(_STREAM, "kPacketCaptureErrCodes", {})
+    getMsList = _function(_CLIP_READER, "getMsList")
+    getDuration = _function(_CLIP_READER, "getDuration")
+    clip_utils = _LazyModule(_CLIP_UTILS)
+    remuxClip = _function(_CLIP_UTILS, "remuxClip")
+    getRealClipSize = _function(_CLIP_UTILS, "getRealClipSize")
+    getTimestampFlags = _function(_VIDEO_LIB_UTILS, "getTimestampFlags")
+    GetVideolibModulesList = _list_or_empty(_VIDEO_LIB_UTILS, "GetVideolibModulesList")
+    GetVideoLibDebugConfigItems = _list_or_empty(_VIDEO_LIB_UTILS, "GetVideoLibDebugConfigItems")
+    GetVideoLibLogLevels = _list_or_empty(_VIDEO_LIB_UTILS, "GetVideoLibLogLevels")
+    SetVideoLibDebugConfig = _function(_VIDEO_LIB_UTILS, "SetVideoLibDebugConfig")
+    SetVideoLibDebugConfigSimple = _function(
+        _VIDEO_LIB_UTILS, "SetVideoLibDebugConfigSimple"
+    )
+else:
+    from backEnd.native.open_capture import (
+        ClipReader,
+        FFmpegLog,
+        GetVideoLibDebugConfigItems,
+        GetVideoLibLogLevels,
+        GetVideolibModulesList,
+        SetVideoLibDebugConfig,
+        SetVideoLibDebugConfigSimple,
+        StreamReader,
+        clip_utils,
+        getDuration,
+        getHardwareDevicesList,
+        getLocalCameraNames,
+        getMsList,
+        getRealClipSize,
+        getTimestampFlags,
+        kPacketCaptureErrCodes,
+        remuxClip,
+    )

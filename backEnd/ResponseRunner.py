@@ -999,7 +999,7 @@ class ResponseRunner(object):
         _kTimeoutWarning = 30
         counter = 0
         for thrd in self._workerThreads:
-            while thrd.isAlive():
+            while thrd.is_alive():
                 counter += 1
                 if counter % _kTimeoutWarning:
                     self._logger.warning("Executor thread still alive, waiting for %d executors for %d seconds!" % (len(self._workerThreads), counter))
@@ -1008,7 +1008,7 @@ class ResponseRunner(object):
     ###########################################################
     def _cleanUpExecutors(self, logState=False):
         for thrd in list(self._workerThreads):
-            if not thrd.isAlive():
+            if not thrd.is_alive():
                 msgId = thrd.getType()
                 self._executorCounts[msgId] = self._executorCounts[msgId] - 1
                 self._workerThreads.remove(thrd)

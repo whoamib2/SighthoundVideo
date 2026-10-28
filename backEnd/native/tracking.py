@@ -1,18 +1,15 @@
 """Tracking-pipeline interface.
 
-The historical implementation is the closed ``svsentry`` extension. This
-module is the only place that imports it. ``pipeline_base()`` and
-``object_collector_base()`` return the native classes when that extension
-imports, and plain ``object`` otherwise, so the Python pipeline modules can
-still be imported on a machine that does not have the binary.
-
-A later tracker can replace ``pipeline_base`` without changing
-``VideoPipeline`` call sites.
+The default pipeline is the open motion tracker in
+:mod:`backEnd.native.open_tracker`. The closed ``svsentry`` extension is
+loaded only when ``SIGHTHOUND_USE_CLOSED_SENTRY=1`` and that module imports.
+``VideoPipeline`` call sites stay the same either way.
 """
 
 from __future__ import annotations
 
 import importlib
+import os
 from typing import Any
 
 from backEnd.native.errors import NativeDependencyError
@@ -37,13 +34,34 @@ def _load() -> Any:
     return _module
 
 
+def _use_closed_sentry() -> bool:
+    return os.environ.get("SIGHTHOUND_USE_CLOSED_SENTRY") == "1"
+
+
+def _numpy_available() -> bool:
+    try:
+        import numpy  # noqa: F401
+    except Exception:
+        return False
+    return True
+
+
 def native_tracking_available() -> bool:
-    return _load() is not None
+    """True when the open tracker can run, or the closed sentry was requested."""
+    if _use_closed_sentry() and _load() is not None:
+        return True
+    return _numpy_available()
 
 
 def ensure_sentry_loaded() -> None:
-    """Load the native sentry library once. Raises if it is not installed."""
+    """Load the closed sentry library when that backend was requested.
+
+    The open tracker does not use ``svsentry``. ``VideoPipeline`` still calls
+    this, and that call succeeds without the binary.
+    """
     global _sentry_loaded
+    if not _use_closed_sentry():
+        return
     module = _load()
     if module is None:
         detail = str(_import_error) if _import_error else ""
@@ -56,21 +74,33 @@ def ensure_sentry_loaded() -> None:
 
 
 def pipeline_base() -> type:
-    """Base class for :class:`backEnd.VideoPipeline.VideoPipeline`."""
-    module = _load()
-    if module is None:
-        return object
-    ensure_sentry_loaded()
-    return module.VideoPipeline
+    """Base class for :class:`backEnd.VideoPipeline.VideoPipeline`.
+
+    The open motion tracker is the default. Set ``SIGHTHOUND_USE_CLOSED_SENTRY=1``
+    to prefer the closed ``svsentry`` extension when it imports.
+    """
+    if _use_closed_sentry():
+        module = _load()
+        if module is not None:
+            ensure_sentry_loaded()
+            return module.VideoPipeline
+    from backEnd.native.open_tracker import OpenVideoPipeline
+
+    return OpenVideoPipeline
 
 
 def object_collector_base() -> type:
-    """Base class for the queued cloud object collector."""
-    module = _load()
-    if module is None:
-        return object
-    ensure_sentry_loaded()
-    return module.ObjectCollector
+    """Base class for the queued cloud object collector.
+
+    The open tracker calls the Python methods on ``QueuedDataManagerCloud``.
+    The closed collector base is used only when that backend was requested.
+    """
+    if _use_closed_sentry():
+        module = _load()
+        if module is not None:
+            ensure_sentry_loaded()
+            return module.ObjectCollector
+    return object
 
 
 # Default argument for VideoPipeline. Resolved at import; a missing svsentry

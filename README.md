@@ -23,17 +23,16 @@ Useful public resources:
 
 ## Important technical notes
 
-Phase 1 of the source port targets Python 3.11+ (also exercised on 3.12). Windows stays a first-class native target, and the same Python sources are what Linux and macOS import.
+Phase 1 ported the Python tree to 3.11+ (also exercised on 3.12). Phase 2 replaces the closed `videoLib2`, `svsentry`, and `SIOWrapper` binaries with open backends so a Python 3.11 process can capture, track, and classify without those extensions. Windows stays a first-class target. Linux and macOS use the same sources.
 
-What this port covers:
+What works in the open backend:
 
-* Python syntax and the standard-library renames (`pickle`, `http.client`, `xmlrpc`, `queue`, `urllib`).
-* Bytes versus text for live-view mmap headers, pickle files, SQLite blobs, HTTP bodies, and XML-RPC.
-* wxPython 4.x (Phoenix) call sites and Pillow 10 image helpers.
-* Dependencies in `pyproject.toml`. The desktop UI needs `wxPython`; tests and lint need the `dev` extra (`pytest`, `ruff`) plus Pillow and requests.
-* CMake 3.20 projects for `launch`, `xnat`, `backEnd/triggers` (`optsearches`), and `vitaToolbox/path` (`volumeUtils`, Apple only), aimed at MSVC 2022 and current clang/gcc.
-* Packaging through `scripts/package_app.py` (PyInstaller). `frontEnd/setup-Win.py` and `frontEnd/setup-Mac.py` delegate to it.
-* A local Windows build: `scripts\build_windows.ps1` creates `.venv`, installs dependencies, fetches any model scripts this checkout has, runs ruff, compileall, and pytest, and builds the CMake projects when MSVC 2022 is installed.
+* Capture and decode of files, RTSP, and HTTP through PyAV (FFmpeg is inside the PyAV wheels). USB cameras use OpenCV when `opencv-python-headless` is installed, including DirectShow on Windows.
+* Clip files registered with `ClipManager.addClip`, plus `getMsList`, `getDuration`, `ClipReader`, and remux helpers.
+* The 32-byte live-view mmap header the monitor reads, JPEG snapshots, and a best-effort single-variant HLS playlist (MPEG-TS segments).
+* A motion gate and a ByteTrack-style tracker (high-score association, then low-score recovery, with a constant-velocity prediction) that calls `QueuedDataManagerCloud`.
+* An ONNX Runtime YOLO detector on the existing local HTTP contract: raw RGB `POST` with `X-Width` and `X-Height`, JSON `objects` reply. COCO classes map to `person`, `vehicle`, and `animal` for `TargetTrigger`. Providers are DirectML, CUDA, and CPU on Windows, and CUDA and CPU on Linux. CPU is the fallback when those providers are absent.
+* `plate_text`, `face_identity`, and `delivery_carrier` still travel on the detection JSON when a model output provides them.
 
 ### Windows installer
 
@@ -43,32 +42,47 @@ End users run `dist\VigilCam-Setup.exe`. A developer produces it on a Windows PC
 powershell -NoProfile -ExecutionPolicy Bypass -File scripts\bootstrap.ps1 -Package
 ```
 
-`scripts\bootstrap.ps1` updates the checkout (or clones the repository when you point it at an empty directory) and runs `scripts\build_windows.ps1`. Pass `-Branch cursor/python3-port-phase1-0735` when the script is not already inside a checkout.
+`scripts\bootstrap.ps1` updates the checkout (or clones the repository when you point it at an empty directory) and runs `scripts\build_windows.ps1`. Pass `-Branch cursor/python3-port-phase2-0735` when the script is not already inside a checkout.
 
 The build prefers Python 3.14 (`py -3.14`). Checked on PyPI on 2026-10-27: wxPython 4.3.2, numpy 2.5.4, Pillow 13.0.0, and onnxruntime-directml 1.24.4 publish Windows amd64 cp314 wheels. PyAV 19.0.2 and onnx 1.23.2 install on 3.14 from cp312 stable-ABI wheels (their cp314t files are free-threaded only). opencv-python-headless 5.0.0.93 installs from a cp37 stable-ABI wheel. PyInstaller 6.22.3 publishes `py3-none-win_amd64`. Python 3.15 is refused because onnxruntime-directml 1.24.4 has no cp315 wheel. If 3.14 is not installed, the script uses 3.13, then 3.12, then 3.11, and says so. `requires-python` stays `>=3.11`. An existing `.venv` from another version is recreated. Paths with spaces, such as `C:\App Dev\SighthoundVideo`, are passed as single arguments. The script runs in Windows PowerShell 5.1 and in PowerShell 7. Native programs can write to stderr without stopping the build. Pytest prints a short summary (`-q --tb=short`) and tees the full report to `build\pytest.log`.
 
-`scripts\build_windows.ps1` is safe to re-run. It reuses `.venv` when that environment is already the chosen Python. With `-Package` it installs PyInstaller and, through winget, Inno Setup when that compiler is missing. The compiler search includes `%LOCALAPPDATA%\Programs\Inno Setup 6\ISCC.exe` (where a per-user winget install lands), the uninstall registry `InstallLocation`, Program Files, and PATH, and it searches again after winget. If winget itself is missing, the script says so and stops before the installer step. MSVC 2022 is optional: when it is absent the script prints a message and continues. The native projects are `optsearches`, `launch`, and `xnat`.
+`scripts\build_windows.ps1` is safe to re-run. It reuses `.venv` when that environment is already the chosen Python, downloads YOLOX-Nano when `models\yolox_nano.onnx` is missing, runs ruff, compileall, and pytest, and builds the CMake projects when MSVC 2022 is installed. With `-Package` it installs PyInstaller and, through winget, Inno Setup when that compiler is missing. The compiler search includes `%LOCALAPPDATA%\Programs\Inno Setup 6\ISCC.exe` (where a per-user winget install lands), the uninstall registry `InstallLocation`, Program Files, and PATH, and it searches again after winget. If winget itself is missing, the script says so and stops before the installer step. MSVC 2022 is optional: when it is absent the script prints a message and continues. The native projects are `optsearches`, `launch`, and `xnat`.
 
 The package is a PyInstaller one-folder bundle. Python, wxPython, PyAV/FFmpeg, and ONNX Runtime DirectML are inside the folder, so the installed app does not need Python. Inno Setup adds Start menu and desktop shortcuts, an uninstaller, and an optional "start with Windows" task. The finished file is `dist\VigilCam-Setup.exe`, and the script prints that path.
 
 Startup always appends to `%LOCALAPPDATA%\VigilCam\logs\startup.log`. On first launch, an existing `%LOCALAPPDATA%\Sighthound Video` folder is renamed to `VigilCam` when that new folder is not already there. A fatal error also opens a message box. The installed app is windowed; `VigilCam.exe --console` allocates a console, and `VigilCam-Debug.cmd` in the install folder launches it that way. A frozen build starts the backend itself unless the legacy launch service is actually reachable.
 
-The Windows build depends on `onnxruntime-directml` and not the CPU `onnxruntime` wheel. Those two distributions own the same `onnxruntime` package directory, so the script removes any CPU or CUDA wheel and force-reinstalls DirectML, then checks `get_available_providers`. The app uses the GPU when DirectML is available and the CPU otherwise. Model fetch scripts, when this checkout has them, download weights during the build and the installer copies those files into the app folder so it works offline. The downloaded detector and attribute weights are about 45 MB, small enough to ship in the installer.
+The Windows build depends on `onnxruntime-directml` and not the CPU `onnxruntime` wheel. Those two distributions own the same `onnxruntime` package directory, so the script removes any CPU or CUDA wheel and force-reinstalls DirectML, then checks `get_available_providers`. The analytics process uses the GPU when DirectML is available and the CPU otherwise. YOLOX-Nano is fetched at build time and copied into the app folder, so the installed program works offline. That file is about 3.5 MB.
 
-What is still blocked by closed binaries that are not in this tree (`videoLib2`, `svsentry`, `SIOWrapper`, sometimes inside the LFS `libs` archive):
+The default weights are Megvii YOLOX-Nano (Apache-2.0). They are not in git:
 
-* Camera capture and clip decode (`backEnd.native.capture`).
-* The tracking pipeline (`backEnd.native.tracking`).
-* The in-process object detector (`backEnd.native.detector.SIOObjectDetector`).
+```bash
+python scripts/fetch_detector_model.py
+```
 
-Those names are the only import sites for the closed extensions. Calling them without the binary raises `NativeDependencyError`. The local detector HTTP contract is unchanged: raw RGB `POST` with `X-Width` and `X-Height`, JSON `objects` reply. Detections can already carry `plate_text`, `face_identity`, and `delivery_carrier` (USPS, FedEx, UPS, Amazon). This phase does not run those recognizers.
+Ultralytics YOLOv8 and YOLOv10 are AGPL-3.0. The fetch script does not download them. A raw YOLOv8 ONNX file can still be selected with `SIGHTHOUND_DETECTOR_MODEL` if you accept that license. See `models/README.md`.
 
-Recommended next steps:
+Set `SIGHTHOUND_USE_CLOSED_CAPTURE=1` or `SIGHTHOUND_USE_CLOSED_SENTRY=1` only if you still have those Python 2.7 binaries and want the adapters to try them.
 
-* Replace capture with PyAV or OpenCV behind `backEnd.native.capture`.
-* Replace `svsentry` with an open tracker behind `pipeline_base` / `object_collector_base`.
-* Serve the existing RGB HTTP contract from an ONNX Runtime detector and fill the reserved attributes.
-* Smoke-test the wxPython UI and a PyInstaller bundle on Windows and macOS once those backends exist.
+What is left:
+
+* The wxPython UI and a PyInstaller bundle have not been exercised against these backends on Windows or macOS.
+* Plate, face, and delivery-carrier recognizers are not implemented.
+* Packet capture returns "driver not available" (`-2`). There is no pcap backend.
+* Clip playback does not draw the old on-frame box and zone overlays.
+* HLS is a single-variant playlist, not the historical multi-bitrate ladder.
+
+### Windows setup
+
+* Python 3.11 or 3.12, 64-bit.
+* `python -m pip install -e ".[dev]"` from the repo root. That installs Pillow, requests, wxPython, numpy, PyAV, pytest, ruff, and the `onnx` package used to build the tiny test detector. On Windows the runtime is `onnxruntime-directml`. On other platforms it is the CPU `onnxruntime` wheel. Do not install both.
+* wxPython wheels need the Visual C++ runtime that the wheel documents. Capture itself does not need Visual Studio once PyAV is installed.
+* CPU inference needs no GPU. `onnxruntime-directml` uses the GPU when DirectML is available and the CPU otherwise.
+* A developer who wants CUDA instead of the packaged DirectML runtime can install `onnxruntime-gpu` built for their CUDA version. `CUDAExecutionProvider` is used on Windows and Linux when it is present.
+* USB cameras: `python -m pip install opencv-python-headless`.
+* Download the detector before starting the analytics process: `python scripts/fetch_detector_model.py`.
+
+Phase 1 still covers the Python 3 syntax port, wxPython 4 / Pillow 10 call sites, CMake 3.20 projects for `launch`, `xnat`, `optsearches`, and Apple `volumeUtils`, and PyInstaller packaging via `scripts/package_app.py`. On Windows, `scripts\build_windows.ps1` runs those checks and can write the installer.
 
 Historical build notes (Python 2.7, VS2017, `cx_Freeze`, `py2exe`) remain below for the original source release. Several assets are still Git LFS objects.
 

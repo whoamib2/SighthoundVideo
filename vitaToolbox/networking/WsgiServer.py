@@ -154,7 +154,7 @@ class WsgiServer(threading.Thread):
         if wait:
             self.join(wait)
         self._logger.info("shutdown completed")
-        return not self.isAlive()
+        return not self.is_alive()
 
 
     ###########################################################

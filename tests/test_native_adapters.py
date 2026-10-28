@@ -1,22 +1,25 @@
-"""Closed binaries stay behind adapters and do not break import."""
+"""Open backends are the default. Closed binaries stay optional."""
 
 import pytest
 
 from backEnd.native.capture import StreamReader, native_capture_available
-from backEnd.native.errors import NativeDependencyError
 from backEnd.native.tracking import native_tracking_available
 
 
-def test_capture_adapter_imports_without_the_binary():
-    assert native_capture_available() is False
-    with pytest.raises(NativeDependencyError):
-        StreamReader()
+def test_open_capture_is_available_when_pyav_imports():
+    pytest.importorskip("av")
+    assert native_capture_available() is True
+    reader = StreamReader("cam", None, None, ".", ".", ".", None, False)
+    assert reader.locationName == "cam"
+    assert reader.open("", {}) is False
 
 
-def test_pipeline_modules_import_and_refuse_to_run_without_sentry():
-    assert native_tracking_available() is False
-    import backEnd.QueuedDataManagerCloud
+def test_open_pipeline_constructs_without_svsentry():
+    pytest.importorskip("numpy")
+    assert native_tracking_available() is True
     import backEnd.VideoPipeline
 
-    with pytest.raises(NativeDependencyError):
-        backEnd.VideoPipeline.VideoPipeline("clip", object())
+    collector = type("Collector", (), {})()
+    pipeline = backEnd.VideoPipeline.VideoPipeline("clip", collector)
+    assert pipeline.objectCollector is collector
+    pipeline.flush()
