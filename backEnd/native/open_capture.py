@@ -32,6 +32,7 @@ from appCommon.LiveViewBuffer import (
 _LIVE_MAX_WIDTH = 1280
 _LIVE_MAX_HEIGHT = 720
 _DEFAULT_CLIP_MS = 60_000
+_MAX_RECORD_WIDTH = 1280
 
 
 def _av():
@@ -122,6 +123,16 @@ def _jpeg_bytes(rgb: bytes, width: int, height: int, out_w: int, out_h: int) -> 
     return buffer.getvalue()
 
 
+def _record_dims(width: int, height: int) -> tuple[int, int]:
+    """Cap recorded width so a 4K camera does not write an empty or stalled file."""
+    width = max(2, int(width))
+    height = max(2, int(height))
+    if width > _MAX_RECORD_WIDTH:
+        height = max(2, int(round(height * _MAX_RECORD_WIDTH / float(width))))
+        width = _MAX_RECORD_WIDTH
+    return _even(width), _even(height)
+
+
 def _frame_ms(frame: Any, fallback_ms: int) -> int:
     stamp = getattr(frame, "time", None)
     if stamp is None:
@@ -163,7 +174,8 @@ class _ClipWriter:
         assert self._stream is not None
         array = _rgb_ndarray(rgb, width, height)
         if array.shape[1] != self._width or array.shape[0] != self._height:
-            array = array[: self._height, : self._width]
+            scaled, _, _ = _scale_rgb(rgb, width, height, self._width, self._height)
+            array = _rgb_ndarray(scaled, self._width, self._height)
         av = _av()
         video = av.VideoFrame.from_ndarray(array, format="rgb24")
         if self._first_ms is None:
@@ -182,8 +194,8 @@ class _ClipWriter:
         name = "%d.mp4" % int(ms)
         self._full_path = os.path.join(folder, name)
         self._relative = (camera + "/" + name).replace("\\", "/")
-        self._width = _even(width)
-        self._height = _even(height)
+        self._width = _record_dims(width, height)[0]
+        self._height = _record_dims(width, height)[1]
         self._first_ms = ms
         self._last_ms = ms
         av = _av()
@@ -486,13 +498,17 @@ class StreamReader:
         if not self._running:
             return None
         try:
-            rgb, width, height, ms = self._read_rgb()
+            rgb, width, height, _media_ms = self._read_rgb()
         except Exception:
             self._running = False
             return None
         if rgb is None:
             self._running = False
             return None
+        # Search and clips use arrival time. A camera PTS that starts at 0 or
+        # jumps by seconds never overlaps "today" and opens a new tiny file
+        # on every jump.
+        ms = int(time.time() * 1000)
         if self._last_ms >= 0 and ms <= self._last_ms:
             ms = self._last_ms + 1
         self._last_ms = ms
