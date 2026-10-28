@@ -287,8 +287,12 @@ class ClipManager(object):
             self.close()
 
         # Open the database file and retrieve a list of the tables
-        self._connection = sql.connect(filePath.encode('utf-8'), timeout,
-                factory=TimedConnection, check_same_thread=False)
+        self._connection = sql.connect(
+            filePath.encode('utf-8'),
+            timeout=timeout,
+            factory=TimedConnection,
+            check_same_thread=False,
+        )
         self._connection.setParameters(self._logger, float(kSqlAlertThreshold), os.path.exists(self._curDbPath+".debug"))
         self._cur = self._connection.cursor()
 
