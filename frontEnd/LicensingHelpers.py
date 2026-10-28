@@ -47,6 +47,7 @@ from appCommon.CommonStrings import kAppName
 from appCommon.CommonStrings import kVersionString
 from appCommon.CommonStrings import kMajorVersionString
 from .LicenseDialog import doShowLicenseDialog
+from .BackEndClient import BackendNotReady
 
 
 # Constants...
@@ -125,7 +126,16 @@ def checkForMaxCameras(backEndClient, uiParent, numPendingCameras=0):
     while True:
         # This will get a license that is currently valid for configured cams
         # (not including pending cameras), or None...
-        lic = getLicense(backEndClient)
+        try:
+            lic = getLicense(backEndClient)
+        except BackendNotReady as exc:
+            wx.MessageBox(
+                str(exc),
+                "Backend starting",
+                wx.OK | wx.ICON_INFORMATION,
+                uiParent,
+            )
+            return True
 
         # If we're under, no need for any UI...
         numCamsAllowed = int(lic[kCamerasField])

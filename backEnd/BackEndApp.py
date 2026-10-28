@@ -225,6 +225,18 @@ _kMessageServerPingTime = 120
 # camera to give any pending information time to be processed.
 _kRuleCleanupTimeout = 120
 
+# A subsystem crash used to restart the backend immediately and re-open every
+# camera. Wait, then double the wait, and stop at half a minute.
+_kRestartDelayStart = 2
+_kRestartDelayMax = 30
+
+
+def next_restart_delay(previous):
+    """Seconds to wait before starting the backend again after a crash."""
+    if not previous or previous < _kRestartDelayStart:
+        return _kRestartDelayStart
+    return min(_kRestartDelayMax, previous * 2)
+
 # If a temp video file could not be moved we'll try again for this many seconds
 # before giving up and deleting it.
 _kTmpFileLifetime = 20*60
@@ -961,23 +973,31 @@ class BackEndApp(object):
 
         if not os.path.isfile(os.path.join(self._userLocalDataDir, "disableOnvif")):
             self._onvifLogger = getLogger(_kOnvifLogName, self._logDir, _kOnvifLogSize)
-            self._onvifScanner = OnvifNetworkScanner(self._onvifLogger,
+            try:
+                self._onvifScanner = OnvifNetworkScanner(self._onvifLogger,
                                     NetworkScannerCallback(MessageIds.msgIdUpdateOnvif, self._childProcQueue),
                                     _kFastestOnvifPoll,
                                     OnvifDeviceManager(self._onvifLogger, self._threadPool),
                                     "ONVIF")
-            self._logger.info("ONVIF scanner had been created")
+                self._logger.info("ONVIF scanner had been created")
+            except Exception:
+                self._onvifScanner = None
+                self._logger.error("ONVIF scanner failed to start", exc_info=True)
         else:
             self._logger.info("ONVIF scanner is disabled")
 
         if not os.path.isfile(os.path.join(self._userLocalDataDir, "disableUpnp")):
             self._upnpLogger = getLogger(_kUpnpLogName, self._logDir, _kUpnpLogSize)
-            self._upnpScanner = NetworkScanner(self._upnpLogger,
+            try:
+                self._upnpScanner = NetworkScanner(self._upnpLogger,
                                     NetworkScannerCallback(MessageIds.msgIdUpdateUpnp, self._childProcQueue),
                                     _kFastestUpnpPoll,
                                     ControlPointManager(self._upnpLogger),
                                     "UPNP")
-            self._logger.info("UPNP scanner had been created")
+                self._logger.info("UPNP scanner had been created")
+            except Exception:
+                self._upnpScanner = None
+                self._logger.error("UPNP scanner failed to start", exc_info=True)
         else:
             self._logger.info("UPNP scanner is disabled")
 
@@ -3543,22 +3563,25 @@ def main(userDataDir, *otherArgs):
         userDataDir = userDataDir.decode('utf-8')
     userDataDir = os.path.expanduser(userDataDir)
     wantQuit = False
+    restartDelay = 0
 
     # We want to continually launch the app unless it explicitly terminated.
     while not wantQuit:
         _app = BackEndApp(userDataDir)
+        crashed = False
         try:
             _app.run()
+        except (KeyboardInterrupt, SystemExit):
+            wantQuit = True
+            getLogger(_kLogName, None, _kLogSize).info("Backend interrupted")
         except BaseException:
-            # Catch ALL exceptions, not just subclasses of Exception.  That will
-            # catch things like KeyboardInterrupt.
-            #
-            # ...if we don't do this and we get a keyboard interrupt, badness
-            # ensues.
+            # A subsystem error must not spin the camera probe in a tight loop.
+            crashed = True
             getLogger(_kLogName, None, _kLogSize).error("Unhandled exception", exc_info=True)
 
         # Retrieve whether or not the app meant to quit.
-        wantQuit = _app.wantQuit
+        if _app is not None and _app.wantQuit:
+            wantQuit = True
 
         try:
             # Ensure all resources used by the app are freed and destroyed
@@ -3569,6 +3592,13 @@ def main(userDataDir, *otherArgs):
             getLogger(_kLogName, None, _kLogSize).error("Unhandled exception in cleanup", exc_info=True)
 
         _app = None
+        if not wantQuit and crashed:
+            restartDelay = next_restart_delay(restartDelay)
+            getLogger(_kLogName, None, _kLogSize).error(
+                "Restarting backend in %s seconds" % restartDelay)
+            time.sleep(restartDelay)
+        else:
+            restartDelay = 0
 
     # make sure logging and all of its resources get closed properly
     logging.shutdown()

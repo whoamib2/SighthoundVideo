@@ -2166,7 +2166,7 @@ class _openGLWarningDialog(wx.Dialog):
             buttonSizer = self.CreateStdDialogButtonSizer(wx.OK)
             self.FindWindowById(wx.ID_OK, self).Bind(wx.EVT_BUTTON, self.OnDialogExit)
             sizer.Add(buttonSizer, 0, wx.LEFT | wx.RIGHT | wx.BOTTOM |
-                      wx.EXPAND | wx.ALIGN_RIGHT, self.kDialogPadding)
+                      wx.EXPAND, self.kDialogPadding)
 
             self.Bind(wx.EVT_CLOSE, self.OnDialogExit)
 

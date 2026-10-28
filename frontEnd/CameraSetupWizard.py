@@ -70,7 +70,6 @@ from vitaToolbox.path.PathUtils import kInvalidPathChars
 from vitaToolbox.path.PathUtils import kInvalidPathCharsDesc
 from vitaToolbox.path.PathUtils import normalizePath
 from vitaToolbox.strUtils.EnsureUnicode import ensureUnicode
-from vitaToolbox.strUtils.EnsureUnicode import ensureUtf8
 from vitaToolbox.wx.BitmapWindow import BitmapWindow
 from vitaToolbox.wx.FixedStaticBitmap import FixedStaticBitmap
 from vitaToolbox.wx.OverlapSizer import OverlapSizer
@@ -861,7 +860,7 @@ class _BasePage(wxWizard.WizardPageSimple):
         headerSizer = wx.BoxSizer(wx.VERTICAL)
         headerSizer.Add(headerTitle, 1, wx.EXPAND | wx.LEFT | wx.TOP |
                         wx.BOTTOM, 2*_kPaddingSize)
-        headerSizer.Add(wx.StaticLine(self, -1), 0, wx.EXPAND)
+        headerSizer.Add(wx.StaticLine(headerPanel, -1), 0, wx.EXPAND)
         headerPanel.SetSizer(headerSizer)
 
         footerSizer = wx.BoxSizer(wx.HORIZONTAL)
@@ -4447,13 +4446,13 @@ class _ManualSettingsScreen(_BasePage):
         cameraType = self._typeCtrl.GetStringSelection()
 
         # Get settings out of UI...
-        username = ensureUtf8(self._userCtrl.GetValue().strip())
+        username = ensureUnicode(self._userCtrl.GetValue().strip())
         username = urllib.parse.quote(username, "")
-        password = ensureUtf8(self._passCtrl.GetValue().strip())
+        password = ensureUnicode(self._passCtrl.GetValue().strip())
         password = urllib.parse.quote(password, "")
-        scheme   = "%s://" % ensureUtf8(self._getStreamType())
-        hostname = ensureUtf8(self._ipCtrl.GetValue().strip())
-        pathPart = ensureUtf8(self._streamPathCtrl.GetValue().strip())
+        scheme   = "%s://" % ensureUnicode(self._getStreamType())
+        hostname = ensureUnicode(self._ipCtrl.GetValue().strip())
+        pathPart = ensureUnicode(self._streamPathCtrl.GetValue().strip())
         if scheme == 'rtsp://':
             portStr = self._rtspPortCtrl.GetValue()
         else:
@@ -5543,7 +5542,7 @@ class _TestScreen(_BasePage):
         vSizer = wx.BoxSizer(wx.VERTICAL)
         vSizer.Add(nextText, 0, wx.TOP, 2*_kPaddingSize)
         vSizer.Add(self._videoWindow, 0, wx.ALIGN_CENTER | wx.TOP | wx.BOTTOM,
-                   1.5*_kPaddingSize)
+                   (3 * _kPaddingSize) // 2)
         hSizer = wx.BoxSizer(wx.HORIZONTAL)
         hSizer.Add(viewText, 0, wx.ALIGN_CENTER_VERTICAL)
         hSizer.Add(self._viewLink, 0, wx.ALIGN_CENTER_VERTICAL)
