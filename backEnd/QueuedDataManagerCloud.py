@@ -60,7 +60,7 @@ from backEnd.attribute_text import merge_track_attributes
 
 # Globals...
 from vitaToolbox.image.ImageConversion import convertProcFrameToPIL
-from vitaToolbox.strUtils.EnsureUnicode import ensureUtf8
+from vitaToolbox.strUtils.EnsureUnicode import ensureUnicode
 
 _kFrameSaveInterval=1000 # distance in ms between frames we save
 _kStatsReportInterval=30
@@ -231,16 +231,23 @@ class QueuedDataManagerCloud(object_collector_base()):
         else:
             alive = client.isAlive()
         if alive:
-            while self._outstandingDetectionRequests > 0:
+            deadline = time.time() + 2.0
+            while self._outstandingDetectionRequests > 0 and time.time() < deadline:
                 self._logger.debug("Destroying HTTP client - waiting for " + str(self._outstandingDetectionRequests) + " pending results")
                 self._processDetections()
                 if self._outstandingDetectionRequests > 0:
                     time.sleep(0.1)
+            if self._outstandingDetectionRequests > 0:
+                self._logger.warning(
+                    "Stopping analytics with %d detection(s) still pending"
+                    % self._outstandingDetectionRequests
+                )
+                self._outstandingDetectionRequests = 0
 
             self._logger.debug("Destroying HTTP client - terminating")
             client.terminate()
             self._logger.debug("Destroying HTTP client - waiting ...")
-            client.join()
+            client.join(2.0)
             self._logger.debug("Destroying HTTP client - done")
         self._httpClient = None
 
@@ -606,7 +613,7 @@ class QueuedDataManagerCloud(object_collector_base()):
                 os.makedirs(dirname)
             pilFrame.save(saveTo, "JPEG")
         except:
-            self._logger.warning("Failed to save thumbnail to " + ensureUtf8(saveTo))
+            self._logger.warning("Failed to save thumbnail to " + ensureUnicode(saveTo))
 
         # Even if we've failed to create a thumb, there's no reason to retry immediately
         self._lastFrameSavedTime = ms
