@@ -88,6 +88,8 @@ class ObjectDetectorClient(threading.Thread):
     #---------------------------------------------------------------------------
     def __init__(self, id, logger):
         threading.Thread.__init__(self)
+        # A stuck inference must not keep the camera process alive after quit.
+        self.daemon = True
         self._id = id
         self._visualizeDebug = False
         self.setDebugFolder(None)

@@ -222,16 +222,23 @@ class QueuedDataManagerCloud(object_collector_base()):
         else:
             alive = client.isAlive()
         if alive:
-            while self._outstandingDetectionRequests > 0:
+            deadline = time.time() + 2.0
+            while self._outstandingDetectionRequests > 0 and time.time() < deadline:
                 self._logger.debug("Destroying HTTP client - waiting for " + str(self._outstandingDetectionRequests) + " pending results")
                 self._processDetections()
                 if self._outstandingDetectionRequests > 0:
                     time.sleep(0.1)
+            if self._outstandingDetectionRequests > 0:
+                self._logger.warning(
+                    "Stopping analytics with %d detection(s) still pending"
+                    % self._outstandingDetectionRequests
+                )
+                self._outstandingDetectionRequests = 0
 
             self._logger.debug("Destroying HTTP client - terminating")
             client.terminate()
             self._logger.debug("Destroying HTTP client - waiting ...")
-            client.join()
+            client.join(2.0)
             self._logger.debug("Destroying HTTP client - done")
         self._httpClient = None
 

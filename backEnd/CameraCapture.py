@@ -255,6 +255,10 @@ class CameraCapture(object):
 
         self._wsgiServer = None
         self._wsgiServerMessages = collections.deque()
+        self._streamReader = None
+        self._streamReaderOpened = False
+        self._streamReaderLock = threading.RLock()
+        self._queuedDataMgr = None
 
         self._hasMmap = False
 
@@ -285,8 +289,6 @@ class CameraCapture(object):
         # We need to protect against WSGI requests on arbitrary threads talking
         # to a stream reader which is closed, so during the image fetch time we
         # won't be able to change its status.
-        self._streamReaderOpened = False
-        self._streamReaderLock = threading.RLock()
         self._streamReader = StreamReader(cameraLocation,
                                                        self._clipMgr, self._clipMgrLock, tmpPath,
                                                        archivePath, userDir,
@@ -669,6 +671,9 @@ class CameraCapture(object):
         self._timingInfo.inputItemMark( 'capture.BSkipped' )
         self._timingInfo.inputItemMark( 'capture.CToNumpy' )
 
+        if not self._hasMmap and self._liveViewEnabled:
+            self._openSharedMemory(self._liveViewFile)
+
         frame = self._streamReader.getNewFrame(self._liveViewEnabled)
         currentTimeMs = int(time.time()*1000)
 
@@ -698,9 +703,6 @@ class CameraCapture(object):
         self._timingInfo.inputIncrement( int( 1 ))
 
         self._ms = frame.ms
-
-        if not self._hasMmap and self._liveViewEnabled:
-            self._openSharedMemory(self._liveViewFile)
 
         # Process the frame
         if (isLocalCamera(self._cameraUri) and
@@ -803,6 +805,15 @@ class CameraCapture(object):
                                 capture, due to a former failure of some sort.
         """
 
+
+        if getattr(self, "_streamReader", None) is None:
+            manager = getattr(self, "_queuedDataMgr", None)
+            if manager is not None:
+                try:
+                    manager.terminate()
+                except Exception:
+                    pass
+            return
 
         self._streamReaderLock.acquire()
         self._streamReaderOpened = False
