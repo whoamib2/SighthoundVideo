@@ -176,8 +176,57 @@ def test_postinit_failure_kills_the_backend_it_launched(monkeypatch):
     assert killed == [4242]
 
 
+def _is_bundled_bitmap(path):
+    text = str(path).replace("\\", "/")
+    return (
+        "frontEnd/bmps/" in text
+        or "vitaToolbox/wx/bmps/" in text
+        or "/icons/" in text
+        or text.startswith("icons/")
+    )
+
+
+def _use_uniform_bitmaps():
+    """Load every bundled bitmap as the same 8x8 image.
+
+    Git LFS checkouts mix real files and pointer files. Hover buttons require
+    every state of a button to share one size, and a pointer is not a PNG.
+    The widget tree still runs the real sizer and drawing code.
+    """
+    import wx
+    from PIL import Image
+
+    real_open = Image.open
+
+    def open_image(fp, *args, **kwargs):
+        if isinstance(fp, str) and _is_bundled_bitmap(fp):
+            return Image.new("RGBA", (8, 8), (0, 0, 0, 0))
+        return real_open(fp, *args, **kwargs)
+
+    Image.open = open_image
+    real_bitmap = wx.Bitmap
+    real_image = wx.Image
+
+    def bitmap(*args, **kwargs):
+        if args and isinstance(args[0], str) and _is_bundled_bitmap(args[0]):
+            return real_bitmap(8, 8)
+        return real_bitmap(*args, **kwargs)
+
+    def image(*args, **kwargs):
+        if args and isinstance(args[0], str) and _is_bundled_bitmap(args[0]):
+            return real_image(8, 8)
+        return real_image(*args, **kwargs)
+
+    bitmap.FromBuffer = real_bitmap.FromBuffer
+    bitmap.FromBufferRGBA = real_bitmap.FromBufferRGBA
+    bitmap.FromRGBA = getattr(real_bitmap, "FromRGBA", real_bitmap.FromBufferRGBA)
+    wx.Bitmap = bitmap
+    wx.Image = image
+
+
 def test_main_frame_and_simple_dialogs_construct(wx_app, tmp_path):
     import wx
+    _use_uniform_bitmaps()
     from frontEnd.FrontEndFrame import FrontEndFrame
 
     storage = tmp_path / "db"
