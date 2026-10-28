@@ -134,3 +134,31 @@ def test_clip_writer_survives_jittery_timestamps_and_reader_plays_it(tmp_path):
         count += 1
     assert count == 120 - 60
     reader.close()
+
+def test_flush_registers_recording_and_timeline_stays_continuous(tmp_path):
+    pytest.importorskip("av")
+    import logging
+
+    from backEnd.ClipManager import ClipManager
+    from backEnd.native.open_capture import _ClipWriter
+
+    clip_mgr = ClipManager(logging.getLogger("test"))
+    clip_mgr.open(str(tmp_path / "clipdb"))
+    reader = _Reader(tmp_path)
+    reader._clip_mgr = clip_mgr
+    reader._clip_mgr_lock = None
+    reader._move_failed = None
+    writer = _ClipWriter(reader)
+    frame = np.zeros((96, 160, 3), dtype=np.uint8).tobytes()
+    ms = 10_000
+    for flush_round in range(3):
+        for _ in range(45):  # 3 s at 15 fps
+            ms += 66
+            writer.write(frame, 160, 96, ms)
+        assert writer.flush_if_long_enough() == 1
+    # Too short to be worth its own file: kept open.
+    writer.write(frame, 160, 96, ms + 66)
+    assert writer.flush_if_long_enough() == 0
+    ranges = clip_mgr.getTimesFromLocation("Cam", 0, ms + 10_000)
+    assert len(ranges) == 1, ranges
+    assert ranges[0][1] - ranges[0][0] >= 8_000

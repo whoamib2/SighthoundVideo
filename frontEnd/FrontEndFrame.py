@@ -47,6 +47,7 @@ import webbrowser
 
 # Common 3rd-party imports...
 import wx
+import wx.adv
 
 # Toolbox imports...
 from vitaToolbox.loggingUtils.LoggingUtils import getLogger
@@ -210,6 +211,10 @@ class FrontEndFrame(wx.Frame):
         self._lastSupportExpiredMessage = None
 
         self._terminatedBackEnd = False
+        # Closing the window hides it to the tray (recording keeps going);
+        # File > Exit or the tray's Quit really quits.
+        self._reallyQuit = False
+        self._trayIcon = None
 
         self._debugModeModel = wx.GetApp().getDebugModeModel()
         self._debugModeModel.addListener(self._handleDebugModeChange)
@@ -474,6 +479,16 @@ class FrontEndFrame(wx.Frame):
         """
         self._logger.info("Front end requested to close")
 
+        if (event.CanVeto() and (not self._reallyQuit) and
+                (not self._terminatedBackEnd) and
+                (not wx.App.Get().IsAppClosingAutomatically()) and
+                self._hasCameras()):
+            # Keep recording 24/7: hide to the notification area instead of
+            # leaving window-less background processes nobody can reach.
+            event.Veto()
+            self._hideToTray()
+            return
+
         # Stop getting messages from the back end.
         # Note: if in the future we can't do this because we need to get
         # messages from the back end while it's quitting, we should set a
@@ -498,6 +513,7 @@ class FrontEndFrame(wx.Frame):
 
             # We might want to give the user a chance to cancel the close...
             if (event.CanVeto()                         and
+                (not self._reallyQuit)                  and
                 (not getFrontEndPref(_kHideExitPrompt)) and
                 hasCameras                                 ):
 
@@ -517,8 +533,11 @@ class FrontEndFrame(wx.Frame):
 
             # If the app is being closed automatically, the backend is supposed
             # to be completely closed too.
-            if not hasCameras or wx.App.Get().IsAppClosingAutomatically():
+            if (not hasCameras or self._reallyQuit or
+                    wx.App.Get().IsAppClosingAutomatically()):
                 self.forceBackendExit()
+
+        self._removeTrayIcon()
 
         # If they close the main frame, it means we want the app to exit now,
         # even if there are other windows open (because we are a one-main-window
@@ -594,6 +613,48 @@ class FrontEndFrame(wx.Frame):
         @param  call  The callable to register.
         """
         self._prefsNotificationList.append(call)
+
+
+    ###########################################################
+    def _hideToTray(self):
+        """Hide the main window and show a notification-area icon."""
+        try:
+            if self._trayIcon is None:
+                self._trayIcon = _VigilTrayIcon(self)
+            self._logger.info("Main window hidden to the notification area")
+        except Exception:
+            self._logger.error("Could not create tray icon", exc_info=True)
+            self._trayIcon = None
+        self.Hide()
+
+
+    ###########################################################
+    def showFromTray(self):
+        """Bring the main window back (tray click or a second launch)."""
+        if self.IsIconized():
+            self.Iconize(False)
+        self.Show()
+        self.Raise()
+        self._removeTrayIcon()
+
+
+    ###########################################################
+    def quitFromTray(self):
+        """Really quit: front end, back end and cameras."""
+        self._reallyQuit = True
+        self._removeTrayIcon()
+        wx.CallAfter(self.Close, True)
+
+
+    ###########################################################
+    def _removeTrayIcon(self):
+        icon, self._trayIcon = self._trayIcon, None
+        if icon is not None:
+            try:
+                icon.RemoveIcon()
+                icon.Destroy()
+            except Exception:
+                pass
 
 
     ###########################################################
@@ -1022,6 +1083,7 @@ class FrontEndFrame(wx.Frame):
 
         @param  event  The event (ignored).
         """
+        self._reallyQuit = True
         # Close, don't use wx.Exit.  That way, python destructors get called.
         #
         # NOTE: Don't do anything important in this function, since if you
@@ -1818,3 +1880,34 @@ class _exitInfoDialog(wx.Dialog):
         @param  event  The button event.
         """
         self.EndModal(wx.CANCEL)
+
+
+##############################################################################
+class _VigilTrayIcon(wx.adv.TaskBarIcon):
+    """Notification-area icon shown while the main window is hidden."""
+    _kIdOpen = wx.NewIdRef()
+    _kIdQuit = wx.NewIdRef()
+
+    def __init__(self, frame):
+        wx.adv.TaskBarIcon.__init__(self)
+        self._frame = frame
+        icon = wx.Icon(resource_path(os.path.join("icons", "VigilCam.ico")),
+                       wx.BITMAP_TYPE_ICO)
+        self.SetIcon(icon, "%s - recording continues" % kAppName)
+        self.Bind(wx.adv.EVT_TASKBAR_LEFT_DCLICK, self._onOpen)
+        self.Bind(wx.adv.EVT_TASKBAR_LEFT_UP, self._onOpen)
+        self.Bind(wx.EVT_MENU, self._onOpen, id=self._kIdOpen)
+        self.Bind(wx.EVT_MENU, self._onQuit, id=self._kIdQuit)
+
+    def CreatePopupMenu(self):
+        menu = wx.Menu()
+        menu.Append(self._kIdOpen, "Open %s" % kAppName)
+        menu.AppendSeparator()
+        menu.Append(self._kIdQuit, "Quit %s (stops recording)" % kAppName)
+        return menu
+
+    def _onOpen(self, _event=None):
+        wx.CallAfter(self._frame.showFromTray)
+
+    def _onQuit(self, _event=None):
+        self._frame.quitFromTray()

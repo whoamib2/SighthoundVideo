@@ -249,6 +249,14 @@ class _ClipWriter:
         stream.time_base = fractions.Fraction(1, 1000)
         self._stream = stream
 
+    def flush_if_long_enough(self, min_ms: int = 2000) -> int:
+        if self._container is None or self._first_ms is None or self._last_ms is None:
+            return 0
+        if self._last_ms - self._first_ms < min_ms:
+            return 0
+        self.close_segment()
+        return 1
+
     def close_segment(self) -> None:
         if self._container is None:
             return
@@ -634,7 +642,20 @@ class StreamReader:
         return 0
 
     def flush(self, *args: Any) -> int:
-        return 0
+        """Finish the clip being written so search can play up to now.
+
+        The original capture library formalized its temporary file on
+        msgIdFlushVideo. Closing the segment registers it in clipdb; the next
+        frame opens a new segment linked to it, so coverage stays continuous.
+        """
+        writer = self._writer
+        if writer is None:
+            return 0
+        try:
+            return writer.flush_if_long_enough()
+        except Exception:
+            logging.getLogger(__name__).exception("Clip flush failed")
+            return 0
 
     def setMmapParams(self, enabled: Any, width: Any, height: Any, fps: Any) -> None:
         self._live_enabled = bool(enabled)
