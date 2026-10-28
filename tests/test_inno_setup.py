@@ -12,7 +12,7 @@ from pathlib import Path
 import pytest
 
 ROOT = Path(__file__).resolve().parents[1]
-ISS = ROOT / "installer" / "SighthoundVideo.iss"
+ISS = ROOT / "installer" / "VigilCam.iss"
 BUILD = ROOT / "scripts" / "build_windows.ps1"
 
 # Inno Setup 6 [Tasks] flags. "checked" is not one of them; tasks start checked.
@@ -109,7 +109,7 @@ def test_iscc_compiles_the_tasks_section_when_present(tmp_path):
         pytest.skip("ISCC.exe is not installed in this environment")
     payload = tmp_path / "payload"
     payload.mkdir()
-    (payload / "SighthoundVideo.exe").write_bytes(b"MZ")
+    (payload / "VigilCam.exe").write_bytes(b"MZ")
     tasks = "\n".join(_sections(ISS.read_text(encoding="utf-8"))["Tasks"])
     out = tmp_path / "out"
     out.mkdir()
@@ -119,17 +119,17 @@ def test_iscc_compiles_the_tasks_section_when_present(tmp_path):
         "\n".join(
             [
                 "[Setup]",
-                "AppName=Sighthound Video",
+                "AppName=VigilCam",
                 "AppVersion=7.0.16",
-                "DefaultDirName={autopf}\\Sighthound Video",
+                "DefaultDirName={autopf}\\VigilCam",
                 "OutputDir=" + out.as_posix(),
-                "OutputBaseFilename=SighthoundVideo-Setup",
+                "OutputBaseFilename=VigilCam-Setup",
                 "[Tasks]",
                 tasks,
                 "[Files]",
                 'Source: "' + (payload / "*").as_posix() + '"; DestDir: "{app}"',
                 "[Icons]",
-                'Name: "{autodesktop}\\Sighthound Video"; Filename: "{app}\\SighthoundVideo.exe"; Tasks: desktopicon',
+                'Name: "{autodesktop}\\VigilCam"; Filename: "{app}\\VigilCam.exe"; Tasks: desktopicon',
                 "",
             ]
         ),
@@ -137,4 +137,4 @@ def test_iscc_compiles_the_tasks_section_when_present(tmp_path):
     )
     ran = subprocess.run([iscc, str(script)], capture_output=True, text=True)
     assert ran.returncode == 0, ran.stdout + ran.stderr
-    assert (out / "SighthoundVideo-Setup.exe").is_file()
+    assert (out / "VigilCam-Setup.exe").is_file()

@@ -94,7 +94,7 @@ for rootdir, dirs, files in os.walk(os.path.abspath('.')):
 INCLUDE_FILES = LIBRARIES + [
 ]
 
-ICON_FILE = 'icons/SmartVideoApp.icns'
+ICON_FILE = 'icons/VigilCam.icns'
 
 # This is where the .app file will be moved when cxFreeze is finished bundling.
 TARGET_DIR = '../../../app-out/FrontEnd-Mac'
@@ -192,7 +192,7 @@ BUILD_EXE_OPTIONS = {
     # Modules that we need to include because cxFreeze missed them, or because
     # it has no way of finding out that we need them.
     'includes': [
-        'netifaces',
+        'psutil',
     ],
 
     # Include a module with all of its submodules.

@@ -63,7 +63,7 @@ _kConfigFile = "shlaunch.cfg"
 _kServiceExe = "shlaunch"
 
 # The sudo application we use to run the service with administrative rights.
-_kSudoExe = "SighthoundVideoLauncher"
+_kSudoExe = "VigilCamLauncher"
 
 # The (one and only) section in the configuration file.
 _kConfigSectionMain = "Main"

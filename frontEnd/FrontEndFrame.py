@@ -248,7 +248,7 @@ class FrontEndFrame(wx.Frame):
         # Set the app icons.  On Mac, the icon is set implicitly.
         if (wx.Platform == "__WXMSW__"):
             icons = wx.IconBundle()
-            icons.AddIcon(os.path.join("icons", "SmartVideoApp.ico"), wx.BITMAP_TYPE_ICO)
+            icons.AddIcon(os.path.join("icons", "VigilCam.ico"), wx.BITMAP_TYPE_ICO)
             self.SetIcons(icons)
 
         self.Bind(wx.EVT_CLOSE, self.OnClose)

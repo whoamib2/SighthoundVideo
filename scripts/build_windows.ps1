@@ -1,10 +1,10 @@
-# Build and test Sighthound Video on Windows, and optionally make an installer.
+# Build and test VigilCam on Windows, and optionally make an installer.
 #
 #   powershell -NoProfile -ExecutionPolicy Bypass -File scripts\build_windows.ps1
 #   powershell -NoProfile -ExecutionPolicy Bypass -File scripts\build_windows.ps1 -Package
 #
 # The script is safe to re-run. It reuses .venv, skips model downloads that
-# are already on disk, and overwrites dist\SighthoundVideo-Setup.exe.
+# are already on disk, and overwrites dist\VigilCam-Setup.exe.
 # onnxruntime-directml is installed for the venv and the packaged app. The
 # process uses DirectML when that provider loads, and CPU otherwise.
 
@@ -295,12 +295,12 @@ function Invoke-ModelFetch([string]$Python) {
     }
 }
 
-Write-Host "Sighthound Video Windows build"
+Write-Host "VigilCam Windows build"
 Write-Host "Repository: $Root"
 if ($Package) {
-    Write-Host "Installer: yes (dist\SighthoundVideo-Setup.exe)"
+    Write-Host "Installer: yes (dist\VigilCam-Setup.exe)"
 } else {
-    Write-Host "Installer: no (pass -Package to build dist\SighthoundVideo-Setup.exe)"
+    Write-Host "Installer: no (pass -Package to build dist\VigilCam-Setup.exe)"
 }
 
 $chosen = Find-BasePython
@@ -451,11 +451,11 @@ if ($Package) {
     Invoke-Checked "PyInstaller one-folder bundle" {
         & $Python (Join-Path $Root 'scripts\package_app.py') --windowed
     }
-    $bundle = Join-Path $Root 'dist\SighthoundVideo\SighthoundVideo.exe'
+    $bundle = Join-Path $Root 'dist\VigilCam\VigilCam.exe'
     if (-not (Test-Path -LiteralPath $bundle)) {
         throw "PyInstaller did not write $bundle."
     }
-    $debugCmd = Join-Path $Root 'dist\SighthoundVideo\SighthoundVideo-Debug.cmd'
+    $debugCmd = Join-Path $Root 'dist\VigilCam\VigilCam-Debug.cmd'
     if (-not (Test-Path -LiteralPath $debugCmd)) {
         throw "PyInstaller did not write $debugCmd."
     }
@@ -469,9 +469,9 @@ if ($Package) {
         throw "Inno Setup 6 (ISCC.exe) was not found under %LOCALAPPDATA%\Programs\Inno Setup 6, the uninstall registry, Program Files, or PATH. Install it from https://jrsoftware.org/isinfo.php or with winget, then re-run with -Package."
     }
     Write-Host "Inno Setup: $iscc"
-    $iss = Join-Path $Root 'installer\SighthoundVideo.iss'
+    $iss = Join-Path $Root 'installer\VigilCam.iss'
     Invoke-Checked "Inno Setup" { & $iscc $iss }
-    $script:InstallerPath = Join-Path $Root 'dist\SighthoundVideo-Setup.exe'
+    $script:InstallerPath = Join-Path $Root 'dist\VigilCam-Setup.exe'
     if (-not (Test-Path -LiteralPath $script:InstallerPath)) {
         throw "Inno Setup finished without writing $($script:InstallerPath)."
     }
@@ -479,7 +479,7 @@ if ($Package) {
 
 Write-Host ""
 Write-Host "========================================" -ForegroundColor Green
-Write-Host "Sighthound Video Windows build finished" -ForegroundColor Green
+Write-Host "VigilCam Windows build finished" -ForegroundColor Green
 Write-Host "  Python:    $Python"
 Write-Host "  Checks:    ruff, compileall, pytest"
 Write-Host "  Native:    $($script:NativeStatus)"

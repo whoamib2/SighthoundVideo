@@ -36,7 +36,7 @@
 #
 #*****************************************************************************
 
-import sys, netifaces, hashlib
+import sys, hashlib
 
 ###############################################################################
 
@@ -118,19 +118,8 @@ def _machine_id_fallback(logger=None):
     """
     found = []
     try:
-        for interfaceName in netifaces.interfaces():
-            interfaceAddresses = netifaces.ifaddresses(interfaceName)
-            linkAddresses = interfaceAddresses.get(netifaces.AF_LINK, None)
-            if linkAddresses is None:
-                continue
-            macs = []
-            for linkAddress in linkAddresses:
-                mac = linkAddress.get('addr', None)
-                if mac:
-                    if 0 == (2 & int(mac[0:2], 16)):
-                        macs.append(mac)
-            if len(macs) > 0:
-                found.append((interfaceName, macs))
+        from vitaToolbox.sysUtils.interfaces import mac_addresses
+        found = mac_addresses()
     except:
         if logger:
             logger.error("issue looking at MAC addresses (%s)" % sys.exc_info()[1])

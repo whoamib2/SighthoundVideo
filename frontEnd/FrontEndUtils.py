@@ -120,7 +120,10 @@ def getUserLocalDataDir():
                         pass
         return _kDataDir
     dataDir = wx.StandardPaths.Get().GetUserLocalDataDir()
-    return os.path.join(os.path.dirname(dataDir), kAppName)
+    new_dir = os.path.join(os.path.dirname(dataDir), kAppName)
+    # First launch after the VigilCam rename picks up the old folder.
+    from appCommon.startuplog import migrate_legacy_data_dir
+    return migrate_legacy_data_dir(os.path.dirname(new_dir))
 
 
 ###############################################################################

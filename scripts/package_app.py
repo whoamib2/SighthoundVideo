@@ -1,4 +1,4 @@
-"""Package Sighthound Video with PyInstaller.
+"""Package VigilCam with PyInstaller.
 
 The historical Windows build used py2exe and the Mac build used cx_Freeze.
 Both entry points (``frontEnd/setup-Win.py`` and ``frontEnd/setup-Mac.py``)
@@ -62,7 +62,7 @@ def _importable(name: str) -> bool:
 def pyinstaller_command(
     root: Path,
     *,
-    name: str = "SighthoundVideo",
+    name: str = "VigilCam",
     distpath: Path | None = None,
     workpath: Path | None = None,
     extra_binaries: list[str] | None = None,
@@ -90,6 +90,9 @@ def pyinstaller_command(
         str(root),
     ]
     # The frozen Windows app looks for models beside the executable.
+    icon = root / "icons" / "VigilCam.ico"
+    if icon.is_file():
+        command.extend(["--icon", str(icon)])
     if system == "win32":
         command.extend(["--contents-directory", "."])
     for module_name in ("backEnd", "frontEnd", "vitaToolbox", "appCommon", "launch", "xnat"):
@@ -123,12 +126,12 @@ _DEBUG_LAUNCHER = """@echo off
 \"%~dp0{exe}\" --console %*
 echo.
 echo Exit code %ERRORLEVEL%
-echo Startup log: %LOCALAPPDATA%\\Sighthound Video\\logs\\startup.log
+echo Startup log: %LOCALAPPDATA%\\VigilCam\\logs\\startup.log
 pause
 """
 
 
-def write_debug_launcher(folder: Path, exe_name: str = "SighthoundVideo.exe") -> Path:
+def write_debug_launcher(folder: Path, exe_name: str = "VigilCam.exe") -> Path:
     """Console double-click launcher next to the windowed executable.
 
     The windowed exe has no console. This command file starts it with
@@ -136,14 +139,14 @@ def write_debug_launcher(folder: Path, exe_name: str = "SighthoundVideo.exe") ->
     returns.
     """
     folder.mkdir(parents=True, exist_ok=True)
-    path = folder / "SighthoundVideo-Debug.cmd"
+    path = folder / "VigilCam-Debug.cmd"
     path.write_text(_DEBUG_LAUNCHER.format(exe=exe_name), encoding="utf-8", newline="\r\n")
     return path
 
 
 def main(argv: list[str] | None = None) -> int:
-    parser = argparse.ArgumentParser(description="Build a Sighthound Video bundle")
-    parser.add_argument("--name", default="SighthoundVideo")
+    parser = argparse.ArgumentParser(description="Build a VigilCam bundle")
+    parser.add_argument("--name", default="VigilCam")
     parser.add_argument("--distpath", default=str(ROOT / "dist"))
     parser.add_argument("--workpath", default=str(ROOT / "build" / "pyinstaller"))
     parser.add_argument(

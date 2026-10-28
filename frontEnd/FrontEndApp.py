@@ -137,13 +137,13 @@ _kLicenseLoadTimeout=30
 
 # Offer to move data...
 _kMoveDataOffer = (
-'''Would you like to import your existing data into Sighthound Video?'''
+'''Would you like to import your existing data into VigilCam?'''
 '''\n\n'''
-'''This data will no longer be accessible by Sighthound Video. Please '''
-'''first ensure that no Sighthound Video processes are running before '''
+'''This data will no longer be stored under the previous folder name. Please '''
+'''first ensure that no VigilCam processes are running before '''
 '''continuing, and make a backup of your existing data.'''
 )
-_kMoveDataOfferTitle = "Sighthound Video installation detected"
+_kMoveDataOfferTitle = "Previous installation detected"
 
 _kMoveFailedText = (
 '''Couldn't move existing data.'''
@@ -157,7 +157,7 @@ _kMoveFailedTitle = "Couldn't move"
 _kVideoMoveFailedText = (
 '''Couldn't move existing video files.'''
 '''\n\n'''
-'''Sighthound Video could not migrate the existing video files. Hit OK '''
+'''VigilCam could not migrate the existing video files. Hit OK '''
 '''to continue launching the application and begin from scratch, or Cancel '''
 '''to exit and attempt to manually back up existing video files. They may '''
 '''be located at "%s" or "%s".\n\n'''
@@ -169,7 +169,7 @@ _kStartError = \
 "The application could not be started.\nPlease wait a minute and try again."
 
 _kServiceMissingWin32 = \
-"""The service is not running.\nPlease check the Sighthound Video Launch """
+"""The service is not running.\nPlease check the VigilCam Launch """
 """entry in the 'Services' section of """
 """the Control Panel, or reinstall the application."""
 
@@ -301,7 +301,7 @@ class FrontEndApp(wx.App):
                 launchLog("UNCAUGHT LAUNCH CHECK ERROR (%s)" %
                           sys.exc_info()[1])
                 show_fatal(
-                    "Sighthound Video could not check the launch service.\n\n%s"
+                    "VigilCam could not check the launch service.\n\n%s"
                     % startup_log_path()
                 )
                 self._fatalShown = True
@@ -344,7 +344,7 @@ class FrontEndApp(wx.App):
             isRightVersionRunning = self._handleOldBackends()
 
             # Offer to move the user's data directory if they are upgrading
-            # from VDV to Sighthound Video. Must happen after setting app name
+            # from VDV to VigilCam. Must happen after setting app name
             # but before we do anything with the data directory...
             if not self._offerMoveDataDir():
                 return False
@@ -560,9 +560,9 @@ class FrontEndApp(wx.App):
         if not lic:
             log_startup("backend did not provide license data; leaving the window closed")
             wx.MessageBox(
-                "Sighthound Video could not read a license from the local backend.\n\n%s"
+                "VigilCam could not read a license from the local backend.\n\n%s"
                 % startup_log_path(),
-                "Cannot start Sighthound Video",
+                "Cannot start VigilCam",
                 wx.OK | wx.ICON_ERROR,
             )
             self._fatalShown = True
@@ -698,7 +698,7 @@ class FrontEndApp(wx.App):
 
         dataDir = getUserLocalDataDir()
 
-        # Look for old data in "Sighthound Video" and offer to move it...
+        # Look for old data in "VigilCam" and offer to move it...
         oldAppDir = os.path.join(os.path.split(dataDir)[0], "Sighthound Video" + os.sep)
         if os.path.isdir(oldAppDir):
             choice = wx.MessageBox(_kMoveDataOffer, _kMoveDataOfferTitle,
@@ -864,7 +864,7 @@ class FrontEndApp(wx.App):
                 osDir = os.path.expanduser("~/Library/Logs/DiagnosticReports")
                 crashes = os.listdir(osDir)
                 crashes = [os.path.join(osDir, crash) for crash in crashes if
-                    crash.startswith('Sighthound')]
+                    crash.startswith('Sighthound') or crash.startswith('VigilCam')]
 
                 if len(crashes):
                     prompt = _kCrashError
@@ -1013,13 +1013,13 @@ def validateOSVersion(logger):
         errStr = "Unsupported macOS version. macOS 10.10 or greater is required"
     elif major == 10 and minor == 12 and patch < 4:
         errStr = """Unsupported macOS version %s. This macOS version has a known problem, """\
-                 """which prevents Sighthound Video from functioning correctly. """\
+                 """which prevents VigilCam from functioning correctly. """\
                  """Please upgrade macOS to 10.12.4 or later version.""" % release
 
     if errStr is not None:
         dlg = wx.MessageDialog(None,
                         errStr,
-                        "Cannot start Sighthound Video",
+                        "Cannot start VigilCam",
                         wx.OK | wx.ICON_ERROR)
         dlg.ShowModal()
         return False
@@ -1042,7 +1042,7 @@ def main():
     except Exception:
         log_startup_exception("FrontEndApp constructor failed")
         show_fatal(
-            "Sighthound Video failed before the window opened.\n\n%s"
+            "VigilCam failed before the window opened.\n\n%s"
             % startup_log_path()
         )
         return
@@ -1063,7 +1063,7 @@ def main():
     except Exception:
         log_startup_exception("PostInit failed")
         show_fatal(
-            "Sighthound Video failed during startup.\n\n%s" % startup_log_path()
+            "VigilCam failed during startup.\n\n%s" % startup_log_path()
         )
         return
 
@@ -1072,7 +1072,7 @@ def main():
         log_startup("PostInit returned true, top-level windows=%d" % len(windows))
         if not windows:
             show_fatal(
-                "Sighthound Video did not open a window.\n\n%s" % startup_log_path()
+                "VigilCam did not open a window.\n\n%s" % startup_log_path()
             )
             return
         log_startup("entering MainLoop")
@@ -1085,7 +1085,7 @@ def main():
         log_startup("PostInit returned false, exiting")
         if not getattr(app, "_quietExit", False) and not getattr(app, "_fatalShown", False):
             show_fatal(
-                "Sighthound Video could not start.\n\n%s" % startup_log_path()
+                "VigilCam could not start.\n\n%s" % startup_log_path()
             )
     logger.info("Front end application closed...")
 
