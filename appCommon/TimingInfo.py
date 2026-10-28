@@ -98,11 +98,16 @@ class TimingInfo( object ):
     def associateKeys( self, dictIn ):
         msg = ''
         for key in dictIn:
-            # maybe non-ascii chars
-            valueAsUnicode  = str( dictIn[ key ])
-            valueAsAscii    = valueAsUnicode.encode( 'ascii', errors='replace' )
+            # Keep ASCII text. encode() returns bytes, which cannot be joined
+            # onto the log string.
+            value = dictIn[key]
+            if isinstance(value, (bytes, bytearray)):
+                value = bytes(value).decode('utf-8', 'replace')
+            else:
+                value = str(value)
+            valueAsAscii = value.encode('ascii', errors='replace').decode('ascii')
 
-            msg += str( key ) + '=\"' + valueAsAscii + '\"  '
+            msg += str(key) + '=\"' + valueAsAscii + '\"  '
             if TimingInfo.kKeySource == key:
                 self.sourceName = valueAsAscii
                 self._checkConfigForEnabled()
