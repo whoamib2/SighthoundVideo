@@ -530,14 +530,14 @@ class RuleListPanel(BorderImagePanel):
             newQuery.setCoordSpace(procSize)
         newQuery.getVideoSource().setLocationName(self._curLocation)
 
-        dlg = QueryEditorDialog(self.GetTopLevelParent(), self._dataManager,
-                                self._backEndClient,
-                                newQuery,
-                                kSearchViewDefaultRules +
-                                self._backEndClient.getRuleNames(),
-                                [self._curLocation])
-
+        dlg = None
         try:
+            dlg = QueryEditorDialog(self.GetTopLevelParent(), self._dataManager,
+                                    self._backEndClient,
+                                    newQuery,
+                                    kSearchViewDefaultRules +
+                                    self._backEndClient.getRuleNames(),
+                                    [self._curLocation])
             result = dlg.ShowModal()
 
             # If the user cancels the dialog, do nothing
@@ -545,9 +545,17 @@ class RuleListPanel(BorderImagePanel):
                 # Save the new rule
                 self._backEndClient.addRule(newQuery, True)
                 ruleCreated = True
-
+        except Exception as exc:
+            wx.MessageBox(
+                "New rule could not open.\n\n%s" % exc,
+                "New rule",
+                wx.OK | wx.ICON_ERROR,
+                self.GetTopLevelParent(),
+            )
+            return
         finally:
-            dlg.Destroy()
+            if dlg is not None:
+                dlg.Destroy()
 
         if ruleCreated:
             info = self._backEndClient.getRuleInfo(newQuery.getName())
@@ -598,16 +606,26 @@ class RuleListPanel(BorderImagePanel):
 
         if responseEdit:
             query.setLastEdited('response', None)
-        dlg = QueryEditorDialog(self.GetTopLevelParent(), self._dataManager,
-                                self._backEndClient, query,
-                                set(kSearchViewDefaultRules +
-                                    self._backEndClient.getRuleNames()) -
-                                set([query.getName()]),
-                                [origLocation])
+        dlg = None
         try:
+            dlg = QueryEditorDialog(self.GetTopLevelParent(), self._dataManager,
+                                    self._backEndClient, query,
+                                    set(kSearchViewDefaultRules +
+                                        self._backEndClient.getRuleNames()) -
+                                    set([query.getName()]),
+                                    [origLocation])
             result = dlg.ShowModal()
+        except Exception as exc:
+            wx.MessageBox(
+                "Edit rule could not open.\n\n%s" % exc,
+                "Edit rule",
+                wx.OK | wx.ICON_ERROR,
+                self.GetTopLevelParent(),
+            )
+            return
         finally:
-            dlg.Destroy()
+            if dlg is not None:
+                dlg.Destroy()
 
         if result == wx.ID_CANCEL:
             return

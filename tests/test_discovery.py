@@ -287,6 +287,18 @@ def test_upnp_notify_decodes_nts_and_ignores_unknown():
     assert ControlPointManager._checkForByebye(bye) == "uuid:camera-1"
 
 
+def test_upnp_description_socket_makefile_accepts_one_argument():
+    import io
+    import http.client
+    from vitaToolbox.networking.Upnp import _StringSock
+
+    body = b"HTTP/1.1 200 OK\r\nContent-Length: 5\r\n\r\nhello"
+    response = http.client.HTTPResponse(_StringSock(body), method="GET")
+    response.begin()
+    assert response.status == 200
+    assert response.read() == b"hello"
+
+
 def test_missing_port_file_says_backend_is_starting(tmp_path):
     from frontEnd.BackEndClient import BackendNotReady, _BackEndTransport
 

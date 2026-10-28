@@ -1129,8 +1129,12 @@ class BackEndApp(object):
                     # Ensure that the platform wrapper is still running
                     if not self._platformHTTPWrapperProc or \
                         not self._platformHTTPWrapperProc.is_alive():
-                        self._logger.warn("Platform wrapper is not running, restarting")
-                        self._initPlatformHTTPWrapper()
+                        now = time.time()
+                        last = getattr(self, "_platformWrapperRestartAt", 0)
+                        if now - last >= 30:
+                            self._platformWrapperRestartAt = now
+                            self._logger.warn("Platform wrapper is not running, restarting")
+                            self._initPlatformHTTPWrapper()
 
                     # Give the license manager opportunity to do things.
                     try:

@@ -103,6 +103,16 @@ def makeFontNotUnderlined(*args):
 
 
 ##############################################################################
+def _font_points(size):
+    """wx point sizes are integers. A float multiplier must not reach SetPointSize."""
+    try:
+        points = int(round(float(size)))
+    except (TypeError, ValueError):
+        points = 1
+    return max(1, points)
+
+
+##############################################################################
 def adjustPointSize(win, multiplier):
     """Adjust the point size by the given amount.
 
@@ -112,7 +122,7 @@ def adjustPointSize(win, multiplier):
     @param  multiplier  The amount to adjust by.
     """
     font = win.GetFont()
-    font.SetPointSize(font.GetPointSize()*multiplier)
+    font.SetPointSize(_font_points(font.GetPointSize() * multiplier))
     win.SetFont(font)
 
 
@@ -134,9 +144,9 @@ def shrinkLargeText(win, newSize=None):
     pointSize = font.GetPointSize()
     if pointSize > 10:
         if newSize:
-            font.SetPointSize(newSize)
+            font.SetPointSize(_font_points(newSize))
         else:
-            font.SetPointSize(pointSize-2)
+            font.SetPointSize(_font_points(pointSize - 2))
         win.SetFont(font)
 
 
@@ -150,7 +160,7 @@ def growTitleText(win, multiplier=1.5):
     @param  multiplier  The multiplier to increase the size by
     """
     font = win.GetFont()
-    font.SetPointSize(font.GetPointSize()*multiplier)
+    font.SetPointSize(_font_points(font.GetPointSize() * multiplier))
     if font.GetPointSize() < 14:
         font.SetWeight(wx.FONTWEIGHT_BOLD)
     win.SetFont(font)
