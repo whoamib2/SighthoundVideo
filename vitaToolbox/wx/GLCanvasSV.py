@@ -72,15 +72,30 @@ from vitaToolbox.wx.BindChildren import bindChildren
 
 
 
+def _gl_text(value):
+    """OpenGL string query as text.
+
+    PyOpenGL 3 returns ``bytes`` from ``glGetString``. ``None`` means the
+    context has no such string (or the context is not current).
+    """
+    if value is None:
+        return "(none)"
+    if isinstance(value, str):
+        text = value
+    elif isinstance(value, (bytes, bytearray, memoryview)):
+        text = bytes(value).split(b"\x00", 1)[0].decode("utf-8", errors="replace")
+    else:
+        text = str(value)
+    text = text.strip()
+    return text or "(none)"
+
+
 def getGLAttribute(attr):
     try:
-        res = gl.glGetString( attr )
-        if res is None:
-            res = '(none)'
-    except:
-        res = '(none)'
+        return _gl_text(gl.glGetString(attr))
+    except Exception:
         getLogger(kFrontEndLogName).exception("Failed to retrieve " + str(attr))
-    return res
+        return "(none)"
 
 
 _kDefaultInitSize = (640, 480)
