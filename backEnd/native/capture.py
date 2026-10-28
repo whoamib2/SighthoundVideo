@@ -86,6 +86,21 @@ def _function(module_name: str, name: str) -> Callable[..., Any]:
     return wrapper
 
 
+def _list_or_empty(module_name: str, name: str) -> Callable[..., Any]:
+    """Debug-menu listings. An open build has no videoLib2, so return []."""
+
+    def wrapper(*args: Any, **kwargs: Any) -> Any:
+        try:
+            module = _load(module_name)
+        except NativeDependencyError:
+            return []
+        return getattr(module, name)(*args, **kwargs)
+
+    wrapper.__name__ = name
+    wrapper.__qualname__ = name
+    return wrapper
+
+
 def _constant(module_name: str, name: str, default: Any) -> Any:
     try:
         return getattr(_load(module_name), name)
@@ -116,9 +131,9 @@ if _use_closed_capture():
     remuxClip = _function(_CLIP_UTILS, "remuxClip")
     getRealClipSize = _function(_CLIP_UTILS, "getRealClipSize")
     getTimestampFlags = _function(_VIDEO_LIB_UTILS, "getTimestampFlags")
-    GetVideolibModulesList = _function(_VIDEO_LIB_UTILS, "GetVideolibModulesList")
-    GetVideoLibDebugConfigItems = _function(_VIDEO_LIB_UTILS, "GetVideoLibDebugConfigItems")
-    GetVideoLibLogLevels = _function(_VIDEO_LIB_UTILS, "GetVideoLibLogLevels")
+    GetVideolibModulesList = _list_or_empty(_VIDEO_LIB_UTILS, "GetVideolibModulesList")
+    GetVideoLibDebugConfigItems = _list_or_empty(_VIDEO_LIB_UTILS, "GetVideoLibDebugConfigItems")
+    GetVideoLibLogLevels = _list_or_empty(_VIDEO_LIB_UTILS, "GetVideoLibLogLevels")
     SetVideoLibDebugConfig = _function(_VIDEO_LIB_UTILS, "SetVideoLibDebugConfig")
     SetVideoLibDebugConfigSimple = _function(
         _VIDEO_LIB_UTILS, "SetVideoLibDebugConfigSimple"

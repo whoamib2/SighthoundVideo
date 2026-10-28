@@ -343,7 +343,7 @@ class ViewToolbarControl(wx.Control):
         _, h = self.GetSize()
 
         # The buttons should be centered, according to the toolbar's size.
-        return _kSidePadding, (h - self._buttonsHeight+1) / 2
+        return _kSidePadding, (h - self._buttonsHeight+1) // 2
 
 
     ############################################################

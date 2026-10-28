@@ -257,7 +257,7 @@ class RadioPushButton(wx.Control):
 
         dc.DrawRoundedRectangle(0, 0, width, height, self._cornerRadius)
         dc.DrawText(self._label,
-                    (width - textWidth) / 2, (height - textHeight) / 2)
+                    (width - textWidth) // 2, (height - textHeight) // 2)
 
 
     ###########################################################

@@ -206,7 +206,7 @@ class RuleListPanel(BorderImagePanel):
         overlapSizer.Add(self._recordingEnabledButton)
         overlapSizer.Add(self._recordingDisabledButton)
         hSizer.Add(overlapSizer, 0, wx.ALL | wx.ALIGN_CENTER_VERTICAL,
-                   _kCtrlPadding/2)
+                   _kCtrlPadding//2)
         hSizer.Add(self._offText, 0, wx.LEFT | wx.RIGHT | wx.ALIGN_CENTER_VERTICAL,
                    _kCtrlPadding)
         hSizer.Add(self._onText, 0, wx.LEFT | wx.RIGHT | wx.ALIGN_CENTER_VERTICAL,
@@ -238,8 +238,8 @@ class RuleListPanel(BorderImagePanel):
                                              style=wx.TRANSPARENT_WINDOW,
                                              redrawFix=isWin)
         self._ruleWin.SetBackgroundStyle(kBackgroundStyle)
-        self._ruleSizer = wx.FlexGridSizer(cols=5, vgap=_kCtrlPadding/2,
-                                           hgap=_kCtrlPadding/2)
+        self._ruleSizer = wx.FlexGridSizer(cols=5, vgap=_kCtrlPadding//2,
+                                           hgap=_kCtrlPadding//2)
         self._ruleSizer.AddGrowableCol(1, 1)
         self._ruleSizer.AddGrowableCol(2, 1)
         self._ruleWin.SetSizer(self._ruleSizer)

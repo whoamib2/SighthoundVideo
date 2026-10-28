@@ -55,7 +55,8 @@ def formatTime(formatStr, timeStruct=None):
         retval = timeStruct.strftime(formatStr)
     else:
         retval = time.strftime(formatStr, timeStruct)
-    if currentLocale is not None and currentLocale[1] is not None:
+    # Python 3 strftime returns str. Decode only a bytes result.
+    if isinstance(retval, (bytes, bytearray)) and currentLocale and currentLocale[1]:
         retval = retval.decode(currentLocale[1])
     return retval
 

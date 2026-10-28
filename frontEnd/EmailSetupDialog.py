@@ -246,7 +246,7 @@ class EmailSetupDialog(wx.Dialog):
 
         # Make our top label line up with top label on next tab
         localSizer.AddSpacer(
-            max((self._toAddrField.GetSize()[1]-toAddrLabel.GetSize()[1])/2, 0))
+            max((self._toAddrField.GetSize()[1]-toAddrLabel.GetSize()[1])//2, 0))
         localSizer.Add(toAddrLabel, 0, wx.BOTTOM, 8)
         localSizer.Add(self._toAddrField, 0, wx.EXPAND | wx.BOTTOM, 4)
         localSizer.Add(toHelpLabel, 0, wx.BOTTOM, 12)
@@ -258,7 +258,7 @@ class EmailSetupDialog(wx.Dialog):
 
         # Make our top label line up with top label on next tab
         localSizer.AddSpacer(
-            max((self._subjectField.GetSize()[1]-subjectLabel.GetSize()[1])/2, 0))
+            max((self._subjectField.GetSize()[1]-subjectLabel.GetSize()[1])//2, 0))
         localSizer.Add(subjectLabel, 0, wx.BOTTOM, 8)
         localSizer.Add(self._subjectField, 0, wx.EXPAND | wx.BOTTOM, 4)
 

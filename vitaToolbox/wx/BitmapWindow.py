@@ -248,8 +248,8 @@ class BitmapWindow(wx.Window):
                 self._offset = (-left, -upper)
             else:
                 # bitmap is smaller than window, so paste it in center
-                left  = (winWidth - bmpWidth)/2
-                upper = (winHeight - bmpHeight)/2
+                left  = (winWidth - bmpWidth)//2
+                upper = (winHeight - bmpHeight)//2
                 self._offset = (left, upper)
 
         self.Refresh()

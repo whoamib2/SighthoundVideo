@@ -346,11 +346,11 @@ class HoverButton(wx.Control):
         style = self.GetWindowStyle()
         x = cornerRadius + offset
         if style & wx.ALIGN_CENTER:
-            x += (widthForText - textWidth) / 2
+            x += (widthForText - textWidth) // 2
         elif style & wx.ALIGN_RIGHT:
             x += widthForText - textWidth
 
-        dc.DrawText(label, x, (height - textHeight) / 2)
+        dc.DrawText(label, x, (height - textHeight) // 2)
 
         if self._menu:
             renderer = wx.RendererNative.Get()
@@ -416,7 +416,7 @@ class HoverButton(wx.Control):
                     # this HoverButton on the call stack. So we will do a
                     # wx.callafter on the popup menu so that if the this control is
                     # destroyed, we won't crash.
-                    wx.CallAfter(self.PopupMenu, self._menu, (offset+height/2, height))
+                    wx.CallAfter(self.PopupMenu, self._menu, (offset+height//2, height))
                     self._lastPopup = time.time()
 
                 self.OnMouseUp(event)
@@ -631,7 +631,7 @@ class HoverButton(wx.Control):
 
             style = self.GetWindowStyle()
             if style & wx.ALIGN_CENTER:
-                offset = offset/2
+                offset = offset//2
             elif not (style & wx.ALIGN_RIGHT):
                 offset = 0
 
