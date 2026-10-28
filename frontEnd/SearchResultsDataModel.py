@@ -1823,9 +1823,9 @@ def _findPlaceInRangeList(rangeList, x):
     1.5
 
     # Stress test a bit...
-    >>> [_findPlaceInRangeList([(1,2), (4,5), (7,8), (10,11)], i) for i in xrange(13)]
+    >>> [_findPlaceInRangeList([(1,2), (4,5), (7,8), (10,11)], i) for i in range(13)]
     [-0.5, 0, 0, 0.5, 1, 1, 1.5, 2, 2, 2.5, 3, 3, 3.5]
-    >>> [_findPlaceInRangeList([(1,2), (4,5), (7,8)], i) for i in xrange(10)]
+    >>> [_findPlaceInRangeList([(1,2), (4,5), (7,8)], i) for i in range(10)]
     [-0.5, 0, 0, 0.5, 1, 1, 1.5, 2, 2, 2.5]
 
     # Special case of empty list: returns 0.5

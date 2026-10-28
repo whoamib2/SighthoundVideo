@@ -36,7 +36,6 @@
 #*****************************************************************************
 
 import os
-import sys
 from http.server import BaseHTTPRequestHandler, HTTPServer
 from . import MessageIds
 import traceback
@@ -53,23 +52,12 @@ from backEnd.native.onnx_detector import create_detector
 #from DebugLogManager import DebugLogManager
 
 from vitaToolbox.loggingUtils.LoggingUtils import getLogger
+from appCommon.resources import model_dir
 
 ################################################################################
 # TODO: duplicated into ObjectDetectorClient.py, too small for its own module ... resolve the redundancy
 def _getModelDir():
-    if hasattr(sys, 'frozen'):
-        path = os.path.dirname(sys.executable)
-        if sys.platform == 'darwin':
-            return os.path.join(path, "..", "Resources", "models" )
-        return os.path.join(path, "models" )
-    else:
-        devLibFolder = os.getenv("SV_DEVEL_LIB_FOLDER_CONAN")
-        if devLibFolder is not None and devLibFolder != "":
-            res = os.path.join(devLibFolder, "..", "models")
-            if os.path.isdir(res):
-                return res
-        # This likely won't work
-        return os.path.join("..", "models")
+    return model_dir()
 
 ################################################################################
 def _as_body(text):

@@ -61,7 +61,8 @@ def abspathU(path):
        part and relative part to unicode to join them.  This will fail, since
        the default str to unicode conversion assumes the str is ASCII.
 
-    The fix is to use os.getcwdu().  Note that we only do this upon failure.
+    Python 2 needed the wide-character form of getcwd for this case.  Note that
+    we only do this upon failure.
     Why?
     * On Windows, the default abspath() doesn't seem to have problems, and
       it goes through a different code path.  We want that other code path on

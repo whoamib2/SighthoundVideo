@@ -22,17 +22,48 @@ PyInstaller itself is an optional dependency (``pip install pyinstaller``).
 from __future__ import annotations
 
 import argparse
+import os
 import sys
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 
-_DATA_DIRS = (
-    "frontEnd/bmps",
-    "fonts",
-    "icons",
-    "config",
-)
+# Directories that are never application data, even if a file inside them
+# happens to use a resource suffix.
+_SKIP_DIR_NAMES = {
+    ".git",
+    ".venv",
+    "venv",
+    "build",
+    "dist",
+    "tests",
+    "__pycache__",
+    ".pytest_cache",
+    ".cursor",
+    ".mypy_cache",
+}
+
+# Non-Python files the UI and the packager open by relative path. Model
+# weights are added file-by-file further down so a models/README is not packed.
+_RESOURCE_SUFFIXES = {
+    ".png",
+    ".jpg",
+    ".jpeg",
+    ".gif",
+    ".bmp",
+    ".ico",
+    ".icns",
+    ".wav",
+    ".mp3",
+    ".ogg",
+    ".ttf",
+    ".otf",
+    ".html",
+    ".css",
+    ".xml",
+    ".pem",
+    ".svg",
+}
 
 _COLLECT_ALL = ("wx", "av", "onnxruntime", "PIL", "numpy", "cv2", "OpenGL", "certifi", "psutil")
 # PyOpenGL loads platform plugins after the first import. PyInstaller does not
@@ -72,6 +103,40 @@ def _importable(name: str) -> bool:
     return True
 
 
+def resource_directories(root: Path) -> list[str]:
+    """Relative directories of bundled images, sounds, fonts, and similar files.
+
+    A directory is included when it directly contains a resource file. Nested
+    directories are collapsed into an ancestor that also contains a resource,
+    so ``frontEnd/bmps`` covers ``frontEnd/bmps/mac`` and ``frontEnd/bmps/win``.
+    The top-level ``models`` directory is omitted here; ONNX files are added
+    individually.
+    """
+    root = Path(root)
+    found: set[str] = set()
+    for dirpath, dirnames, filenames in os.walk(root):
+        dirnames[:] = [
+            name for name in dirnames
+            if name not in _SKIP_DIR_NAMES and not name.endswith(".egg-info")
+        ]
+        relative = Path(dirpath).relative_to(root)
+        if relative.parts and (
+            relative.parts[0] in _SKIP_DIR_NAMES or relative.parts[0] == "models"
+        ):
+            dirnames[:] = []
+            continue
+        if relative == Path("."):
+            continue
+        if any(Path(name).suffix.lower() in _RESOURCE_SUFFIXES for name in filenames):
+            found.add(relative.as_posix())
+    kept: list[str] = []
+    for relative in sorted(found, key=lambda item: (item.count("/"), item)):
+        if any(relative.startswith(parent + "/") for parent in kept):
+            continue
+        kept.append(relative)
+    return kept
+
+
 def pyinstaller_command(
     root: Path,
     *,
@@ -102,7 +167,8 @@ def pyinstaller_command(
         "--paths",
         str(root),
     ]
-    # The frozen Windows app looks for models beside the executable.
+    # Windows one-folder bundles put datas next to the executable, which is
+    # sys._MEIPASS. appCommon.resources.resource_path joins bundled paths there.
     icon = root / "icons" / "VigilCam.ico"
     if icon.is_file():
         command.extend(["--icon", str(icon)])
@@ -115,13 +181,10 @@ def pyinstaller_command(
     for module_name in _COLLECT_ALL:
         if _importable(module_name):
             command.extend(["--collect-all", module_name])
-    for relative in _DATA_DIRS:
+    for relative in resource_directories(root):
         source = root / relative
         if source.is_dir():
-            command.extend(["--add-data", _data_arg(source, relative, sep)])
-    sounds = root / "frontEnd" / "sounds"
-    if sounds.is_dir():
-        command.extend(["--add-data", _data_arg(sounds, "frontEnd/sounds", sep)])
+            command.extend(["--add-data", _data_arg(source, relative.replace("\\", "/"), sep)])
     models = root / "models"
     if models.is_dir():
         for path in sorted(models.iterdir()):
