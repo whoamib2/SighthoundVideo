@@ -455,6 +455,10 @@ if ($Package) {
     if (-not (Test-Path -LiteralPath $bundle)) {
         throw "PyInstaller did not write $bundle."
     }
+    $debugCmd = Join-Path $Root 'dist\SighthoundVideo\SighthoundVideo-Debug.cmd'
+    if (-not (Test-Path -LiteralPath $debugCmd)) {
+        throw "PyInstaller did not write $debugCmd."
+    }
     $iscc = Find-Iscc
     if (-not $iscc) {
         Install-WithWinget 'JRSoftware.InnoSetup' 'Inno Setup 6' { return [bool](Find-Iscc) } | Out-Null

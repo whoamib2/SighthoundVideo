@@ -57,25 +57,18 @@ def getLaunchParameters(name=kBackendExeName):
 
     # Launch the back end application
     if frozen is not None:
-        # Windows and OSX Built -
-
-        # On Windows, Replace the name--we have a copy of the executable so it
-        # shows up better in the Task Manager.
-        exeDir = os.path.split(sys.executable)[0]
-
+        # The packaged Windows app is SighthoundVideo.exe. Re-launch that
+        # executable. There is no separate "Sighthound Agent" binary.
         if sys.platform == 'darwin':
-            name = kExeName
-
-        backendExeName = os.path.join(exeDir, name)
-
-        # On frozen windows, the sys.executable is our .exe file.
-        # Re-launch it with a --backEnd flag to launch the backend.
-        # On frozen Mac the frontend is also the backend, the actual launch
-        # points have to ensure that the --backend flag is added to the params
-        openParams = [backendExeName]
+            exeDir = os.path.split(sys.executable)[0]
+            openParams = [os.path.join(exeDir, kExeName)]
+        else:
+            openParams = [sys.executable]
     else:
-        # Windows and OSX non-built -
-        openParams = [sys.executable, "FrontEndLaunchpad.py"]
+        # Windows and OSX non-built. Use the absolute path so this still works
+        # when the process was not started in the repository root.
+        root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+        openParams = [sys.executable, os.path.join(root, "FrontEndLaunchpad.py")]
 
     return openParams
 
