@@ -34,7 +34,20 @@ _DATA_DIRS = (
     "config",
 )
 
-_COLLECT_ALL = ("wx", "av", "onnxruntime", "PIL", "numpy", "cv2")
+_COLLECT_ALL = ("wx", "av", "onnxruntime", "PIL", "numpy", "cv2", "OpenGL", "certifi", "psutil")
+# PyOpenGL loads platform plugins after the first import. PyInstaller does not
+# trace those, so they are named here.
+_HIDDEN_IMPORTS = (
+    "OpenGL",
+    "OpenGL.GL",
+    "OpenGL.GLU",
+    "OpenGL.platform.win32",
+    "OpenGL.arrays",
+    "OpenGL.arrays.numpymodule",
+    "OpenGL.raw.GL",
+    "certifi",
+    "psutil",
+)
 
 
 def _sep(platform: str) -> str:
@@ -95,8 +108,10 @@ def pyinstaller_command(
         command.extend(["--icon", str(icon)])
     if system == "win32":
         command.extend(["--contents-directory", "."])
-    for module_name in ("backEnd", "frontEnd", "vitaToolbox", "appCommon", "launch", "xnat"):
+    for module_name in ("backEnd", "frontEnd", "vitaToolbox", "appCommon", "launch", "xnat", "OpenGL"):
         command.extend(["--collect-submodules", module_name])
+    for module_name in _HIDDEN_IMPORTS:
+        command.extend(["--hidden-import", module_name])
     for module_name in _COLLECT_ALL:
         if _importable(module_name):
             command.extend(["--collect-all", module_name])

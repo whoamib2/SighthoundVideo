@@ -15,6 +15,10 @@ dependencies = [
     "numpy>=1.26",
     "av>=12",
     "psutil>=6",
+    # Video windows import OpenGL at startup. The package is pure Python.
+    "PyOpenGL>=3.1.7",
+    # Requests reads certifi by name when the app is frozen.
+    "certifi",
     # The CPU wheel and onnxruntime-directml both install the onnxruntime
     # package. Windows must not depend on the CPU wheel.
     "onnxruntime>=1.18; sys_platform != 'win32'",
