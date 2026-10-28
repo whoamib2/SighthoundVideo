@@ -42,7 +42,7 @@ YOLOX_NANO = {
     "source": "https://github.com/Megvii-BaseDetection/YOLOX",
     "note": (
         "YOLOX-Nano COCO weights from the 0.1.1rc0 release. "
-        "Input is 416x416 RGB, unnormalized (0-255), gray pad 114. "
+        "Input is 416x416 BGR (channel_order), unnormalized (0-255), gray pad 114. "
         "Person, vehicle, and animal COCO classes are mapped onto the rule engine."
     ),
 }

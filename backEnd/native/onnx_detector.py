@@ -152,6 +152,15 @@ def _read_spec(model_path: str, session: Any) -> dict[str, Any]:
     return spec
 
 
+def _wants_bgr(spec: dict[str, Any]) -> bool:
+    """YOLOX COCO weights were trained on OpenCV BGR images. Feeding RGB
+    roughly halves vehicle scores and loses most small objects."""
+    order = str(spec.get("channel_order") or "").lower()
+    if order in ("bgr", "rgb"):
+        return order == "bgr"
+    return str(spec.get("layout") or "").lower() == "yolox"
+
+
 def _input_hw(session: Any, spec: dict[str, Any]) -> tuple[int, int, bool]:
     """Return ``(height, width, channels_first)``."""
     shape = session.get_inputs()[0].shape
@@ -177,7 +186,17 @@ def _is_dim(value: Any) -> bool:
     return isinstance(value, int) and value > 0
 
 
-def _letterbox(rgb: bytes, width: int, height: int, size: int, pad: int, normalize: bool, resize: str, channels_first: bool):
+def _letterbox(
+    rgb: bytes,
+    width: int,
+    height: int,
+    size: int,
+    pad: int,
+    normalize: bool,
+    resize: str,
+    channels_first: bool,
+    bgr: bool = False,
+):
     import numpy as np
     from PIL import Image
 
@@ -192,6 +211,8 @@ def _letterbox(rgb: bytes, width: int, height: int, size: int, pad: int, normali
     pad_y = (size - new_h) // 2
     canvas.paste(resized, (pad_x, pad_y))
     array = np.asarray(canvas).astype(np.float32)
+    if bgr:
+        array = array[:, :, ::-1]
     if normalize:
         array *= 1.0 / 255.0
     if channels_first:
@@ -427,6 +448,7 @@ class OnnxYoloDetector:
             bool(self._spec.get("normalize", True)),
             str(self._spec.get("resize", "bilinear")),
             self._channels_first,
+            _wants_bgr(self._spec),
         )
         outputs = self._session.run(None, {self._input_name: blob})
         attributes = self._extra_attributes(outputs)

@@ -11,9 +11,12 @@ part of this backend.
 
 from __future__ import annotations
 
+import bisect
+import collections
 import ctypes
 import fractions
 import glob
+import logging
 import mmap
 import os
 import sys
@@ -32,6 +35,7 @@ from appCommon.LiveViewBuffer import (
 _LIVE_MAX_WIDTH = 1280
 _LIVE_MAX_HEIGHT = 720
 _DEFAULT_CLIP_MS = 60_000
+_CLIP_FPS = 15
 _MAX_RECORD_WIDTH = 1280
 
 
@@ -81,12 +85,13 @@ class VideoFrame:
         self.filename = filename or ""
         self.dummy = bool(dummy)
         self.wasResized = False
+        self._large: Optional["VideoFrame"] = None
         # create_string_buffer copies and appends a NUL. Readers use width*height*3.
         self._storage = ctypes.create_string_buffer(self.rgb)
         self.buffer = ctypes.cast(self._storage, ctypes.c_void_p)
 
     def getLargeFrame(self) -> "VideoFrame":
-        return self
+        return self._large if self._large is not None else self
 
     def asPil(self):
         from PIL import Image
@@ -133,6 +138,27 @@ def _record_dims(width: int, height: int) -> tuple[int, int]:
     return _even(width), _even(height)
 
 
+def analytics_frame(frame: "VideoFrame") -> "VideoFrame":
+    """The frame the tracker sees: the camera frame scaled to the recorded
+    clip size, with the full-size frame kept for the detector.
+
+    A 4096x1536 camera frame made the pure-Python motion tracker take about a
+    second per frame, so tracks broke up and objects were never sent to the
+    detector. Boxes stay in the same coordinates as the recorded clips.
+    """
+    out_w, out_h = _record_dims(frame.width, frame.height)
+    if (out_w, out_h) == (frame.width, frame.height):
+        return frame
+    from PIL import Image
+
+    image = Image.frombytes("RGB", (frame.width, frame.height), frame.rgb)
+    image = image.resize((out_w, out_h), Image.Resampling.BILINEAR)
+    small = VideoFrame(image.tobytes(), out_w, out_h, frame.ms, filename=frame.filename, dummy=frame.dummy)
+    small.wasResized = True
+    small._large = frame
+    return small
+
+
 def _frame_ms(frame: Any, fallback_ms: int) -> int:
     stamp = getattr(frame, "time", None)
     if stamp is None:
@@ -158,6 +184,7 @@ class _ClipWriter:
         self._first_ms: Optional[int] = None
         self._last_ms: Optional[int] = None
         self._prev_relative = ""
+        self._last_tick = -1
         self._width = 0
         self._height = 0
 
@@ -180,8 +207,15 @@ class _ClipWriter:
         video = av.VideoFrame.from_ndarray(array, format="rgb24")
         if self._first_ms is None:
             self._first_ms = ms
-        video.pts = max(0, ms - self._first_ms)
-        video.time_base = self._stream.time_base
+        # libx264 encodes in 1/15 s ticks whatever the stream time base is.
+        # Two frames that arrive within one tick got the same pts, the muxer
+        # rejected the packet (EINVAL) and the file was left without an index.
+        tick = int(round(max(0, ms - self._first_ms) * _CLIP_FPS / 1000.0))
+        if tick <= self._last_tick:
+            tick = self._last_tick + 1
+        self._last_tick = tick
+        video.pts = tick
+        video.time_base = fractions.Fraction(1, _CLIP_FPS)
         for packet in self._stream.encode(video):
             self._container.mux(packet)
         self._last_ms = ms
@@ -198,8 +232,16 @@ class _ClipWriter:
         self._height = _record_dims(width, height)[1]
         self._first_ms = ms
         self._last_ms = ms
+        self._last_tick = -1
         av = _av()
-        self._container = av.open(self._full_path, mode="w")
+        # Fragmented MP4 keeps every finished fragment playable. A plain MP4
+        # writes its index (moov) only on close, so a capture process that
+        # restarts or dies leaves a file no player can open.
+        self._container = av.open(
+            self._full_path,
+            mode="w",
+            options={"movflags": "frag_keyframe+empty_moov+default_base_moof"},
+        )
         stream = self._container.add_stream("libx264", rate=15)
         stream.width = self._width
         stream.height = self._height
@@ -433,8 +475,14 @@ class StreamReader:
         lowered = uri.lower()
         if lowered.startswith(("rtsp://", "rtsps://", "http://", "https://")):
             options["rtsp_transport"] = "tcp"
-        self._container = av.open(uri, options=options or None)
+        # Without a timeout a stalled RTSP read blocks the capture loop forever,
+        # and CameraCapture's own stream timeout never gets to run.
+        self._container = av.open(uri, options=options or None, timeout=(15.0, 10.0))
         stream = _video_stream(self._container)
+        try:
+            stream.thread_type = "AUTO"
+        except Exception:
+            pass
         self._width = int(stream.codec_context.width or 0)
         self._height = int(stream.codec_context.height or 0)
         self._iterator = self._container.decode(stream)
@@ -517,8 +565,14 @@ class StreamReader:
             try:
                 self._writer.write(rgb, width, height, ms)
                 filename = self._writer.relative_path
-            except Exception:
-                self._writer = None
+            except Exception as exc:
+                logging.getLogger(__name__).warning("Clip write failed, starting a new segment: %r", exc)
+                # Close what was written so the clip stays playable, then
+                # start a fresh segment on the next frame.
+                try:
+                    self._writer.close_segment()
+                except Exception:
+                    pass
         frame = VideoFrame(rgb, width, height, ms, filename=filename, dummy=False)
         self._width = width
         self._height = height
@@ -531,7 +585,7 @@ class StreamReader:
                 hls.write(rgb, width, height, ms)
             except Exception:
                 pass
-        return frame
+        return analytics_frame(frame)
 
     def _read_rgb(self) -> tuple[Optional[bytes], int, int, int]:
         if self._capture is not None:
@@ -548,14 +602,26 @@ class StreamReader:
             decoded = next(self._iterator)
         except StopIteration:
             return None, 0, 0, 0
-        array = decoded.to_ndarray(format="rgb24")
+        # Convert straight to the recording size inside libswscale. A full
+        # 4096x1536 RGB copy per frame plus a Python resize kept the loop at
+        # about 3 fps on a 15 fps camera, the RTSP backlog grew until reads
+        # stalled for 10 s and the capture process was restarted every minute.
+        out_w, out_h = _record_dims(int(decoded.width), int(decoded.height))
+        if (out_w, out_h) != (int(decoded.width), int(decoded.height)):
+            array = decoded.to_ndarray(width=out_w, height=out_h, format="rgb24")
+        else:
+            array = decoded.to_ndarray(format="rgb24")
         height, width = array.shape[:2]
         ms = _frame_ms(decoded, self._fallback_ms)
         self._fallback_ms = ms + 1
         return array.tobytes(), int(width), int(height), ms
 
     def getProcSize(self) -> tuple[int, int]:
-        return (int(self._width), int(self._height))
+        # Boxes are in analytics-frame coordinates, which match the recorded
+        # clip size (see analytics_frame and _ClipWriter).
+        if self._width <= 0 or self._height <= 0:
+            return (int(self._width), int(self._height))
+        return _record_dims(self._width, self._height)
 
     def getInitialFrameBufferSize(self) -> int:
         if self._width > 0 and self._height > 0:
@@ -758,15 +824,34 @@ def _iter_video_frames(path: str):
         container.close()
 
 
-def _timestamp_list(path: str) -> list[int]:
+def _packet_stamps(container: Any, stream: Any) -> list[int]:
+    """Presentation timestamps in ms from the demuxer, without decoding."""
+    time_base = float(stream.time_base or 0) or (1.0 / 1000.0)
+    raw = []
+    for packet in container.demux(stream):
+        if packet.pts is not None and packet.size:
+            raw.append(int(packet.pts))
+    raw.sort()
     stamps: list[int] = []
     last = -1
-    for ms, _rgb, _w, _h, _iw, _ih in _iter_video_frames(path):
+    for pts in raw:
+        ms = int(round(pts * time_base * 1000.0))
         if stamps and ms <= last:
             ms = last + 1
         stamps.append(ms)
         last = ms
     return stamps
+
+
+def _timestamp_list(path: str) -> list[int]:
+    # Demux only. Decoding every frame to RGB took seconds per clip and the
+    # search, thumbnail and cleaner paths call this for every result.
+    av = _av()
+    container = av.open(path)
+    try:
+        return _packet_stamps(container, _video_stream(container))
+    finally:
+        container.close()
 
 
 def getMsList(path: str, logFn: Any = None) -> list[int]:
@@ -823,11 +908,14 @@ def _write_mp4(path: str, frames: list[tuple[int, bytes, int, int]]) -> bool:
         stream.height = height
         stream.pix_fmt = "yuv420p"
         origin = frames[0][0]
+        last_tick = -1
         for ms, rgb, fw, fh in frames:
             array = _rgb_ndarray(rgb, fw, fh)[:height, :width]
             video = av.VideoFrame.from_ndarray(array, format="rgb24")
-            video.pts = max(0, int(ms - origin))
-            video.time_base = fractions.Fraction(1, 1000)
+            # Same 1/15 s encoder ticks as _ClipWriter; keep them strictly increasing.
+            last_tick = max(last_tick + 1, int(round(max(0, ms - origin) * _CLIP_FPS / 1000.0)))
+            video.pts = last_tick
+            video.time_base = fractions.Fraction(1, _CLIP_FPS)
             for packet in stream.encode(video):
                 container.mux(packet)
         for packet in stream.encode():
@@ -945,12 +1033,25 @@ class ClipFrame:
 
 
 class ClipReader:
-    """Random-access reader for MP4 clips written by :class:`StreamReader`."""
+    """Random-access reader for MP4 clips written by :class:`StreamReader`.
+
+    Frames are decoded on demand. Decoding a whole 60 s clip up front held
+    about 1.6 GB of RGB for a 1280x480 camera and left the search player
+    black while it loaded.
+    """
+
+    _CACHE_FRAMES = 48
 
     def __init__(self, logFn: Any = None) -> None:
         self._log_fn = logFn
         self._path = ""
-        self._frames: list[tuple[int, bytes, int, int]] = []
+        self._stamps: list[int] = []
+        self._pts: list[int] = []
+        self._cache: "collections.OrderedDict[int, tuple[bytes, int, int]]" = collections.OrderedDict()
+        self._container = None
+        self._stream = None
+        self._decoder = None
+        self._decoded_index = -1
         self._input_size = (0, 0)
         self._out_w = 0
         self._out_h = 0
@@ -965,29 +1066,58 @@ class ClipReader:
         self._out_w = int(outW or 0)
         self._out_h = int(outH or 0)
         try:
-            loaded = []
-            input_size = (0, 0)
-            origin = None
+            av = _av()
+            container = av.open(path)
+            try:
+                stream = _video_stream(container)
+                time_base = float(stream.time_base or 0) or (1.0 / 1000.0)
+                raw = sorted(
+                    int(packet.pts) for packet in container.demux(stream) if packet.pts is not None and packet.size
+                )
+            finally:
+                container.close()
+            if not raw:
+                return False
+            # Same rounding as getMsList so search offsets land on the same frame.
+            origin = int(round(raw[0] * time_base * 1000.0))
+            stamps: list[int] = []
             last = -1
-            for ms, rgb, width, height, in_w, in_h in _iter_video_frames(path):
-                if origin is None:
-                    origin = ms
-                    input_size = (in_w or width, in_h or height)
-                relative = ms - origin
-                if loaded and relative <= last:
+            for pts in raw:
+                relative = int(round(pts * time_base * 1000.0)) - origin
+                if stamps and relative <= last:
                     relative = last + 1
-                loaded.append((relative, rgb, width, height))
+                stamps.append(relative)
                 last = relative
-            self._frames = loaded
-            self._input_size = input_size
+            self._pts = raw
+            self._stamps = stamps
+            self._container = av.open(path)
+            self._stream = _video_stream(self._container)
+            try:
+                self._stream.thread_type = "AUTO"
+            except Exception:
+                pass
+            ctx = self._stream.codec_context
+            self._input_size = (int(ctx.width or 0), int(ctx.height or 0))
             self._index = -1
-            return bool(loaded)
-        except Exception:
-            self._frames = []
+            return True
+        except Exception as exc:
+            logging.getLogger(__name__).warning("ClipReader could not open %s: %r", path, exc)
+            self.close()
             return False
 
     def close(self) -> None:
-        self._frames = []
+        self._decoder = None
+        if self._container is not None:
+            try:
+                self._container.close()
+            except Exception:
+                pass
+        self._container = None
+        self._stream = None
+        self._decoded_index = -1
+        self._cache.clear()
+        self._stamps = []
+        self._pts = []
         self._index = -1
 
     def getInputSize(self) -> tuple[int, int]:
@@ -1006,42 +1136,88 @@ class ClipReader:
         self._out_h = int(resolution[1] or 0)
 
     def seek(self, offsetMs: int) -> Optional[ClipFrame]:
-        if not self._frames:
+        if not self._stamps:
             return None
-        target = int(offsetMs)
-        chosen = 0
-        for index, (ms, _rgb, _w, _h) in enumerate(self._frames):
-            chosen = index
-            if ms >= target:
-                break
+        chosen = bisect.bisect_left(self._stamps, int(offsetMs))
+        chosen = min(chosen, len(self._stamps) - 1)
         self._index = chosen
         return self._frame_at(chosen)
 
     def getNextFrame(self) -> Optional[ClipFrame]:
-        if not self._frames:
+        if not self._stamps:
             return None
         nxt = self._index + 1
-        if nxt >= len(self._frames):
+        if nxt >= len(self._stamps):
             return None
         self._index = nxt
         return self._frame_at(nxt)
 
     def getPrevFrame(self) -> Optional[ClipFrame]:
-        if not self._frames or self._index <= 0:
+        if not self._stamps or self._index <= 0:
             return None
         self._index -= 1
         return self._frame_at(self._index)
 
     def getNextFrameOffset(self) -> int:
         nxt = self._index + 1
-        if nxt < 0 or nxt >= len(self._frames):
+        if nxt < 0 or nxt >= len(self._stamps):
             return -1
-        return int(self._frames[nxt][0])
+        return int(self._stamps[nxt])
 
-    def _frame_at(self, index: int) -> ClipFrame:
-        ms, rgb, width, height = self._frames[index]
+    def _remember(self, index: int, value: tuple[bytes, int, int]) -> None:
+        self._cache[index] = value
+        self._cache.move_to_end(index)
+        while len(self._cache) > self._CACHE_FRAMES:
+            self._cache.popitem(last=False)
+
+    def _decode(self, index: int) -> Optional[tuple[bytes, int, int]]:
+        if index in self._cache:
+            self._cache.move_to_end(index)
+            return self._cache[index]
+        if self._container is None or self._stream is None:
+            return None
+        # Keep decoding forward when the target is close ahead; otherwise seek
+        # to the keyframe before it.
+        if self._decoder is None or index <= self._decoded_index or index - self._decoded_index > 90:
+            self._container.seek(self._pts[index], stream=self._stream, backward=True, any_frame=False)
+            self._decoder = self._container.decode(self._stream)
+            self._decoded_index = -1
+        found = None
+        for decoded in self._decoder:
+            if decoded.pts is None:
+                current = self._decoded_index + 1
+            else:
+                current = bisect.bisect_left(self._pts, int(decoded.pts))
+                current = min(current, len(self._pts) - 1)
+            self._decoded_index = current
+            if current < index - self._CACHE_FRAMES:
+                continue
+            array = decoded.to_ndarray(format="rgb24")
+            value = (array.tobytes(), int(array.shape[1]), int(array.shape[0]))
+            self._remember(current, value)
+            if current >= index:
+                found = self._cache.get(index, value)
+                break
+        else:
+            self._decoder = None
+        if found is None and self._cache:
+            # Missing tail frame: show the nearest decoded frame.
+            nearest = min(self._cache, key=lambda key: abs(key - index))
+            found = self._cache[nearest]
+        return found
+
+    def _frame_at(self, index: int) -> Optional[ClipFrame]:
+        try:
+            value = self._decode(index)
+        except Exception as exc:
+            logging.getLogger(__name__).warning("ClipReader decode failed in %s: %r", self._path, exc)
+            self._decoder = None
+            value = None
+        if value is None:
+            return None
+        rgb, width, height = value
         scaled, out_w, out_h = _scale_rgb(rgb, width, height, self._out_w, self._out_h)
-        return ClipFrame(scaled, out_w, out_h, ms, self._input_size)
+        return ClipFrame(scaled, out_w, out_h, self._stamps[index], self._input_size)
 
 
 def getTimestampFlags(extras: Any = None) -> int:

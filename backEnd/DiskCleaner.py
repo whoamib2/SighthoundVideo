@@ -61,7 +61,7 @@ from vitaToolbox.path.VolumeUtils import getStorageSizeStr
 from vitaToolbox.loggingUtils.LoggingUtils import getLogger
 from vitaToolbox.windows.winUtils import registerForForcedQuitEvents
 from vitaToolbox.process.ProcessUtils import setProcessPriority, kPriorityLow, checkMemoryLimit
-from vitaToolbox.strUtils.EnsureUnicode import ensureUtf8
+from vitaToolbox.strUtils.EnsureUnicode import ensureUnicode, ensureUtf8
 from vitaToolbox.profiling.MarkTime import TimerLogger
 
 # Local imports...
@@ -511,7 +511,7 @@ class DiskCleaner(object):
 
         if self._canDeleteFolder(pathToCheck):
             try:
-                self._logger.debug("Removing folder " + ensureUtf8(name))
+                self._logger.debug("Removing folder " + ensureUnicode(name))
                 os.rmdir(name)
             except:
                 self._logger.warning("Couldn't remove %s: %s" % (ensureUtf8(name), traceback.format_exc()))
@@ -660,7 +660,7 @@ class DiskCleaner(object):
                 elif dirsCount == 1 and dirnames[0] == kThumbsSubfolder:
                     # there's only thumbs folder, left behind somehow
                     # schedule it for cleanup, unless the video folder is still "current"
-                    self._logger.debug("Found an orphaned dir " + ensureUtf8(root))
+                    self._logger.debug("Found an orphaned dir " + ensureUnicode(root))
                     if os.path.basename(root) != str(time.time())[:5]:
                         orphanedThumbs.append(os.path.join(root,kThumbsSubfolder))
 
@@ -985,7 +985,7 @@ class DiskCleaner(object):
         totalFilesDeleted = 0
         for prefix in range(firstFolder, lastFolder+1):
             subfolders.append( str(prefix) )
-        self._logger.debug("Removing thumbs between " + str(start) + " and " + str(stop) + "; folders=" + ensureUtf8(str(subfolders)))
+        self._logger.debug("Removing thumbs between " + str(start) + " and " + str(stop) + "; folders=" + str(subfolders))
         for folder in subfolders:
             thumbFolder = os.path.join(self._videoDir, camLoc, folder, kThumbsSubfolder )
 
@@ -1004,11 +1004,11 @@ class DiskCleaner(object):
                     try:
                         size = os.path.getsize(fullFilePath)
                         os.remove(fullFilePath)
-                        self._logger.debug("Deleted " + ensureUtf8(fullFilePath))
+                        self._logger.debug("Deleted " + ensureUnicode(fullFilePath))
                         deletedSize += size
                         deletedCount += 1
                     except:
-                        self._logger.error("Failed to delete " + ensureUtf8(fullFilePath))
+                        self._logger.error("Failed to delete " + ensureUnicode(fullFilePath))
                 else:
                     keptFiles += 1
 

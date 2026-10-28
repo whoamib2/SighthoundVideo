@@ -48,7 +48,7 @@ import os
 import io
 import sys
 import time
-from vitaToolbox.strUtils.EnsureUnicode import ensureUtf8
+from vitaToolbox.strUtils.EnsureUnicode import ensureUnicode
 from vitaToolbox.sysUtils.TimeUtils import formatTime
 
 # Common 3rd-party imports...
@@ -105,10 +105,10 @@ class CameraManager(object):
                 for backup in backups:
                     try:
                         self._openDb(os.path.join(self._backupDir, backup))
-                        self._logger.info("Loaded camera db backup from " + ensureUtf8(backup))
+                        self._logger.info("Loaded camera db backup from " + ensureUnicode(backup))
                         return
                     except:
-                        self._logger.error("Failed to load camera db backup from " + ensureUtf8(backup))
+                        self._logger.error("Failed to load camera db backup from " + ensureUnicode(backup))
 
 
     ###########################################################

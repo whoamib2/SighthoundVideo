@@ -88,7 +88,7 @@ from vitaToolbox.path.GetDiskSpaceAvailable import checkFreeSpace
 from vitaToolbox.windows.winUtils import registerForForcedQuitEvents
 from vitaToolbox.sysUtils.MachineId import machineId
 from vitaToolbox.sysUtils.TimeUtils import getTimeAsMs
-from vitaToolbox.strUtils.EnsureUnicode import ensureUtf8
+from vitaToolbox.strUtils.EnsureUnicode import ensureUnicode, ensureUtf8
 from vitaToolbox.threading.ThreadPool import ThreadPool
 from vitaToolbox.process.ProcessUtils import listChildProcessesOfPID
 from vitaToolbox.profiling.QueueStats import QueueStats
@@ -2306,7 +2306,9 @@ class BackEndApp(object):
 
                 # Update if the rule is currently schedule or not if necessary.
                 curScheduled = False
-                if ms/1000 > schedChange:
+                # schedChange is None when the schedule never changes (an
+                # "every day, 24 hours" rule). Python 2 let None compare.
+                if schedChange is not None and ms/1000 > schedChange:
                     curScheduled, nextSchedChange = rule.getScheduleInfo()
                     self._ruleDicts[cameraLocation][ruleName] = \
                         (rule, curScheduled, nextSchedChange, query, responses)
@@ -3499,9 +3501,9 @@ class BackEndApp(object):
                     shutil.move(src, dst)
                     moved = True
                 else:
-                    self._logger.error("Pending move item " + ensureUtf8(src) + " does not exist")
+                    self._logger.error("Pending move item " + ensureUnicode(src) + " does not exist")
             except Exception as e:
-                self._logger.error("Failed to move file (" + ensureUtf8(src) + "->" + ensureUtf8(dst) + "): " + str(e))
+                self._logger.error("Failed to move file (" + ensureUnicode(src) + "->" + ensureUnicode(dst) + "): " + str(e))
 
             if moved:
                 # If it was successfully relocated remove it from the dict.
