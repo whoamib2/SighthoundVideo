@@ -44,9 +44,11 @@ import sys
 ###############################################################
 def getProcessorInfo():
     """Return a string describing the system processor."""
-    if 'darwin' == sys.platform:
+    if sys.platform == "darwin":
         return _getProcessorInfoMac()
-    return _getProcessorInfoWin()
+    if sys.platform == "win32":
+        return _getProcessorInfoWin()
+    return sys.platform
 
 
 ###############################################################
@@ -58,37 +60,37 @@ def _getProcessorInfoMac():
 
 
 ###############################################################
+def _registry_text(value):
+    if isinstance(value, (bytes, bytearray)):
+        return bytes(value).decode("utf-8", errors="replace")
+    return "" if value is None else str(value)
+
+
 def _getProcessorInfoWin():
     """Return a string describing the system processor."""
-    # Strange import to avoid obfuscator warnings on Mac, where this doesn't
-    # exist.
-    # ...need to also make sure that obfuscator doesn't obfuscate any of the
-    # identifiers related to this module.
-    _winreg = object()
-    exec('import _winreg')
+    import winreg
 
-    identifier = ''
-    procName = ''
+    identifier = ""
+    procName = ""
     numKeys = 0
 
     try:
-        key = _winreg.OpenKey(_winreg.HKEY_LOCAL_MACHINE,
-                              r'HARDWARE\DESCRIPTION\System\CentralProcessor\0')
+        key = winreg.OpenKey(winreg.HKEY_LOCAL_MACHINE,
+                             r"HARDWARE\DESCRIPTION\System\CentralProcessor\0")
         try:
-            identifier = _winreg.QueryValueEx(key, 'Identifier')[0]
+            identifier = _registry_text(winreg.QueryValueEx(key, "Identifier")[0])
         except Exception:
             pass
         try:
-            procName = _winreg.QueryValueEx(key, 'ProcessorNameString')[0]
+            procName = _registry_text(winreg.QueryValueEx(key, "ProcessorNameString")[0])
         except Exception:
             pass
         try:
-            key = _winreg.OpenKey(_winreg.HKEY_LOCAL_MACHINE,
-                              r'HARDWARE\DESCRIPTION\System\CentralProcessor')
+            key = winreg.OpenKey(winreg.HKEY_LOCAL_MACHINE,
+                             r"HARDWARE\DESCRIPTION\System\CentralProcessor")
             while True:
-                # This will eventually throw an exception when we run out of
-                # processor keys.
-                _winreg.EnumKey(key, numKeys)
+                # This eventually raises when the processor keys run out.
+                winreg.EnumKey(key, numKeys)
                 numKeys += 1
         except Exception:
             pass
