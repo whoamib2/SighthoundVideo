@@ -92,8 +92,10 @@ class HttpClient(object):
             self._logger.error(err)
             return None, err, None
         try:
+            if isinstance(body, str):
+                body = body.encode("utf-8")
             if body:
-                headers["Content-Length"] = len(body)
+                headers["Content-Length"] = str(len(body))
             kargs = {}
             kargs["timeout"] = self._timeout
             if "https" == u.scheme.lower():
@@ -111,8 +113,8 @@ class HttpClient(object):
             if u.query:
                 path += "?" + u.query
             if u.username and u.password:
-                cred = "%s:%s" % (u.username, u.password)
-                auth = base64.b64encode(cred).decode("ISO-8859-1")
+                cred = ("%s:%s" % (u.username, u.password)).encode("utf-8")
+                auth = base64.b64encode(cred).decode("ascii")
                 headers['Authorization'] = 'Basic %s' % auth
             method = method.upper()
             self._logger.info("sending %s request to %s ..." % (method, url))

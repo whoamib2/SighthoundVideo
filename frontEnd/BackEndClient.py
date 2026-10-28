@@ -1319,8 +1319,10 @@ class _BackEndTransport(xmlrpc.client.Transport):
         try:
             portFile = open(self.__portFilePath, 'rb')
         except IOError:
-            # Give a little nicer error...
-            raise RuntimeError("Missing port file opening " + self.__portFilePath)
+            raise BackendNotReady(
+                "VigilCam's backend is still starting.\n\n"
+                "Wait a few seconds, then try again."
+            )
 
         try:
             port = pickle.load(portFile)
@@ -1331,6 +1333,10 @@ class _BackEndTransport(xmlrpc.client.Transport):
 
         return "127.0.0.1:%s" % str(port)
 
+
+
+class BackendNotReady(RuntimeError):
+    """The backend has not written its port file yet."""
 
 
 ##############################################################################

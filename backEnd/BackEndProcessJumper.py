@@ -177,14 +177,17 @@ else:
 
     def startPlatformHTTPWrapper(*args):
         import os
+        # The open ONNX runtime does not need the legacy Intel compiler redistributable.
+        # If a developer still has INTEL_DEV_REDIST set, keep those DLLs on PATH.
         intelPath = os.environ.get('INTEL_DEV_REDIST')
-        if intelPath is None or len(intelPath) == 0:
-            raise Exception( "Error: INTEL_DEV_REDIST not defined; analytics process will fail" )
-        backupPath = os.environ.get('PATH',None)
-        os.environ['PATH'] = os.path.join(intelPath, "redist", "intel64", "compiler") + ";" + backupPath
+        backupPath = os.environ.get('PATH', None)
+        if intelPath:
+            compiler = os.path.join(intelPath, "redist", "intel64", "compiler")
+            os.environ['PATH'] = compiler + os.pathsep + (backupPath or "")
         p = Process(target=runPlatformHTTPWrapper, args=args)
         p.start()
-        os.environ['PATH'] = backupPath
+        if intelPath and backupPath is not None:
+            os.environ['PATH'] = backupPath
         return p
 
     def runPacketCapture(*args):
