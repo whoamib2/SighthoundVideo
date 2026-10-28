@@ -58,7 +58,7 @@ from vitaToolbox.networking.SanitizeUrl import processUrlAuth
 from vitaToolbox.networking.WsgiServer import WsgiServer
 from vitaToolbox.networking.WsgiServer import makeServerAddressInfos
 from vitaToolbox.listUtils.RandomRange import randomRange
-from vitaToolbox.strUtils.EnsureUnicode import simplifyString, ensureUtf8
+from vitaToolbox.strUtils.EnsureUnicode import simplifyString, ensureUnicode
 from vitaToolbox.path.GetDiskSpaceAvailable import checkFreeSpace
 
 # Local imports...
@@ -145,6 +145,13 @@ _kMemoryStatsInterval = 15*60*1000
 
 # Message when we drop camera connection due to insufficient space
 _kDiskSpaceMessage = "Low disk space on system volume"
+
+
+def _wsgi_body(payload):
+    """WSGI response chunks are bytes. A str body is rejected by wsgiref."""
+    if isinstance(payload, (bytes, bytearray)):
+        return bytes(payload)
+    return str(payload).encode("utf-8")
 
 ###############################################################
 def runCapture(msgQueue, cameraPipe, dataMgrPipe, dataMgrId, cameraLocation, #PYCHECKER OK: Function has too many arguments
@@ -349,12 +356,12 @@ class CameraCapture(object):
                     continue
                 filePath = os.path.join(subdir, name)
                 self._logger.info("Removing tmp file " +
-                            ensureUtf8(filePath))
+                            ensureUnicode(filePath))
                 try:
                     os.remove(filePath)
                 except:
                     self._logger.warning("Couldn't remove %s: %s" %
-                            (ensureUtf8(filePath), traceback.format_exc()))
+                            (ensureUnicode(filePath), traceback.format_exc()))
 
     ###########################################################
     def _openStream(self):
@@ -448,11 +455,12 @@ class CameraCapture(object):
             # exit, to be restarted by the backend
             e = sys.exc_info()[1]
             self._logger.error(e)
-        except:
-            t = traceback.format_exc()
-            e = sys.exc_info()[1]
-            self._logger.error(traceback.format_exc(t))
-            self._logger.error(e)
+        except Exception:
+            # format_exc() takes an integer limit. Passing the already
+            # formatted traceback (a str) raises TypeError and hides the
+            # original failure.
+            self._logger.error(traceback.format_exc())
+            self._logger.error(str(sys.exc_info()[1]))
 
     ###########################################################
     def _checkFreeSpace(self):
@@ -643,7 +651,7 @@ class CameraCapture(object):
                 cameraUri = msg[1]
                 if self._cameraUri != cameraUri:
                     _, sanitizedPath = processUrlAuth(cameraUri)
-                    self._logger.info("Camera URI had been updated to " + ensureUtf8(sanitizedPath))
+                    self._logger.info("Camera URI had been updated to " + ensureUnicode(sanitizedPath))
                     self._cameraUri = cameraUri
         except Exception:
             self._logger.error("Message exception: %s" % (msg), exc_info=True)
@@ -854,7 +862,7 @@ class CameraCapture(object):
 
                 # Clear out the file...
                 f.seek(0)
-                f.write('\x00'*fileSize)
+                f.write(b'\x00' * fileSize)
 
                 # Close it up...
                 f.close()
@@ -1062,13 +1070,14 @@ class CameraCapture(object):
                     raise Exception("frame retrieval failed")
                 #self._logger.debug("got %d bytes of JPEG data" % len(jpeg))
             except:
-                err = str(sys.exc_info()[1])
+                err = _wsgi_body(sys.exc_info()[1])
                 startResponse('404 NO IMAGE',
                        [('Content-Type' , 'text/plain'),
                         ('Content-Length', str(len(err)))])
                 return err
             finally:
                 self._streamReaderLock.release()
+        jpeg = _wsgi_body(jpeg)
         startResponse('200 OK',
                [('Content-Type' , 'image/jpeg'),
                 ('Content-Length', str(len(jpeg))),
@@ -1114,7 +1123,7 @@ class CameraCapture(object):
             startResponse('404 NOT FOUND',
                [('Content-Type', 'text/plain'),
                 ('Content-Length', "0")])
-            return ""
+            return b""
 
         filePath = os.path.join(self._userLocalDataDir, kRemoteFolder, fileName+".m3u8local")
 
@@ -1149,7 +1158,7 @@ class CameraCapture(object):
             startResponse('404 NOT FOUND',
                [('Content-Type', 'text/plain'),
                 ('Content-Length', "0")])
-            return ""
+            return b""
         finally:
             if h is not None:
                 try: h.close()
@@ -1174,13 +1183,14 @@ class CameraCapture(object):
         if fileIndex > self._maxFileIndex:
             self._maxFileIndex = fileIndex
 
+        body = _wsgi_body(result)
         startResponse('200 OK',
            [('Content-Type' , 'application/x-mpegurl'),
-            ('Content-Length', str(len(result))),
+            ('Content-Length', str(len(body))),
             ('Cache-Control', 'no-cache, no-store, must-revalidate'),
             ('Pragma', 'no-cache'),
             ('Expires', '0')])
-        return result
+        return body
 
 
     ###########################################################
@@ -1195,26 +1205,26 @@ class CameraCapture(object):
         try:
             path = environ.get('PATH_INFO', "")
             if self._cleaningUp:
-                errorText = "camera process about to stop"
+                errorText = _wsgi_body("camera process about to stop")
                 startResponse('500 UNAVAILABLE',
                    [('Content-Type' , 'text/plain'),
                     ('Content-Length', str(len(errorText)))])
                 yield errorText
             else:
                 if path == "/image.jpg":
-                    yield self._wsgiAppImage(environ, startResponse)
+                    yield _wsgi_body(self._wsgiAppImage(environ, startResponse))
                 elif path.endswith(".m3u8"):
-                    yield self._wsgiAppStreaming(environ, startResponse)
+                    yield _wsgi_body(self._wsgiAppStreaming(environ, startResponse))
                 else:
-                    errorText = "unknown request path '%s'" % path
+                    errorText = _wsgi_body("unknown request path '%s'" % path)
                     startResponse('404 WRONG PATH',
                        [('Content-Type' , 'text/plain'),
                         ('Content-Length', str(len(errorText)))])
                     yield errorText
-        except:
+        except Exception:
             self._logger.error("uncaught WSGI error for path '%s'" % path)
             self._logger.error(traceback.format_exc())
-            errorText = str(sys.exc_info()[1])
+            errorText = _wsgi_body(sys.exc_info()[1])
             try:
                 startResponse('500 UNCAUGHT ERROR',
                    [('Content-Type' , 'text/plain'),
