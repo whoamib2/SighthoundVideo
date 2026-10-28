@@ -205,15 +205,56 @@ function Find-Cmake([string]$VsRoot) {
     return $null
 }
 
-function Find-Iscc {
-    $candidates = @(
-        (Join-Path ${env:ProgramFiles(x86)} 'Inno Setup 6\ISCC.exe'),
-        (Join-Path $env:ProgramFiles 'Inno Setup 6\ISCC.exe')
-    )
-    foreach ($path in $candidates) {
-        if (Test-Path -LiteralPath $path) { return $path }
+function Update-ProcessPath {
+    # winget writes Path into the user or machine environment. This process
+    # keeps the PATH it started with until those values are read back.
+    $machine = [Environment]::GetEnvironmentVariable('Path', 'Machine')
+    $user = [Environment]::GetEnvironmentVariable('Path', 'User')
+    $combined = @($env:Path, $machine, $user) | Where-Object { $_ }
+    if ($combined.Count -gt 0) {
+        $env:Path = ($combined -join ';')
     }
-    if (Test-Tool 'ISCC') { return (Get-Command ISCC).Source }
+}
+
+function Find-Iscc {
+    # Per-user winget (Inno Setup 6.7.x) lands here. Then uninstall registry
+    # InstallLocation, then Program Files, then PATH.
+    Update-ProcessPath
+    $candidates = @()
+    if ($env:LocalAppData) {
+        $candidates += (Join-Path $env:LocalAppData 'Programs\Inno Setup 6\ISCC.exe')
+    }
+    $uninstallRoots = @(
+        'HKCU:\Software\Microsoft\Windows\CurrentVersion\Uninstall',
+        'HKLM:\Software\Microsoft\Windows\CurrentVersion\Uninstall',
+        'HKLM:\Software\WOW6432Node\Microsoft\Windows\CurrentVersion\Uninstall'
+    )
+    foreach ($root in $uninstallRoots) {
+        if (-not (Test-Path -LiteralPath $root)) { continue }
+        $keys = @(Get-ChildItem -LiteralPath $root -ErrorAction SilentlyContinue)
+        foreach ($key in $keys) {
+            $props = Get-ItemProperty -LiteralPath $key.PSPath -ErrorAction SilentlyContinue
+            if ($null -eq $props) { continue }
+            $name = [string]$props.DisplayName
+            $location = [string]$props.InstallLocation
+            if ($name -notmatch 'Inno Setup') { continue }
+            if ($name -match 'Inno Setup 5' -or $location -match 'Inno Setup 5') { continue }
+            if ($location) {
+                $candidates += (Join-Path $location.Trim().TrimEnd('\') 'ISCC.exe')
+            }
+        }
+    }
+    if (${env:ProgramFiles(x86)}) {
+        $candidates += (Join-Path ${env:ProgramFiles(x86)} 'Inno Setup 6\ISCC.exe')
+    }
+    if ($env:ProgramFiles) {
+        $candidates += (Join-Path $env:ProgramFiles 'Inno Setup 6\ISCC.exe')
+    }
+    foreach ($path in $candidates) {
+        if ($path -and (Test-Path -LiteralPath $path)) { return $path }
+    }
+    $cmd = Get-Command ISCC -ErrorAction SilentlyContinue
+    if ($cmd) { return $cmd.Source }
     return $null
 }
 
@@ -416,11 +457,12 @@ if ($Package) {
     }
     $iscc = Find-Iscc
     if (-not $iscc) {
-        $gotInno = Install-WithWinget 'JRSoftware.InnoSetup' 'Inno Setup 6' { return [bool](Find-Iscc) }
-        if ($gotInno) { $iscc = Find-Iscc }
+        Install-WithWinget 'JRSoftware.InnoSetup' 'Inno Setup 6' { return [bool](Find-Iscc) } | Out-Null
+        # Search again. A per-user winget install is not on the PATH this process started with.
+        $iscc = Find-Iscc
     }
     if (-not $iscc) {
-        throw "Inno Setup 6 (ISCC.exe) was not found. Install it from https://jrsoftware.org/isinfo.php or with winget, then re-run with -Package."
+        throw "Inno Setup 6 (ISCC.exe) was not found under %LOCALAPPDATA%\Programs\Inno Setup 6, the uninstall registry, Program Files, or PATH. Install it from https://jrsoftware.org/isinfo.php or with winget, then re-run with -Package."
     }
     Write-Host "Inno Setup: $iscc"
     $iss = Join-Path $Root 'installer\SighthoundVideo.iss'

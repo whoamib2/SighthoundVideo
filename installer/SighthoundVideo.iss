@@ -28,7 +28,8 @@ UninstallDisplayName={#MyAppName}
 CloseApplications=yes
 
 [Tasks]
-Name: "desktopicon"; Description: "Create a desktop shortcut"; GroupDescription: "Shortcuts:"; Flags: checked
+; A task is checked unless Flags includes unchecked. "checked" is not a task flag.
+Name: "desktopicon"; Description: "Create a desktop shortcut"; GroupDescription: "Shortcuts:"
 Name: "startup"; Description: "Start Sighthound Video when Windows starts"; GroupDescription: "Startup:"; Flags: unchecked
 
 [Files]
