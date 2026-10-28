@@ -32,6 +32,13 @@ _SKIP_DIALOGS = {
 
 
 def _ensure_display():
+    """Give wx a display on Linux. Windows and macOS already have a desktop.
+
+    Xvfb is a Linux program. Starting it on Windows raises FileNotFoundError
+    before wx.App is created, so the frame test never runs there.
+    """
+    if sys.platform != "linux":
+        return None
     if os.environ.get("DISPLAY"):
         return None
     xvfb = "Xvfb"
@@ -122,6 +129,44 @@ class _FakeBackend:
             return []
 
         return method
+
+
+def test_ensure_display_does_not_launch_xvfb_on_windows(monkeypatch):
+    monkeypatch.setattr(sys, "platform", "win32")
+
+    def boom(*_args, **_kwargs):
+        raise AssertionError("Xvfb must not be started on Windows")
+
+    monkeypatch.setattr("tests.test_frontend_frame.subprocess.Popen", boom)
+    assert _ensure_display() is None
+
+
+def test_ensure_display_starts_xvfb_on_linux_without_a_display(monkeypatch):
+    monkeypatch.setattr(sys, "platform", "linux")
+    monkeypatch.delenv("DISPLAY", raising=False)
+    started = []
+
+    class _Proc:
+        def poll(self):
+            return None
+
+    def fake_popen(command, **_kwargs):
+        started.append(command)
+        return _Proc()
+
+    monkeypatch.setattr("tests.test_frontend_frame.subprocess.Popen", fake_popen)
+    monkeypatch.setattr("tests.test_frontend_frame.time.sleep", lambda _seconds: None)
+    previous = os.environ.get("DISPLAY")
+    try:
+        proc = _ensure_display()
+        assert proc is not None
+        assert started[0][0] == "Xvfb"
+        assert os.environ["DISPLAY"] == ":97"
+    finally:
+        if previous is None:
+            os.environ.pop("DISPLAY", None)
+        else:
+            os.environ["DISPLAY"] = previous
 
 
 def test_kill_process_tree_stops_parent_and_child():
