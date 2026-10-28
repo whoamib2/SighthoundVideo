@@ -1500,17 +1500,28 @@ class SearchView(BaseView):
             return
 
         # Edit the specified query
-        dlg = QueryEditorDialog(self.GetTopLevelParent(), self._dataMgr,
-                                self._backEndClient, query,
-                                set(kSearchViewDefaultRules +
-                                    self._backEndClient.getRuleNames()) -
-                                set([query.getName()]),
-                                [camName.rsplit(kInactiveSuffix)[0] for camName
-                                 in self._cameraChoice.GetStrings()])
+        dlg = None
         try:
+            dlg = QueryEditorDialog(self.GetTopLevelParent(), self._dataMgr,
+                                    self._backEndClient, query,
+                                    set(kSearchViewDefaultRules +
+                                        self._backEndClient.getRuleNames()) -
+                                    set([query.getName()]),
+                                    [camName.rsplit(kInactiveSuffix)[0] for camName
+                                     in self._cameraChoice.GetStrings()])
             result = dlg.ShowModal()
+        except Exception as exc:
+            self._logger.exception("Edit rule failed")
+            wx.MessageBox(
+                "Edit rule could not open.\n\n%s" % exc,
+                "Edit rule",
+                wx.OK | wx.ICON_ERROR,
+                self.GetTopLevelParent(),
+            )
+            return
         finally:
-            dlg.Destroy()
+            if dlg is not None:
+                dlg.Destroy()
 
         if result == wx.ID_CANCEL:
             return
@@ -1666,16 +1677,27 @@ class SearchView(BaseView):
             newQuery.getVideoSource().setLocationName(cameraLoc)
 
         # Edit the specified query
-        dlg = QueryEditorDialog(self.GetTopLevelParent(), self._dataMgr,
-                                self._backEndClient, newQuery,
-                                kSearchViewDefaultRules +
-                                self._backEndClient.getRuleNames(),
-                                [camName.rsplit(kInactiveSuffix)[0] for camName
-                                 in self._cameraChoice.GetStrings()])
+        dlg = None
         try:
+            dlg = QueryEditorDialog(self.GetTopLevelParent(), self._dataMgr,
+                                    self._backEndClient, newQuery,
+                                    kSearchViewDefaultRules +
+                                    self._backEndClient.getRuleNames(),
+                                    [camName.rsplit(kInactiveSuffix)[0] for camName
+                                     in self._cameraChoice.GetStrings()])
             result = dlg.ShowModal()
+        except Exception as exc:
+            self._logger.exception("New rule failed")
+            wx.MessageBox(
+                "New rule could not open.\n\n%s" % exc,
+                "New rule",
+                wx.OK | wx.ICON_ERROR,
+                self.GetTopLevelParent(),
+            )
+            return
         finally:
-            dlg.Destroy()
+            if dlg is not None:
+                dlg.Destroy()
 
         # If the user cancels the dialog, do nothing
         if result == wx.ID_CANCEL:
