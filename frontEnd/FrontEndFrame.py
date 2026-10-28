@@ -55,6 +55,7 @@ from vitaToolbox.wx.FontUtils import makeFontDefault
 
 # Local imports...
 from appCommon.CommonStrings import kAppName, kDocumentationUrl, kForumsUrl
+from appCommon.resources import resource_path
 from appCommon.CommonStrings import kUpgradeFeaturesUrl
 from appCommon.CommonStrings import kFrontEndLogName
 from appCommon.CommonStrings import kLoginStatusLastUser
@@ -248,7 +249,10 @@ class FrontEndFrame(wx.Frame):
         # Set the app icons.  On Mac, the icon is set implicitly.
         if (wx.Platform == "__WXMSW__"):
             icons = wx.IconBundle()
-            icons.AddIcon(os.path.join("icons", "VigilCam.ico"), wx.BITMAP_TYPE_ICO)
+            icons.AddIcon(
+                resource_path(os.path.join("icons", "VigilCam.ico")),
+                wx.BITMAP_TYPE_ICO,
+            )
             self.SetIcons(icons)
 
         self.Bind(wx.EVT_CLOSE, self.OnClose)

@@ -55,19 +55,11 @@ def ensureUnicode(strOrUnicode, encoding="utf-8"):
     This function does nothing if it's already unicode.  Otherwise, it decodes
     using the passed encoding.
 
-    This is _DIFFERENT_ than just "casting" the object as a unicode object by
-    doing something like this:
-       unicode(strOrUnicode)
+    This is _DIFFERENT_ than decoding with the default ASCII codec. That fails
+    when the bytes are not ASCII, for example a UTF-8 registered-mark sequence.
 
-    ...since that mechanism will use ASCII to convert to unicode if the string
-    isn't unicode, which usually fails.
-       Try: unicode('Sighthound\xc2\xae Video')
-
-    It's also _DIFFERENT_ than casting with an encoding like this:
-       unicode(strOrUnicode, 'utf-8')
-
-    ...since that will fail if the string is already unicode:
-       Try: unicode(u'Sighthound\xae Video', 'utf-8')
+    It's also _DIFFERENT_ than decoding with an explicit encoding when the
+    value is already a str. That raises, because str has no byte encoding.
 
 
     Note: doctest examples have an extra backslash in them to make doctest work.

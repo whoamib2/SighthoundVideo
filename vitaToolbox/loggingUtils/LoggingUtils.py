@@ -247,8 +247,8 @@ def formatExceptionConcisely(exc_info):
     ...    fn1()
     >>> try:
     ...   fn2()
-    ... except Exception, e:
-    ...   print formatExceptionConcisely(sys.exc_info())
+    ... except Exception:
+    ...   print(formatExceptionConcisely(sys.exc_info()))
     <type 'exceptions.Exception'>: Bogus - <doctest __main__.formatExceptionConcisely[2]>(2); <doctest __main__.formatExceptionConcisely[1]>(2); <doctest __main__.formatExceptionConcisely[0]>(2)
 
     @param  exc_info  Info from sys.exc_info()
@@ -566,7 +566,7 @@ class _VitaRotatingFileHandler(logging.handlers.RotatingFileHandler):
 
     We see this type of stack crawl:
         File "c:\Python25\lib\logging\__init__.py", line 985, in info
-          apply(self._log, (INFO, msg, args), kwargs)
+          self._log(INFO, msg, args, **kwargs)
         File "c:\Python25\lib\logging\__init__.py", line 1101, in _log
           self.handle(record)
         File "c:\Python25\lib\logging\__init__.py", line 1111, in handle
@@ -584,7 +584,7 @@ class _VitaRotatingFileHandler(logging.handlers.RotatingFileHandler):
         File "c:\Python25\lib\traceback.py", line 13, in _print
           file.write(str+terminator)
         File "c:\Python25\lib\logging\__init__.py", line 999, in warning
-          apply(self._log, (WARNING, msg, args), kwargs)
+          self._log(WARNING, msg, args, **kwargs)
         File "c:\Python25\lib\logging\__init__.py", line 1101, in _log
           self.handle(record)
         File "c:\Python25\lib\logging\__init__.py", line 1111, in handle

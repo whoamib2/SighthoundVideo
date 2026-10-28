@@ -126,8 +126,8 @@ def sendSimpleEmail(message, fromAddr, toAddrs, subject, #PYCHECKER OK: Too many
     """A simple function to send a text email with some images attached.
 
     Note: this function requires ASCII types for all strings passed in
-    except message, which can be either type str (must be ASCII) or type
-    unicode (we'll mail with UTF-8 encoding).
+    except message, which can be either type str (must be ASCII) or a text
+    string (mailed with UTF-8 encoding).
 
     @param  message     The main message; it's probably good to append a \n.
     @param  fromAddr    A single "from" address.

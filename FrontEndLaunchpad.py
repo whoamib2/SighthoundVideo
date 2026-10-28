@@ -67,6 +67,15 @@ if console_requested():
 log_startup("FrontEndLaunchpad import pid=%s argv=%s frozen=%s" % (
     os.getpid(), sys.argv, hasattr(sys, "frozen")))
 
+# Bundled images and sounds are opened from sys._MEIPASS (or the executable
+# directory), not from the working directory. Install that lookup before any
+# UI module constructs a wx bitmap.
+try:
+    from appCommon.resources import install_resource_hooks
+    install_resource_hooks()
+except Exception:
+    log_startup_exception("could not install resource path hooks")
+
 
 def get_utf8_arguments_windows_only():
     # Fix for [SV-194]:
@@ -139,9 +148,10 @@ def _disable_linecache():
     linecache.getline = fake_getline
 
 
-# CxFreeze makes the app's working directory start in the "MacOS" directory; We
-# change our working directory to the Resources directory so that our bmp's and
-# and other resource files can be found and loaded.
+# CxFreeze used to start in the MacOS directory. Resource files are resolved by
+# appCommon.resources (sys._MEIPASS or the executable directory), not by this
+# working directory. The directory change remains so older relative paths that
+# are not bundled resource roots still match the historical frozen layout.
 # ...we also call _disable_linecache(), which also seems to be done by the
 # normal __boot__ script.
 if hasattr(sys, 'frozen'):
