@@ -13,10 +13,17 @@ dependencies = [
     "requests>=2.31",
     "wxPython>=4.2",
     "psutil>=6",
+    "numpy>=1.26",
+    # Video windows import OpenGL at startup. The package is pure Python.
+    "PyOpenGL>=3.1.7",
+    # Requests reads certifi by name when the app is frozen.
+    "certifi",
 ]
 
 [project.optional-dependencies]
 package = ["pyinstaller>=6"]
+# USB cameras. DirectShow on Windows. RTSP and files use PyAV and do not need this.
+vision = ["opencv-python-headless>=4.8"]
 dev = ["pytest>=8", "ruff>=0.6"]
 
 [build-system]

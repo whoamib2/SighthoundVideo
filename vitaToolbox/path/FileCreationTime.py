@@ -39,15 +39,6 @@
 import os
 import sys
 
-# Strange import to avoid obfuscator warnings on Win, where this doesn't exist.
-# ...need to also make sure that obfuscator doesn't obfuscate any of the
-# identifiers related to this module.
-try:
-    import Carbon.File  # macOS only; Carbon was removed with the Python 2.7 Apple builds
-    import Carbon.Files
-except ImportError:
-    Carbon = None
-
 def fileCreationTime(path):
     """Return the file creation time
 
@@ -64,20 +55,11 @@ def fileCreationTime(path):
     if not os.path.exists(path):
         return -1
 
-    if sys.platform == 'darwin':
-        # If we're on OSX we need to use the carbon API
-
-        cFile = Carbon.File.FSRef(path) #PYCHECKER OK, pychecker can't find module on Win
-        cInfo, _, _, _ =\
-            cFile.FSGetCatalogInfo(Carbon.Files.kFSCatInfoCreateDate) #PYCHECKER OK, pychecker can't find module on Win
-
-        if cInfo.createDate[1] != 0:
-            # 2212122496 = -((1970-1904)*365 + 17) * (24*60*60) + 0x100000000L
-            return cInfo.createDate[1] + 2212122496
-        else:
-            return int(os.stat(path).st_ctime)
-
-    # Any other os
-    return int(os.stat(path).st_ctime)
+    stat = os.stat(path)
+    if sys.platform == "darwin":
+        birth = getattr(stat, "st_birthtime", None)
+        if birth:
+            return int(birth)
+    return int(stat.st_ctime)
 
 
