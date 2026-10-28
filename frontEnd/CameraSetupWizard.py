@@ -1764,6 +1764,21 @@ class _DetectedCamerasScreen(_BasePage):
         innerSizer.Add(self._manualRadio, 0, wx.RESERVE_SPACE_EVEN_IF_HIDDEN |
                        wx.TOP | wx.BOTTOM, _kPaddingSize)
 
+        # Blue Iris: servers found on the network show here; the button
+        # opens the login and camera picker.
+        self._blueIrisServers = []
+        self._blueIrisScanStarted = False
+        self._blueIrisLabel = wx.StaticText(self, -1,
+            "Searching the network for Blue Iris servers...")
+        self._blueIrisButton = wx.Button(self, -1, "Add a Blue Iris camera...")
+        makeFontDefault(self._blueIrisLabel)
+        blueIrisSizer = wx.BoxSizer(wx.HORIZONTAL)
+        blueIrisSizer.Add(self._blueIrisButton, 0, wx.ALIGN_CENTER_VERTICAL)
+        blueIrisSizer.Add(self._blueIrisLabel, 1,
+                          wx.ALIGN_CENTER_VERTICAL | wx.LEFT, _kPaddingSize)
+        innerSizer.Add(blueIrisSizer, 0, wx.EXPAND | wx.BOTTOM, _kPaddingSize)
+        self._blueIrisButton.Bind(wx.EVT_BUTTON, self.OnBlueIris)
+
         self.sizer.Add(innerSizer, 1, wx.EXPAND | wx.LEFT | wx.RIGHT,
                        3*_kPaddingSize)
 
@@ -1781,6 +1796,64 @@ class _DetectedCamerasScreen(_BasePage):
         self.wizard.Bind(wxWizard.EVT_WIZARD_PAGE_CHANGING, self.OnChanging)
 
         self._listBox.Bind(wx.EVT_RIGHT_DOWN, self.OnRightClick)
+
+
+    ###########################################################
+    def _startBlueIrisScan(self):
+        """Look for Blue Iris servers once, in the background."""
+        if self._blueIrisScanStarted:
+            return
+        self._blueIrisScanStarted = True
+        import threading
+        from appCommon import BlueIris
+
+        def work():
+            try:
+                found = BlueIris.discoverServers()
+            except Exception:
+                found = []
+            wx.CallAfter(self._blueIrisScanDone, found)
+        threading.Thread(target=work, daemon=True).start()
+
+
+    ###########################################################
+    def _blueIrisScanDone(self, found):
+        if not self:
+            return
+        self._blueIrisServers = found
+        if found:
+            self._blueIrisLabel.SetLabel("Blue Iris found at " + ", ".join(
+                "%s:%d" % hp for hp in found))
+            self._blueIrisButton.SetLabel("Connect to Blue Iris...")
+        else:
+            self._blueIrisLabel.SetLabel("No Blue Iris server found "
+                                         "(you can still enter one).")
+        self.Layout()
+
+
+    ###########################################################
+    def OnBlueIris(self, event=None):
+        """Log into Blue Iris, pick a camera and continue as a manual
+        (\"Other IP camera\") setup with the URL filled in."""
+        from .BlueIrisDialog import BlueIrisDialog
+        dlg = BlueIrisDialog(self.GetTopLevelParent(), self._blueIrisServers)
+        try:
+            if dlg.ShowModal() != wx.ID_OK or not dlg.getResult():
+                return
+            url, camName = dlg.getResult()
+        finally:
+            dlg.Destroy()
+        self.wizard.cameraManufacturer = kOtherCameraManufacturer
+        self.wizard.cameraType = kOtherIpCamType
+        self.wizard.cameraUri = url
+        if not getattr(self.wizard, 'cameraName', None):
+            try:
+                self.wizard.cameraName = camName
+            except Exception:
+                pass
+        self._manualRadio.SetValue(True)
+        self._updateUiFromSelection()
+        self.wizard.ShowPage(self.GetNext())
 
 
     ###########################################################
@@ -2105,6 +2178,8 @@ class _DetectedCamerasScreen(_BasePage):
         if event.GetPage() != self:
             event.Skip()
             return
+
+        self._startBlueIrisScan()
 
         # Ensure the proper controls are displayed and populated.
         camUri = self.wizard.cameraUri

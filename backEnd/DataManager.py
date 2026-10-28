@@ -2533,11 +2533,11 @@ class DataManager(object):
                 continue
 
             for x1, y1, x2, y2, _, _, _ in bboxes:
-                bbox = (round((x1 * thumbH)/float(procH)),
-                        round((y1 * thumbH)/float(procH)),
-                        round((x2 * thumbH)/float(procH)) - 1,
-                        round((y2 * thumbH)/float(procH)) - 1)
-                draw.rectangle( bbox, outline=labelColor)
+                left = round((x1 * thumbH)/float(procH))
+                top = round((y1 * thumbH)/float(procH))
+                right = max(left, round((x2 * thumbH)/float(procH)) - 1)
+                bottom = max(top, round((y2 * thumbH)/float(procH)) - 1)
+                draw.rectangle((left, top, right, bottom), outline=labelColor)
 
     ###########################################################
     def _populateThumbCache(self, camLoc, timeIndex):

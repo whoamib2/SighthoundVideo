@@ -584,6 +584,13 @@ class MovieSlider(wx.Control):
                     endPix = min(startPix - end, width)
                 else:
                     endPix = self._valueToX(end) - (self._elevatorWidth // 2)
+                # Ranges left over from a longer clip can fall outside the
+                # new range; Pillow now raises on a reversed crop box, which
+                # aborted the whole 'videoLoaded' update (black player).
+                startPix = max(0, min(startPix, width))
+                endPix = max(startPix, min(endPix, width))
+                if endPix <= startPix:
+                    continue
                 bbox = (startPix, 0, endPix, self._sliderHeight)
                 specialCropped = specialImg.crop(bbox)
                 img.paste(specialCropped, (startPix, 0))

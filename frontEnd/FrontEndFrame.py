@@ -266,6 +266,8 @@ class FrontEndFrame(wx.Frame):
         self._backEndTimer = wx.Timer(self, -1)
         self.Bind(wx.EVT_TIMER, self.OnBackEndTimer, self._backEndTimer)
         self._backEndTimer.Start(_kBackEndPollMsecs)
+        from .SelfTest import installSelfTestHook
+        installSelfTestHook(self, getUserLocalDataDir())
         self._backEndErrorCount = 0
 
         # Check for updates and then every 24 hours
