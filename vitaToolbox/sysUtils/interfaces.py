@@ -40,6 +40,32 @@ def ipv4_addresses():
     return addrs
 
 
+def multicast_ipv4_text(ip):
+    """Return a dotted IPv4 address that can host multicast, or None.
+
+    0.0.0.0, broadcast, link-local, and non-IPv4 values are not valid
+    multicast interfaces. Windows reports WinError 10049 when one of those
+    is passed to IP_MULTICAST_IF or bind.
+    """
+    if isinstance(ip, (bytes, bytearray)):
+        ip = bytes(ip).decode("ascii", "ignore")
+    if not isinstance(ip, str):
+        return None
+    ip = ip.strip()
+    if not ip or ip in ("0.0.0.0", "255.255.255.255"):
+        return None
+    parts = ip.split(".")
+    if len(parts) != 4:
+        return None
+    try:
+        packed = socket.inet_aton(ip)
+    except OSError:
+        return None
+    if packed[0] == 169 and packed[1] == 254:
+        return None
+    return ip
+
+
 def mac_addresses():
     """``(interface name, [mac, ...])`` for universal (not locally administered) MACs."""
     found = []

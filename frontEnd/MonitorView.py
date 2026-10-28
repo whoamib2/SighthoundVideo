@@ -51,6 +51,7 @@ import wx
 
 # Toolbox imports...
 from vitaToolbox.mvc.AbstractModel import AbstractModel
+from frontEnd.BackEndClient import BackendNotReady
 from vitaToolbox.networking.Upnp import isUpnpUrl
 from vitaToolbox.networking.Upnp import realizeUpnpUrl
 from vitaToolbox.networking.Onvif import isOnvifUrl
@@ -1953,15 +1954,34 @@ class MonitorView(BaseMonitorView):
         if checkForMaxCameras(self._backEndClient, self.GetTopLevelParent()):
             return
 
-        wizard = CameraSetupWizard(self.GetTopLevelParent(),
-                                   self._backEndClient, self._dataManager)
+        wizard = None
         try:
+            wizard = CameraSetupWizard(self.GetTopLevelParent(),
+                                       self._backEndClient, self._dataManager)
             if wizard.run():
                 # If the dialog wasn't canceled make sure the Monitor view is
                 # displayed.
                 self._activateFunc()
+        except BackendNotReady as exc:
+            wx.MessageBox(
+                str(exc),
+                "Backend starting",
+                wx.OK | wx.ICON_INFORMATION,
+                self.GetTopLevelParent(),
+            )
+            return
+        except Exception as exc:
+            self._logger.exception("Add Camera failed")
+            wx.MessageBox(
+                "Add Camera could not open.\n\n%s" % exc,
+                "Add Camera",
+                wx.OK | wx.ICON_ERROR,
+                self.GetTopLevelParent(),
+            )
+            return
         finally:
-            wizard.Destroy()
+            if wizard is not None:
+                wizard.Destroy()
 
         # Any changes to the menu likely didn't update due to a bug in wx...
         # We'll re-call self._setActiveCamera to make sure things are correct.

@@ -55,10 +55,10 @@ import urllib.parse
 import logging
 import copy
 # Common 3rd-party imports...
-from vitaToolbox.sysUtils.interfaces import ipv4_addresses
+from vitaToolbox.sysUtils.interfaces import ipv4_addresses, multicast_ipv4_text
 
 # Toolbox imports...
-from vitaToolbox.strUtils.EnsureUnicode import ensureUtf8
+from vitaToolbox.strUtils.EnsureUnicode import ensureUnicode, ensureUtf8
 from vitaToolbox.networking.XmlUtils import vitaParseXML
 
 # Local imports...
@@ -115,6 +115,13 @@ _kSearchRequest = (
     mx=_kMaxResponseDelay,
     searchTarget="%(searchTarget)s",   # Filled in later...
 )
+
+
+def _datagram(packet):
+    """UDP and TCP payloads are bytes. Python 3 sockets reject str."""
+    if isinstance(packet, (bytes, bytearray)):
+        return bytes(packet)
+    return str(packet).encode("utf-8")
 
 # HTTP over UDP must fit within a single packet.  Spec says that requests
 # should really fit in 512 bytes, but I decided to be a little more
@@ -394,7 +401,11 @@ class ControlPointManager(object):
         """
         addrs = []
         try:
-            addrs = ipv4_addresses()
+            for row in ipv4_addresses():
+                ip = multicast_ipv4_text(row.get("addr"))
+                if ip is None:
+                    continue
+                addrs.append({"addr": ip, "netmask": row.get("netmask")})
         except:
             # due to IPHLPAPI.DLL incompatibilities we've seen this happening
             # in the wild, so protecting us against it cannot hurt ...
@@ -444,7 +455,7 @@ class ControlPointManager(object):
                 #print "Requesting on %s" % (str(requestSock.getsockname()))
                 try:
                     requestSock.sendto(
-                        _kSearchRequest % {'searchTarget': kSearchTargetAll},
+                        _datagram(_kSearchRequest % {'searchTarget': kSearchTargetAll}),
                         (_kMulticastIp, _kMulticastPort)
                     )
 
@@ -497,7 +508,7 @@ class ControlPointManager(object):
             #                                  searchFor)
             try:
                 requestSock.sendto(
-                    _kSearchRequest % {'searchTarget': searchFor},
+                    _datagram(_kSearchRequest % {'searchTarget': searchFor}),
                     (_kMulticastIp, _kMulticastPort)
                 )
             except socket.error:
@@ -1481,8 +1492,8 @@ class UpnpDevice(object):
         # True once we've sent the HTTP request...
         self._sentRequest = False
 
-        # We always read into a buffer.
-        self._buffer = ""
+        # We always read into a buffer. recv() returns bytes.
+        self._buffer = b""
 
         # Increase our number of failure.  Should be init to -1 in __init__
         # so this starts at 0.
@@ -1559,7 +1570,9 @@ class UpnpDevice(object):
             try:
                 md = vitaParseXML(data)
             except:
-                self._logger.error("Error parsing XML from " + str(self._ssdpIp) + ": " + ensureUtf8(data))
+                self._logger.error(
+                    "Error parsing XML from %s: %s" % (self._ssdpIp, ensureUnicode(data))
+                )
                 raise
             #print md.toprettyxml()
 
@@ -1686,8 +1699,8 @@ class UpnpDevice(object):
                 if splitLoc.query: descPath += "?" + splitLoc.query
                 if splitLoc.fragment: descPath += "#" + splitLoc.fragment
                 try:
-                    self._sock.sendall(_kDescriptionRequest %
-                                   {'path': descPath,'netloc': splitLoc.netloc})
+                    self._sock.sendall(_datagram(_kDescriptionRequest %
+                                   {'path': descPath,'netloc': splitLoc.netloc}))
                     self._sentRequest = True
                 except socket.error:
                     # Happens while Axis 1031 is coming up...
@@ -1776,13 +1789,13 @@ def extractUsnFromUpnpUrl(url):
         if not url:
             raise ValueError("Not a valid UPNP URL: %s" % url)
 
-        url = ensureUtf8(url)
+        url = ensureUnicode(url)
         splitResult = urllib.parse.urlsplit(url)
         if splitResult.scheme == 'upnp':
             # Old-style; note that we can't use 'hostname', since that
             # does a lower()
             usn = urllib.parse.unquote(splitResult.netloc.split('@', 1)[-1])
-            return usn.decode('utf-8')
+            return ensureUnicode(usn)
 
         # Get the hostname; if it's blank or None, that's not a valid UPNP URL.
         hostname = splitResult.hostname
@@ -1801,7 +1814,7 @@ def extractUsnFromUpnpUrl(url):
             # every 16 characters, to make it look pretty and keep any part
             # from being >63 characters...
             encodedUsn = encodedUsn.replace('9', '=').replace('.', '')
-            usn = base64.b32decode(encodedUsn, True)
+            usn = base64.b32decode(encodedUsn.encode("ascii"), True)
 
             #print "USN: %s" % usn.decode('utf-8')
             return usn.decode('utf-8')
@@ -1840,13 +1853,13 @@ def constructUpnpUrl(usn, username=None, password=None, pathPart=None,
                       Should be an integer if non-None.
     @return url       The UPNP URL.  Will be UTF-8.
     """
-    url = ensureUtf8(scheme)
+    url = ensureUnicode(scheme)
 
     if username or password:
         if username:
-            url += urllib.parse.quote(ensureUtf8(username), "")
+            url += urllib.parse.quote(ensureUnicode(username), "")
         if password:
-            url += ":%s" % urllib.parse.quote(ensureUtf8(password), "")
+            url += ":%s" % urllib.parse.quote(ensureUnicode(password), "")
         url += "@"
 
     # Encode into our terribly convoluted way of encoding a USN into
@@ -1856,7 +1869,7 @@ def constructUpnpUrl(usn, username=None, password=None, pathPart=None,
     # replace it with 9 (which should be unused).  We also put a "."
     # every 16 characters, to make it look pretty and keep any part
     # from being >63 characters...
-    encodedUsn = base64.b32encode(ensureUtf8(usn))
+    encodedUsn = base64.b32encode(ensureUtf8(usn)).decode("ascii")
     encodedUsn = encodedUsn.lower()
     encodedUsn = encodedUsn.replace('=', '9')
     encodedUsn = re.sub(r'(.{16})', r'\1.', encodedUsn).rstrip('.')
@@ -1867,8 +1880,9 @@ def constructUpnpUrl(usn, username=None, password=None, pathPart=None,
         url += ":%d" % port
 
     if pathPart:
+        pathPart = ensureUnicode(pathPart)
         assert pathPart.startswith('/')
-        url += ensureUtf8(pathPart)
+        url += pathPart
 
     #print "URL: %s" % url
     return url
@@ -1911,12 +1925,12 @@ def realizeUpnpUrl(deviceDict, url):
         # getPresentationUrl function, since we need to do our own parsing
         # anyway...
         presUrl, _ = device.getPresentationUrl()
-        presUrl = ensureUtf8(presUrl)
+        presUrl = ensureUnicode(presUrl)
         presSplitResult = urllib.parse.urlsplit(presUrl)
 
         # Split the UPNP URL.  This requires our patched urlparse to deal with
         # old-style upnp:// URLs (we patched up in the imports section)...
-        url = ensureUtf8(url)
+        url = ensureUnicode(url)
         upnpSplitResult = urllib.parse.urlsplit(url)
 
         if upnpSplitResult.scheme == 'upnp':

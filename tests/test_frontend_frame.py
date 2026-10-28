@@ -69,6 +69,8 @@ def wx_app(tmp_path_factory):
     from vitaToolbox.loggingUtils.LoggingUtils import getLogger
 
     app = FrontEndApp(getLogger("frame-test"))
+    # Parent/sizer mismatches are wx assertions. Make them fail the test.
+    app.SetAssertMode(wx.APP_ASSERT_EXCEPTION)
     yield app
     app.Destroy()
     if proc is not None:
@@ -101,7 +103,20 @@ class _FakeBackend:
             "Trial": False,
             "Serial Number": "",
             "Support Expires": 0,
+            "Cameras": -1,
         }
+
+    def getUpnpDictRevNum(self):
+        return None
+
+    def getOnvifDictRevNum(self):
+        return None
+
+    def activeCameraSearch(self, *_args, **_kwargs):
+        return None
+
+    def getLocalCameraNames(self):
+        return []
 
     def launchedByService(self):
         return False
@@ -326,7 +341,12 @@ def test_main_frame_and_simple_dialogs_construct(wx_app, tmp_path):
                 built.append("%s.%s" % (module_name, name))
             except Exception as exc:
                 text = str(exc)
-                if "unexpected type 'float'" in text or "arguments did not match" in text:
+                assertion = (
+                    exc.__class__.__name__ in ("wxAssertionError", "PyAssertionError")
+                    or "CheckExpectedParentIs" in text
+                    or "SetContainingWindow" in text
+                )
+                if assertion or "unexpected type 'float'" in text or "arguments did not match" in text:
                     failures.append("%s.%s: %s" % (module_name, name, text.splitlines()[0]))
                 else:
                     # A dialog that needs live data is not a Phoenix type error.
@@ -335,3 +355,30 @@ def test_main_frame_and_simple_dialogs_construct(wx_app, tmp_path):
                 parent.Destroy()
     assert not failures, "wx construction failed:\n" + "\n".join(failures)
     assert built, "no dialogs were constructed"
+
+
+class _FakeDataManager:
+    def getCameraLocations(self):
+        return []
+
+
+def test_camera_setup_wizard_constructs(wx_app):
+    """Add Camera builds every wizard page. A sizer/parent mismatch asserts."""
+    import wx
+    _use_uniform_bitmaps()
+    from frontEnd.CameraSetupWizard import CameraSetupWizard
+
+    parent = wx.Frame(None, title="wizard-parent")
+    client = _FakeBackend("", "")
+    wizard = None
+    try:
+        wizard = CameraSetupWizard(parent, client, _FakeDataManager(), "")
+        assert wizard.GetTitle() == "Camera Setup"
+        assert wizard._welcomeScreen.GetParent() is wizard
+        assert wizard._manualSettingsScreen.GetParent() is wizard
+        assert wizard._finishScreen.GetParent() is wizard
+    finally:
+        if wizard is not None:
+            wizard.CleanupTimers()
+            wizard.Destroy()
+        parent.Destroy()

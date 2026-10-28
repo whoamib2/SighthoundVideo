@@ -57,7 +57,7 @@ from xml.dom import minidom
 
 from collections import defaultdict
 
-from vitaToolbox.sysUtils.interfaces import ipv4_addresses
+from vitaToolbox.sysUtils.interfaces import ipv4_addresses, multicast_ipv4_text
 
 from vitaToolbox.strUtils.EnsureUnicode import ensureUnicode, ensureUtf8
 from vitaToolbox.loggingUtils.LoggingUtils import MsgPrefixLogger
@@ -71,6 +71,55 @@ _kDeviceTimeout = 30 # consider the device gone if not seen for that long
 # This is the official IP and port that we send multicast for the WS-Discovery.
 # <http://en.wikipedia.org/wiki/WS-Discovery>
 _kMulticastAddr = ("239.255.255.250", 3702)
+# Logged once per address so a bad adapter does not flood the log every cycle.
+_multicast_skip_logged = set()
+
+
+def _address_key(ip):
+    if isinstance(ip, (bytes, bytearray)):
+        return bytes(ip).decode("ascii", "ignore")
+    return str(ip)
+
+
+def _skip_multicast(ip, logger, reason):
+    key = _address_key(ip)
+    if key in _multicast_skip_logged:
+        return
+    _multicast_skip_logged.add(key)
+    if logger is not None:
+        logger.warning("skipping ONVIF multicast on %s: %s", key, reason)
+
+
+def open_multicast_socket(ip, logger=None):
+    """Bind one IPv4 interface for ONVIF discovery, or None if it cannot."""
+    text = multicast_ipv4_text(ip)
+    if text is None:
+        _skip_multicast(ip, logger, "address cannot be used for multicast")
+        return None
+    ip = text
+    sock = None
+    try:
+        sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+        sock.setsockopt(socket.IPPROTO_IP, socket.IP_MULTICAST_TTL, 1)
+        sock.setsockopt(socket.IPPROTO_IP, socket.IP_MULTICAST_IF,
+                        socket.inet_aton(ip))
+        sock.bind((ip, 0))
+        sock.setblocking(False)
+        return sock
+    except OSError as exc:
+        _skip_multicast(ip, logger, exc)
+        if sock is not None:
+            try:
+                sock.close()
+            except OSError:
+                pass
+        return None
+
+
+def _udp_payload(packet):
+    if isinstance(packet, (bytes, bytearray)):
+        return bytes(packet)
+    return str(packet).encode("utf-8")
 
 # This library follows the Onvif specification found here:
 # <http://www.onvif.org/specs/core/ONVIF-Core-Specification-v242.pdf>
@@ -1680,24 +1729,12 @@ class OnvifDiscovery(object):
             return
         self._logger.debug("IP addresses found %s" % ipAddrs)
 
-        socks = []
         for ipAddr in ipAddrs:
             ip = ipAddr['addr']
             self._logger.debug("creating multicast socket for %s..." % ip)
-            try:
-                sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-                sock.setsockopt(socket.IPPROTO_IP, socket.IP_MULTICAST_TTL, 1)
-                sock.setsockopt(socket.IPPROTO_IP, socket.IP_MULTICAST_IF,
-                                socket.inet_aton(ip))
-                sock.bind((ip, socket.INADDR_ANY))
-                sock.setblocking(False)
+            sock = open_multicast_socket(ip, self._logger)
+            if sock is not None:
                 socks.append(sock)
-            except:
-                self._logger.error("cannot create multicast!", exc_info=True)
-                try:
-                    sock.close()
-                except:
-                    pass
         if not socks:
             self._logger.warn("no multicast socket could be created")
             return
@@ -1726,7 +1763,7 @@ class OnvifDiscovery(object):
                     )
                 )
                 try:
-                    sock.sendto(probeXml, _kMulticastAddr)
+                    sock.sendto(_udp_payload(probeXml), _kMulticastAddr)
                     recvSocks.append(sock)
                 except:
                     self._logger.error(
@@ -1765,7 +1802,7 @@ class OnvifDiscovery(object):
                                         msgUUID
                                     )
                                 )
-                                sock.sendto(probeXml, _kMulticastAddr)
+                                sock.sendto(_udp_payload(probeXml), _kMulticastAddr)
                             except:
                                 self._logger.error(
                                     "Failed to send probe request!",
