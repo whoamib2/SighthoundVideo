@@ -44,9 +44,10 @@ Contains the ClipManager class.
 """
 
 # Python imports...
+from vitaToolbox.strUtils.PickleCompat import loads_pickle
 from itertools import groupby
 import bisect
-import cPickle
+import pickle
 import datetime
 import os
 import sqlite3 as sql
@@ -61,7 +62,7 @@ from vitaToolbox.sql.TimedConnection import TimedConnection
 
 # Local imports...
 from appCommon.CommonStrings import kSqlAlertThreshold
-from videoLib2.python.ClipReader import ClipReader, getMsList
+from backEnd.native.capture import ClipReader, getMsList
 
 # Constants
 kCacheStatusNonCache  =  0  # This is not a cache file
@@ -278,7 +279,7 @@ class ClipManager(object):
         @param  timeout   The time in seconds connections will wait for locks
                           to free without throwing an exception.
         """
-        assert type(filePath) == unicode
+        assert type(filePath) == str
 
         self._curDbPath = filePath
 
@@ -286,8 +287,12 @@ class ClipManager(object):
             self.close()
 
         # Open the database file and retrieve a list of the tables
-        self._connection = sql.connect(filePath.encode('utf-8'), timeout,
-                factory=TimedConnection, check_same_thread=False)
+        self._connection = sql.connect(
+            filePath.encode('utf-8'),
+            timeout=timeout,
+            factory=TimedConnection,
+            check_same_thread=False,
+        )
         self._connection.setParameters(self._logger, float(kSqlAlertThreshold), os.path.exists(self._curDbPath+".debug"))
         self._cur = self._connection.cursor()
 
@@ -950,7 +955,7 @@ class ClipManager(object):
                     # For cache files we need to try to grab the tags dict and
                     # look for marked times.
                     try:
-                        tagDict = cPickle.loads(str(tags))
+                        tagDict = loads_pickle(tags)
                         savedTimes = tagDict.get('saveTimes', [])
                         for first, last in savedTimes:
                             realPrev = prev
@@ -973,7 +978,7 @@ class ClipManager(object):
         seqFirstMs = None
         ranges = []
         numResults = len(results)
-        for i in xrange(numResults):
+        for i in range(numResults):
             thisFilename, thisFirstMs, thisLastMs, _, thisNextFile = results[i]
 
             if seqFirstMs is None:
@@ -1067,7 +1072,7 @@ class ClipManager(object):
         result = result.fetchone()
         if result:
             try:
-                tagsDict = cPickle.loads(str(result[0]))
+                tagsDict = loads_pickle(result[0])
             except Exception:
                 return {}
 
@@ -1086,7 +1091,7 @@ class ClipManager(object):
 
         filename = filename.replace(os.sep, '/')
 
-        pDict = cPickle.dumps(tags)
+        pDict = pickle.dumps(tags)
 
         self._cur.execute('''UPDATE clips SET tags=? WHERE filename=?''',
                           (pDict, filename))
@@ -1204,7 +1209,7 @@ class ClipManager(object):
         @param  videoFolder  The directory where video files are stored.
         @param  configDir    Directory to search for config files.
         """
-        import videoLib2.python.ClipUtils as ClipUtils  # Lazy--loaded on first need
+        from backEnd.native.capture import clip_utils as ClipUtils  # Lazy--loaded on first need
 
         # We need to split files that occur across the time change.
         files = self._cur.execute('''SELECT * FROM clips WHERE camLoc=? AND '''
@@ -1299,7 +1304,7 @@ class ClipManager(object):
         @return failedDeletes   A list of paths to files that were not
                                 successfully removed.
         """
-        import videoLib2.python.ClipUtils as ClipUtils  # Lazy--loaded on first need
+        from backEnd.native.capture import clip_utils as ClipUtils  # Lazy--loaded on first need
 
         failedDeletes = []
 
@@ -1477,7 +1482,7 @@ class ClipManager(object):
         tagsChanged = False
 
         try:
-            tagsDict = cPickle.loads(str(tags))
+            tagsDict = loads_pickle(tags)
         except Exception:
             return
 
@@ -1495,7 +1500,7 @@ class ClipManager(object):
 
         if tagsChanged:
             tagsDict['saveTimes'] = newSavedTimes
-            pickledTags = cPickle.dumps(tagsDict)
+            pickledTags = pickle.dumps(tagsDict)
             self._cur.execute('''UPDATE clips SET tags=? WHERE filename=?''',
                               (pickledTags, filename))
 
@@ -1624,7 +1629,7 @@ class ClipManager(object):
         # Create a compact list of processing sizes and time ranges.
         procSizesAndTimeRanges = []
         procWidth, procHeight, firstMs, lastMs = result[0]
-        for i in xrange(0, len(result)):
+        for i in range(0, len(result)):
             if procWidth == result[i][0] and procHeight == result[i][1]:
                 lastMs = result[i][3]
             else:

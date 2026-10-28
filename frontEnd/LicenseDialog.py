@@ -39,7 +39,7 @@
 
 # Python imports...
 import time
-import urllib
+import urllib.request, urllib.parse, urllib.error
 import webbrowser
 import sys, traceback
 
@@ -67,8 +67,8 @@ from appCommon.LicenseUtils import kNoValueToken
 from appCommon.LicenseUtils import kDefaultUser
 from appCommon.LicenseUtils import kDefaultSerial
 from appCommon.LicenseUtils import licenseValidForAppVersion
-from BackEndClient import LicenseBackEndClient
-from LoginDialog import getLicenseMoreInfoSizer
+from .BackEndClient import LicenseBackEndClient
+from .LoginDialog import getLicenseMoreInfoSizer
 from vitaToolbox.wx.DelayedProgressDialog import DelayedProgressDialog
 from vitaToolbox.wx.FontUtils import adjustPointSize
 from vitaToolbox.wx.FontUtils import makeFontBold
@@ -95,7 +95,7 @@ _kExpiresWidth = 100
 _kAvailableOffset = _kExpiresOffset+_kExpiresWidth+_kItemXOffset
 _kAvailableWidth = 100
 _kActivePaddingY = 3
-_kActiveRadius = (_kItemHeight-2*_kActivePaddingY)/2
+_kActiveRadius = (_kItemHeight-2*_kActivePaddingY)//2
 _kActivePaddingX = _kActiveRadius
 
 if wx.Platform == '__WXMSW__':
@@ -138,7 +138,7 @@ _kUnavailableText = "No"
 _kActiveText = "Active"
 
 
-_kStatusEditionText = "Sighthound Video %s"
+_kStatusEditionText = "VigilCam %s"
 _kStatusUserText = "Licensed To: %s"
 _kStatusSerialText = "Serial Number: %s"
 _kLicenseErrorText = "Current license could not be loaded."
@@ -153,10 +153,10 @@ _kUnlinkingContent = "Contacting server, just a moment..."
 # Information text
 _kLegacyWarning = (
 """Note: You are currently using a legacy license. You must create a """
-"""Sighthound Account and activate a license below to continue """
+"""VigilCam account and activate a license below to continue """
 """receiving updates. Paid licenses should be linked and activated """
 """automatically after signing in but can also be manually linked in your """
-"""account page at https://www.sighthound.com.""")
+"""account page at https://vigilcam.ai.""")
 
 _kCantActivate = (
 """This license cannot be automatically transferred to this machine. """
@@ -192,7 +192,7 @@ _kConfirmUnlink = (
 
 _kConfirmLogoutTitle = "Account Disconnect"
 _kConfirmLogout = (
-"""Disconnecting your Sighthound account will unlink any activated license """
+"""Disconnecting your VigilCam account will unlink any activated license """
 """and prevent you from using the application until you have signed in """
 """again. Are you sure you would like to disconnect your current account?""")
 
@@ -250,9 +250,8 @@ class LicenseDialog(wx.Dialog):
             self.Bind(wx.EVT_TIMER, self.OnRefreshTimer, self._refreshTimer)
             self.Bind(wx.EVT_WINDOW_DESTROY, self.OnDestroy)
 
-            # Icon and user information/messages/blah
-            badgeBmp = wx.Bitmap("frontEnd/bmps/Sighthound_Badge.png")
-            badge = wx.StaticBitmap(self, -1, badgeBmp)
+            # The old badge was a Sighthound logo. Right-click still disconnects.
+            badge = wx.StaticText(self, -1, "VigilCam")
             badge.Bind(wx.EVT_CONTEXT_MENU, self.OnBadgeMenu)
             self._statusEditionLabel = wx.StaticText(self, -1, " ")
             self._statusUserLabel = wx.StaticText(self, -1, " ")
@@ -523,7 +522,7 @@ class LicenseDialog(wx.Dialog):
         """
         serialNum = self._licenseList.getSelectedSerial()
         if serialNum:
-            serialNum = urllib.quote(serialNum)
+            serialNum = urllib.parse.quote(serialNum)
         webbrowser.open(kBuyUpgradeUrl % serialNum)
 
 
@@ -545,7 +544,7 @@ class LicenseDialog(wx.Dialog):
             try:
                 self._licenseClient.acquire(serialNum)
 
-                for _ in xrange(0, int(_kMaxAcquireRetries)):
+                for _ in range(0, int(_kMaxAcquireRetries)):
                     dlg.Pulse()
                     result = self._licenseClient.acquireComplete(
                                 _kAcquirePendingIntervalSec)
@@ -579,7 +578,7 @@ class LicenseDialog(wx.Dialog):
             try:
                 self._licenseClient.unlink()
 
-                for _ in xrange(0, int(_kMaxUnlinkRetries)):
+                for _ in range(0, int(_kMaxUnlinkRetries)):
                     dlg.Pulse()
                     result = self._licenseClient.unlinkComplete(
                                 _kUnlinkPendingIntervalSec)
@@ -772,7 +771,7 @@ class _LicenseList(wx.VListBox):
 
         # Attempt to restore the previous selection
         if curSerial:
-            for i in xrange(0, len(self._licenses)):
+            for i in range(0, len(self._licenses)):
                 if licenses[i][kSerialField] == curSerial:
                     self.SetSelection(i)
                     if not self.IsVisible(i):

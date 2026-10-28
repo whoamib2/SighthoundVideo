@@ -247,8 +247,8 @@ def formatExceptionConcisely(exc_info):
     ...    fn1()
     >>> try:
     ...   fn2()
-    ... except Exception, e:
-    ...   print formatExceptionConcisely(sys.exc_info())
+    ... except Exception:
+    ...   print(formatExceptionConcisely(sys.exc_info()))
     <type 'exceptions.Exception'>: Bogus - <doctest __main__.formatExceptionConcisely[2]>(2); <doctest __main__.formatExceptionConcisely[1]>(2); <doctest __main__.formatExceptionConcisely[0]>(2)
 
     @param  exc_info  Info from sys.exc_info()
@@ -405,7 +405,7 @@ class VitaLogger(logging.Logger):
         assert (self._diskHandler is None), \
                "Should turn off disk logging before setting log directory."
 
-        if type(logDirectory) == str:
+        if isinstance(logDirectory, (bytes, bytearray)):
             logDirectory = logDirectory.decode('utf-8')
         self._logDirectory = logDirectory
 
@@ -451,7 +451,7 @@ class VitaLogger(logging.Logger):
                     os.makedirs(self._logDirectory)
 
                 # Make the disk handler
-                logName = self._logName.decode("utf-8")
+                logName = self._logName.decode("utf-8") if isinstance(self._logName, (bytes, bytearray)) else self._logName
                 logPath = os.path.join(self._logDirectory, logName)
                 self._diskHandler = _VitaRotatingFileHandler(
                     logPath, maxBytes=self._logSize,
@@ -530,7 +530,7 @@ class _FilterBlanks(logging.Filter):
         @param  record  The record to look at.
         @return isGood  True if we want to keep; False to filter.
         """
-        if isinstance(record.msg, basestring):
+        if isinstance(record.msg, str):
             record.msg = record.msg.rstrip()
         return record.msg != ""
 
@@ -555,7 +555,7 @@ class _VitaFormatter(logging.Formatter):
 
 ##############################################################################
 class _VitaRotatingFileHandler(logging.handlers.RotatingFileHandler):
-    """RotatingFileHandler that doesn't get stuck in infinite recursion and
+    r"""RotatingFileHandler that doesn't get stuck in infinite recursion and
     is also thread-safe (atomic her emission call).
 
     The default RotatingFileHandler can get stuck in an infinite loop in due to
@@ -566,7 +566,7 @@ class _VitaRotatingFileHandler(logging.handlers.RotatingFileHandler):
 
     We see this type of stack crawl:
         File "c:\Python25\lib\logging\__init__.py", line 985, in info
-          apply(self._log, (INFO, msg, args), kwargs)
+          self._log(INFO, msg, args, **kwargs)
         File "c:\Python25\lib\logging\__init__.py", line 1101, in _log
           self.handle(record)
         File "c:\Python25\lib\logging\__init__.py", line 1111, in handle
@@ -584,7 +584,7 @@ class _VitaRotatingFileHandler(logging.handlers.RotatingFileHandler):
         File "c:\Python25\lib\traceback.py", line 13, in _print
           file.write(str+terminator)
         File "c:\Python25\lib\logging\__init__.py", line 999, in warning
-          apply(self._log, (WARNING, msg, args), kwargs)
+          self._log(WARNING, msg, args, **kwargs)
         File "c:\Python25\lib\logging\__init__.py", line 1101, in _log
           self.handle(record)
         File "c:\Python25\lib\logging\__init__.py", line 1111, in handle
@@ -778,40 +778,40 @@ def test_main(prefix=""):
     _kTestLogPath = os.path.join(_kTestLogDir, _kTestLog)
 
     if not wantLoopTest:
-        print prefix, "Deleting old log..."
+        print(prefix, "Deleting old log...")
         if os.path.exists(_kTestLogPath):
             os.unlink(_kTestLogPath)
-        print prefix, "...deleted"
+        print(prefix, "...deleted")
 
-    print prefix, "Creating logger w/ no directory and logging error/warning/info..."
-    print prefix, "...expect these to go to console."
+    print(prefix, "Creating logger w/ no directory and logging error/warning/info...")
+    print(prefix, "...expect these to go to console.")
     logger = getLogger(_kTestLog)
     logger.error(prefix + " test error")
     logger.warning(prefix + " test warning")
     logger.info(prefix + " test info")
 
-    print prefix, "Setting '%s' as directory and enabling..." % (_kTestLogDir)
-    print prefix, "...old logs should get flushed to log."
+    print(prefix, "Setting '%s' as directory and enabling..." % (_kTestLogDir))
+    print(prefix, "...old logs should get flushed to log.")
     logger.setLogDirectory(_kTestLogDir)
     logger.enableDiskLogging()
 
-    print prefix, "A few more logs; should go to disk not console"
+    print(prefix, "A few more logs; should go to disk not console")
     logger.error(prefix + " test error, disk only")
     logger.warning(prefix + " test warning, disk only")
     logger.info(prefix + " test info, disk only")
 
-    print prefix, "Disabling disk logging, then logging..."
-    print prefix, "...these should go to console"
+    print(prefix, "Disabling disk logging, then logging...")
+    print(prefix, "...these should go to console")
     logger.disableDiskLogging()
     logger.error(prefix + " test error 2")
     logger.warning(prefix + " test warning 2")
     logger.info(prefix + " test info 2")
 
-    print prefix, "Reenabling disk logging; that should flush previous to disk."
+    print(prefix, "Reenabling disk logging; that should flush previous to disk.")
     logger.enableDiskLogging()
 
     if wantLoopTest:
-        print prefix, "Logging every ~.1 seconds for 30 seconds"
+        print(prefix, "Logging every ~.1 seconds for 30 seconds")
         startTime = time.time()
         i = 0
         while (time.time() - startTime < 30):
@@ -819,15 +819,15 @@ def test_main(prefix=""):
             time.sleep(random.randint(5, 15) / 100.0)
             i += 1
 
-    print prefix, "Redirecting stderr and stdout; no more prints after this!"
+    print(prefix, "Redirecting stderr and stdout; no more prints after this!")
     logger.grabStdStreams()
 
-    print >>sys.stderr, "Here's a print to stderr"
-    print "Here's a print to stdout"
+    print("Here's a print to stderr", file=sys.stderr)
+    print("Here's a print to stdout")
 
     logger.disableDiskLogging()
-    print >>sys.stderr, "Disk logging is disabled, you should see this."
-    print "...and this (stdout)"
+    print("Disk logging is disabled, you should see this.", file=sys.stderr)
+    print("...and this (stdout)")
 
 
 
@@ -847,4 +847,4 @@ if __name__ == '__main__':
     if len(sys.argv) > 1 and sys.argv[1] == "test":
         _runTests()
     else:
-        print "Try calling with 'test' as the argument."
+        print("Try calling with 'test' as the argument.")

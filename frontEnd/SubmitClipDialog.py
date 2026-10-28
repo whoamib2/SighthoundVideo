@@ -52,10 +52,8 @@ _kConsentHeight = 200 # Height for consent static text
 kConsentText = """
 <body style="background-color: #dddddd">
 <p>
-By clicking <b>OK</b>, you agree to provide selected video clips (including any notes) in accordance with the <a href="https://www.sighthound.com/privacy">Sighthound Privacy Policy</a> and <a href="https://www.sighthound.com/terms">Terms of Use</a>.
-<br>
-<br>
-Your data will only be used by Sighthound and not shared with any third parties.
+By clicking <b>OK</b>, you agree to submit the selected video clips (including any notes).
+VigilCam is based on the Sighthound Video open-source release, licensed under the GNU GPLv3.
 </p>
 """.strip()
 
@@ -68,7 +66,7 @@ class SubmitClipConsentDialog(wx.Dialog):
 
         @param  parent         The parent window.
         """
-        wx.Dialog.__init__(self, parent, -1, "Submit clip to Sighthound for analysis ...")
+        wx.Dialog.__init__(self, parent, -1, "Submit clip for analysis")
 
         try:
             # Create the main sizer.
@@ -132,7 +130,7 @@ class SubmitClipDetailsDialog(wx.Dialog):
 
         @param  parent         The parent window.
         """
-        wx.Dialog.__init__(self, parent, -1, "Submit clip to Sighthound for analysis ...")
+        wx.Dialog.__init__(self, parent, -1, "Submit clip for analysis")
 
         try:
             # Create the main sizer.

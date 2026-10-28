@@ -47,7 +47,7 @@ import operator
 # Toolbox imports...
 
 # Local imports...
-from BaseResponse import BaseResponse
+from .BaseResponse import BaseResponse
 
 from backEnd import MessageIds
 

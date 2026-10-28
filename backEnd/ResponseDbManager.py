@@ -38,7 +38,8 @@
 
 
 # Python imports...
-import cPickle as pickle
+from vitaToolbox.strUtils.PickleCompat import loads_pickle
+import pickle as pickle
 import sqlite3 as sql
 import time
 import os
@@ -175,7 +176,7 @@ class ResponseDbManager(object):
         @param  timeout   The time in seconds connections will wait for locks
                           to free without throwing an exception.
         """
-        assert type(filePath) == unicode
+        assert type(filePath) == str
 
         self._curDbPath = filePath
 
@@ -214,8 +215,12 @@ class ResponseDbManager(object):
         if not self._curDbPath:
             return None
 
-        connection = sql.connect(self._curDbPath.encode('utf-8'), timeout,
-                factory=TimedConnection, check_same_thread=False)
+        connection = sql.connect(
+            self._curDbPath.encode('utf-8'),
+            timeout=timeout,
+            factory=TimedConnection,
+            check_same_thread=False,
+        )
         connection.setParameters(self._logger, float(kSqlAlertThreshold), os.path.exists(self._curDbPath+".debug"))
 
         return connection
@@ -384,8 +389,8 @@ class ResponseDbManager(object):
 
         (uid, protocol, camLoc, ruleName, startTime, stopTime,
          playStart, previewMs, objList, startList) = result
-        objList = pickle.loads(str(objList))
-        startList = pickle.loads(str(startList))
+        objList = loads_pickle(objList)
+        startList = loads_pickle(startList)
 
         return (uid, camLoc, ruleName, startTime, stopTime,
                 playStart, previewMs, objList, startList)

@@ -55,7 +55,7 @@ from appCommon.CommonStrings import kAboutAccountsUrl
 from appCommon.CommonStrings import kCreateAccountUrl
 from appCommon.CommonStrings import kForgotPassUrl
 from appCommon.CommonStrings import kLoginStatusLastUser
-from BackEndClient import LicenseBackEndClient
+from .BackEndClient import LicenseBackEndClient
 from vitaToolbox.wx.DelayedProgressDialog import DelayedProgressDialog
 from vitaToolbox.wx.FontUtils import makeFontNotUnderlined
 from vitaToolbox.wx.TextCtrlUtils import setHyperlinkColors
@@ -64,7 +64,7 @@ from vitaToolbox.wx.TextCtrlUtils import setHyperlinkColors
 _kTitle = "Sign In"
 
 _kErrorText = (
-"""There was a problem authenticating your Sighthound account. """
+"""There was a problem authenticating your VigilCam account. """
 """Please enter your email address and password to sign in again."""
 )
 
@@ -73,7 +73,7 @@ _kLegacyPaidAction = "."
 _kLegacyStarterAction = " and claim your free Pro trial."
 
 _kWelcomeTextLegacy = (
-"""Sighthound Video now requires a Sighthound Account. This system allows """
+"""VigilCam can use an account. This system allows """
 """for easier license storage, activation, upgrades, and will enable the """
 """addtion of many new features going forward. You must create an account """
 """to continue receiving application updates"""
@@ -114,7 +114,7 @@ _kPadding = 16
 _kConnectCheckIntervalSec = .1
 _kMaxConnectRetries = 30/_kConnectCheckIntervalSec
 
-_kEMailRegex = re.compile('^[0-9a-zA-Z._%+-]+@[0-9a-zA-Z.-]+\.[a-zA-Z]{2,63}$')
+_kEMailRegex = re.compile(r'^[0-9a-zA-Z._%+-]+@[0-9a-zA-Z.-]+\.[a-zA-Z]{2,63}$')
 
 ##############################################################################
 def getLicenseMoreInfoSizer(parent):
@@ -206,7 +206,7 @@ class LoginDialog(wx.Dialog):
 
             # Fill the field sizer
             fieldSizer = wx.BoxSizer(wx.VERTICAL)
-            gridSizer = wx.FlexGridSizer(rows=0, cols=2, vgap=_kPadding/2,
+            gridSizer = wx.FlexGridSizer(rows=0, cols=2, vgap=_kPadding//2,
                     hgap=4)
             gridSizer.Add(userLabel, 0, wx.ALIGN_CENTER_VERTICAL)
             gridSizer.Add(self._userField)
@@ -303,7 +303,7 @@ class LoginDialog(wx.Dialog):
         try:
             self._licenseClient.login(email, password)
 
-            for _ in xrange(0, int(_kMaxConnectRetries)):
+            for _ in range(0, int(_kMaxConnectRetries)):
                 result = self._licenseClient.loginComplete(
                         _kConnectCheckIntervalSec)
                 if result is not None:

@@ -184,7 +184,7 @@ class TriggerRegion(AbstractModel):
         rightX, rightY = points[rightI]
         rightSegment = LineSegment(x, y, rightX, rightY)
 
-        for ptNum in xrange(0, numPoints):
+        for ptNum in range(0, numPoints):
             prevPtNum = (ptNum - 1 + numPoints) % numPoints
 
             if (prevPtNum == i) or (ptNum == i):
@@ -402,7 +402,7 @@ def _arePointsClockwise(points):
     signedArea = 0
 
     numPoints = len(points)
-    for i in xrange(numPoints):
+    for i in range(numPoints):
         x1, y1 = points[i-2]
         x2, y2 = points[i-1]
         x3, y3 = points[i]
@@ -417,7 +417,7 @@ def _arePointsClockwise(points):
 ##############################################################################
 def test_main():
     """Contains various self-test code."""
-    print "NO TESTS"
+    print("NO TESTS")
 
 
 ##############################################################################
@@ -425,4 +425,4 @@ if __name__ == '__main__':
     if len(sys.argv) > 1 and sys.argv[1] == "test":
         test_main()
     else:
-        print "Try calling with 'test' as the argument."
+        print("Try calling with 'test' as the argument.")

@@ -47,13 +47,13 @@ Contains the BackEndApp class.
 
 # Python imports...
 import bisect
-import cPickle
+import pickle
 import errno
 import logging
 import operator
-from Queue import Empty as QueueEmpty
+from queue import Empty as QueueEmpty
 from multiprocessing import Pipe, Queue
-from Queue import PriorityQueue
+from queue import PriorityQueue
 import os
 from signal import SIGTERM
 from socket import timeout as sockettimeout
@@ -62,7 +62,7 @@ from sqlite3 import DatabaseError
 import sys
 import time
 import traceback
-import xmlrpclib
+import xmlrpc.client
 import multiprocessing
 import hashlib
 import ssl
@@ -133,51 +133,51 @@ from appCommon.DbRecovery import runDatabaseRecovery
 from appCommon.DbRecovery import kStatusRecover
 from appCommon.DbRecovery import kStatusReset
 from appCommon.DebugPrefs import getDebugPrefAsInt, getDebugPrefAsFloat
-from BackEndPrefs import BackEndPrefs
-from BackEndPrefs import kLiveMaxBitrate
-from BackEndPrefs import kLiveEnableTimestamp
-from BackEndPrefs import kLiveMaxResolution
-from BackEndPrefs import kClipResolution
-from BackEndPrefs import kLiveEnableFastStart
-from BackEndPrefs import kGenThumbnailResolution
-from BackEndPrefs import kFpsLimit
-from BackEndPrefs import kRecordInMemory, kClipMergeThreshold, kHardwareAccelerationDevice
-from BackEndProcessJumper import startCapture
-from BackEndProcessJumper import startDiskCleaner
-from BackEndProcessJumper import startNetworkMessageServer
-from BackEndProcessJumper import startResponseRunner
-from BackEndProcessJumper import startStream
-from BackEndProcessJumper import startWebServer
-from BackEndProcessJumper import startPacketCapture
-from BackEndProcessJumper import startPlatformHTTPWrapper
-from CameraManager import CameraManager
-from ClipManager import ClipManager
-from DataManager import DataManager
-from DebugLogManager import DebugLogManager
+from .BackEndPrefs import BackEndPrefs
+from .BackEndPrefs import kLiveMaxBitrate
+from .BackEndPrefs import kLiveEnableTimestamp
+from .BackEndPrefs import kLiveMaxResolution
+from .BackEndPrefs import kClipResolution
+from .BackEndPrefs import kLiveEnableFastStart
+from .BackEndPrefs import kGenThumbnailResolution
+from .BackEndPrefs import kFpsLimit
+from .BackEndPrefs import kRecordInMemory, kClipMergeThreshold, kHardwareAccelerationDevice
+from .BackEndProcessJumper import startCapture
+from .BackEndProcessJumper import startDiskCleaner
+from .BackEndProcessJumper import startNetworkMessageServer
+from .BackEndProcessJumper import startResponseRunner
+from .BackEndProcessJumper import startStream
+from .BackEndProcessJumper import startWebServer
+from .BackEndProcessJumper import startPacketCapture
+from .BackEndProcessJumper import startPlatformHTTPWrapper
+from .CameraManager import CameraManager
+from .ClipManager import ClipManager
+from .DataManager import DataManager
+from .DebugLogManager import DebugLogManager
 if kOpenSourceVersion:
-    from LicenseManagerOSS import LicenseManager
+    from .LicenseManagerOSS import LicenseManager
 else:
     from LicenseManager import LicenseManager
-from ClipUploader import ClipUploader
-import MessageIds
-from ResponseDbManager import ResponseDbManager
-from responses.CommandResponse import CommandResponse
-from responses.EmailResponse import EmailResponse
-from responses.WebhookResponse import WebhookResponse
-from responses.PushResponse import PushResponse
-from responses.IftttResponse import IftttResponse
-from responses.RecordResponse import RecordResponse
-from responses.SoundResponse import SoundResponse
-from responses.SendClipResponse import SendClipResponse
-from videoLib2.python.ClipReader import ClipReader, getMsList
-from videoLib2.python.StreamReader import getLocalCameraNames as strmGetLocalCameraNames
-from videoLib2.python.StreamReader import getHardwareDevicesList as getHardwareDevicesList
-from WebServer import killWebServerProcesses
+from .ClipUploader import ClipUploader
+from . import MessageIds
+from .ResponseDbManager import ResponseDbManager
+from .responses.CommandResponse import CommandResponse
+from .responses.EmailResponse import EmailResponse
+from .responses.WebhookResponse import WebhookResponse
+from .responses.PushResponse import PushResponse
+from .responses.IftttResponse import IftttResponse
+from .responses.RecordResponse import RecordResponse
+from .responses.SoundResponse import SoundResponse
+from .responses.SendClipResponse import SendClipResponse
+from backEnd.native.capture import ClipReader, getMsList
+from backEnd.native.capture import getLocalCameraNames as strmGetLocalCameraNames
+from backEnd.native.capture import getHardwareDevicesList as getHardwareDevicesList
+from .WebServer import killWebServerProcesses
 from launch.Launch import Launch
 from launch.Launch import serviceAvailable
 from appCommon.hostedServices.IftttClient import IftttClient
-from SavedQueryDataModel import convertOld2NewSavedQueryDataModel
-from NetworkScanner import NetworkScanner, OnvifNetworkScanner
+from .SavedQueryDataModel import convertOld2NewSavedQueryDataModel
+from .NetworkScanner import NetworkScanner, OnvifNetworkScanner
 
 
 
@@ -224,6 +224,18 @@ _kMessageServerPingTime = 120
 # We'll delete rules associated with a camera this long after we remove the
 # camera to give any pending information time to be processed.
 _kRuleCleanupTimeout = 120
+
+# A subsystem crash used to restart the backend immediately and re-open every
+# camera. Wait, then double the wait, and stop at half a minute.
+_kRestartDelayStart = 2
+_kRestartDelayMax = 30
+
+
+def next_restart_delay(previous):
+    """Seconds to wait before starting the backend again after a crash."""
+    if not previous or previous < _kRestartDelayStart:
+        return _kRestartDelayStart
+    return min(_kRestartDelayMax, previous * 2)
 
 # If a temp video file could not be moved we'll try again for this many seconds
 # before giving up and deleting it.
@@ -321,7 +333,7 @@ class BackEndApp(object):
         self._logger = getLogger(_kLogName, self._logDir, _kLogSize)
         self._logger.grabStdStreams()
 
-        assert type(self._userLocalDataDir) == unicode
+        assert type(self._userLocalDataDir) == str
 
         self._threadPool = ThreadPool(_kThreadPoolSize)
 
@@ -592,7 +604,7 @@ class BackEndApp(object):
 
         # Handle any last minute messages
         self._logger.info("Handling last messages...")
-        for n in xrange(1,1000):
+        for n in range(1,1000):
             try:
                 msg, _ = self._getQueueMessage(timeout=1)
                 self._logger.info("last message #%d: %s" % (n, str(msg[0])))
@@ -810,7 +822,7 @@ class BackEndApp(object):
         self._hardwareDevice = prefs.getPref(kHardwareAccelerationDevice)
         self._dataStorageLocation = prefs.getPref('dataDir')
         self._timePrefs = ( prefs.getPref('timePref12'), prefs.getPref('datePrefUS') )
-        if type(self._dataStorageLocation) == str:
+        if isinstance(self._dataStorageLocation, (bytes, bytearray)):
             self._dataStorageLocation = self._dataStorageLocation.decode('utf-8')
 
         if self._dataStorageLocation is None:
@@ -833,7 +845,7 @@ class BackEndApp(object):
         }
 
         videoStorageLocation = prefs.getPref('videoDir')
-        if type(videoStorageLocation) == str:
+        if isinstance(videoStorageLocation, (bytes, bytearray)):
             videoStorageLocation = videoStorageLocation.decode('utf-8')
         if videoStorageLocation is None:
             videoStorageLocation = os.path.join(self._userLocalDataDir,
@@ -892,7 +904,7 @@ class BackEndApp(object):
 
         try:
             self._openDatabases()
-        except DatabaseError, e:
+        except DatabaseError as e:
             self._logger.error("Couldn't open databases.", exc_info=True)
             if e.message in kCorruptDbErrorStrings:
                 self._handleCorruptDatabase()
@@ -961,23 +973,31 @@ class BackEndApp(object):
 
         if not os.path.isfile(os.path.join(self._userLocalDataDir, "disableOnvif")):
             self._onvifLogger = getLogger(_kOnvifLogName, self._logDir, _kOnvifLogSize)
-            self._onvifScanner = OnvifNetworkScanner(self._onvifLogger,
+            try:
+                self._onvifScanner = OnvifNetworkScanner(self._onvifLogger,
                                     NetworkScannerCallback(MessageIds.msgIdUpdateOnvif, self._childProcQueue),
                                     _kFastestOnvifPoll,
                                     OnvifDeviceManager(self._onvifLogger, self._threadPool),
                                     "ONVIF")
-            self._logger.info("ONVIF scanner had been created")
+                self._logger.info("ONVIF scanner had been created")
+            except Exception:
+                self._onvifScanner = None
+                self._logger.error("ONVIF scanner failed to start", exc_info=True)
         else:
             self._logger.info("ONVIF scanner is disabled")
 
         if not os.path.isfile(os.path.join(self._userLocalDataDir, "disableUpnp")):
             self._upnpLogger = getLogger(_kUpnpLogName, self._logDir, _kUpnpLogSize)
-            self._upnpScanner = NetworkScanner(self._upnpLogger,
+            try:
+                self._upnpScanner = NetworkScanner(self._upnpLogger,
                                     NetworkScannerCallback(MessageIds.msgIdUpdateUpnp, self._childProcQueue),
                                     _kFastestUpnpPoll,
                                     ControlPointManager(self._upnpLogger),
                                     "UPNP")
-            self._logger.info("UPNP scanner had been created")
+                self._logger.info("UPNP scanner had been created")
+            except Exception:
+                self._upnpScanner = None
+                self._logger.error("UPNP scanner failed to start", exc_info=True)
         else:
             self._logger.info("UPNP scanner is disabled")
 
@@ -1009,7 +1029,7 @@ class BackEndApp(object):
                     self._processQueueMessage(queueMsg)
                     timeToProcess = time.time() - start
                     self._childProcQueueStats.update(qsize, msgId, timeInQueue, timeToProcess)
-                except DatabaseError, e:
+                except DatabaseError as e:
                     self._logger.error("Process message exception: %s", traceback.format_exc())
                     if e.message in kCorruptDbErrorStrings:
                         raise
@@ -1044,7 +1064,7 @@ class BackEndApp(object):
 
                 # Restart any cameras that have unexpectedly terminated
                 if curTime > self._lastCameraCheck+_kCameraCheckInterval:
-                    locations = self._captureStreams.keys()
+                    locations = list(self._captureStreams.keys())
 
                     # If we've been sleeping we don't want to terminate cameras
                     # immediately on awake.
@@ -1071,6 +1091,7 @@ class BackEndApp(object):
                             self._responseRunnerProc.terminate()
                             self._logger.warn("terminated ResponseRunner")
                         else:
+                            self._note_child_exit("ResponseRunner", self._responseRunnerProc)
                             self._logger.info("ResponseRunner not alive, restarting")
                         self._initResponseRunner()
 
@@ -1080,6 +1101,8 @@ class BackEndApp(object):
                             if p.is_alive():
                                 self._terminateCameraProcess(p)
                                 self._logger.warn("terminated %s" % ensureUtf8(location))
+                            else:
+                                self._note_child_exit(location, p)
                             self._delCaptureStream(location)
                             deadCameras.append(location)
                             self._logger.info("%s not alive, restarting" % ensureUtf8(location))
@@ -1093,7 +1116,7 @@ class BackEndApp(object):
                     for cam in deadCameras:
                         self._setCameraStatus(cam, kCameraFailed)
 
-                    pipeIds = self._deadPipes.keys()
+                    pipeIds = list(self._deadPipes.keys())
                     for pipeId in pipeIds:
                         if self._deadPipes[pipeId] < curTime:
                             del self._deadPipes[pipeId]
@@ -1103,14 +1126,21 @@ class BackEndApp(object):
 
                     # Ensure that the disk cleaner is still running
                     if not self._diskCleanupProc.is_alive():
+                        self._note_child_exit("DiskCleaner", self._diskCleanupProc)
                         self._logger.warn("Disk cleaner not running, restarting")
                         self._initDiskCleanup(self._maxStorage)
 
                     # Ensure that the platform wrapper is still running
                     if not self._platformHTTPWrapperProc or \
                         not self._platformHTTPWrapperProc.is_alive():
-                        self._logger.warn("Platform wrapper is not running, restarting")
-                        self._initPlatformHTTPWrapper()
+                        if self._platformHTTPWrapperProc is not None:
+                            self._note_child_exit("PlatformHTTPWrapper", self._platformHTTPWrapperProc)
+                        now = time.time()
+                        last = getattr(self, "_platformWrapperRestartAt", 0)
+                        if now - last >= 30:
+                            self._platformWrapperRestartAt = now
+                            self._logger.warn("Platform wrapper is not running, restarting")
+                            self._initPlatformHTTPWrapper()
 
                     # Give the license manager opportunity to do things.
                     try:
@@ -1124,9 +1154,9 @@ class BackEndApp(object):
                     # the pending process updated queue.
                     try:
                         self._netMsgServerClient.updateCameraProgress()
-                    except sockettimeout, e:
+                    except sockettimeout as e:
                         raise
-                    except Exception, e:
+                    except Exception as e:
                         # Not sure what we were catching here before, or whether
                         # it is still relevant... We now have threaded xmlrpc
                         # servers and timeout sockets... want to take this out
@@ -1139,12 +1169,12 @@ class BackEndApp(object):
                                 "Tell Ryan if you see this - eating " + str(e))
 
                     # Clean up any camera data hanging around as necessary.
-                    for loc in self._pendingRuleCleanupDict.keys():
+                    for loc in list(self._pendingRuleCleanupDict.keys()):
                         if self._pendingRuleCleanupDict[loc] < curTime:
                             self._cleanupCameraData(loc)
 
                     # Clean up any dead camera processes
-                    for i in xrange(len(self._deadCameras)-1, -1, -1):
+                    for i in range(len(self._deadCameras)-1, -1, -1):
                         proc, quitTime = self._deadCameras[i]
                         if quitTime + _kRuleCleanupTimeout < curTime:
                             if proc.is_alive():
@@ -1169,7 +1199,7 @@ class BackEndApp(object):
                     self._netMsgServerClient.backEndPing()
                     self._moveTmpFiles()
 
-            except DatabaseError, e:
+            except DatabaseError as e:
                 if e.message in kCorruptDbErrorStrings:
                     self._handleCorruptDatabase()
                 else:
@@ -1217,7 +1247,7 @@ class BackEndApp(object):
         if self._pendingRealTimeSearches:
             # We normally wait until we've accumulated 1 second of motion data
             # before doing a search.  This is for efficiency reasons...
-            for camName, ms in self._pendingRealTimeSearches.iteritems():
+            for camName, ms in self._pendingRealTimeSearches.items():
                 lastSearchTime = self._lastSearchTimes.get(camName, 0)
                 dt = ms - lastSearchTime
                 if dt > _kMinimumSearchDelayMs:
@@ -1260,7 +1290,7 @@ class BackEndApp(object):
 
         if changedUuids or goneUuids:
 
-            self._netMsgServerClient.setOnvifDevices(xmlrpclib.Binary(cPickle.dumps(allDevices)))
+            self._netMsgServerClient.setOnvifDevices(xmlrpc.client.Binary(pickle.dumps(allDevices)))
 
             self._logger.info("ONVIF UUIDs changed: %s, gone: %s" %
                               (str(changedUuids), str(goneUuids)))
@@ -1269,7 +1299,7 @@ class BackEndApp(object):
             changedUuids |= goneUuids
 
             # Disable / reenable any affected cameras...
-            for camLoc, _ in self._cameraInfo.iteritems():
+            for camLoc, _ in self._cameraInfo.items():
                 uri, enabled, _, extras = self._cameraInfo[camLoc]
 
                 if enabled and isOnvifUrl(uri):
@@ -1297,7 +1327,7 @@ class BackEndApp(object):
         #     self._logger.info("Got device %s" % str(allDevices[dev]))
 
         if changedUsns or goneUsns:
-            self._netMsgServerClient.setUpnpDevices(xmlrpclib.Binary(cPickle.dumps(self._upnpDevices)))
+            self._netMsgServerClient.setUpnpDevices(xmlrpc.client.Binary(pickle.dumps(self._upnpDevices)))
 
             self._logger.debug("UPNP USNs changed: %s, gone: %s" % (str(changedUsns), str(goneUsns)))
 
@@ -1305,7 +1335,7 @@ class BackEndApp(object):
             changedUsns |= goneUsns
 
             # Disable / reenable any affected cameras...
-            for camLoc, _ in self._cameraInfo.iteritems():
+            for camLoc, _ in self._cameraInfo.items():
                 uri, enabled, _, extras = self._cameraInfo[camLoc]
 
                 if enabled and isUpnpUrl(uri):
@@ -1352,7 +1382,7 @@ class BackEndApp(object):
             # Pop off the camera with the earliest ms value.  We will
             # eventually get to everything this way and in approx the
             # order they came in...
-            camName, ms = min(self._pendingRealTimeSearches.iteritems(), key=operator.itemgetter(1))
+            camName, ms = min(iter(self._pendingRealTimeSearches.items()), key=operator.itemgetter(1))
             self._pendingRealTimeSearches.pop(camName)
 
             self._doRealTimeSearch(camName, ms)
@@ -1407,15 +1437,15 @@ class BackEndApp(object):
                 try:
                     # Load the rule
                     ruleFilePath = os.path.join(ruleDir, fileName)
-                    ruleFile = file(ruleFilePath, 'r')
-                    rule = cPickle.load(ruleFile)
+                    ruleFile = open(ruleFilePath, 'rb')
+                    rule = pickle.load(ruleFile)
                     ruleFile.close()
 
                     # Load it's associated query
                     queryFilePath = os.path.join(ruleDir,
                                                  rule.getQueryName()+kQueryExt)
-                    queryFile = file(queryFilePath, 'r')
-                    queryModel = cPickle.load(queryFile)
+                    queryFile = open(queryFilePath, 'rb')
+                    queryModel = pickle.load(queryFile)
                     queryFile.close()
 
                     # First, convert old queries to have coordinate spaces.
@@ -1563,7 +1593,7 @@ class BackEndApp(object):
         timeNow = time.time()
 
         # Iterate over copy of keys, so we can delete...
-        for camLoc in self._responsesToFlush.keys():
+        for camLoc in list(self._responsesToFlush.keys()):
             allResponses, timeStopped = self._responsesToFlush[camLoc]
             if (timeStopped + _kResponseFlushTime <= timeNow) or force:
                 for response in allResponses:
@@ -1708,7 +1738,7 @@ class BackEndApp(object):
 
         # Inform any loaded rules for this camera about the new session.
         ruleDict = self._ruleDicts.get(camLocation, {})
-        for _, _, _, _, responses in ruleDict.values():
+        for _, _, _, _, responses in list(ruleDict.values()):
             for response in responses:
                 response.startNewSession()
 
@@ -1782,7 +1812,7 @@ class BackEndApp(object):
 
         # Let the new camera process know what moves are still pending
         pendingMoves = []
-        for targetPath, (loc, _) in self._pendingFileMoves.items():
+        for targetPath, (loc, _) in list(self._pendingFileMoves.items()):
             if loc == camLocation:
                 pendingMoves.append(os.path.basename(targetPath))
         extra['pendingMoves'] = pendingMoves
@@ -1845,7 +1875,7 @@ class BackEndApp(object):
         # Note the fact that we'd like to flush the responses before too long...
         ruleDict = self._ruleDicts.get(camLocation, {})
         allResponses = []
-        for _, _, _, _, responses in ruleDict.itervalues():
+        for _, _, _, _, responses in ruleDict.values():
             allResponses.extend(responses)
         self._responsesToFlush[camLocation] = (allResponses, time.time())
 
@@ -1962,7 +1992,7 @@ class BackEndApp(object):
         @return (contact,name)  The certificate data to use.
         """
         mid = machineId(True, self._logger)
-        for _ in xrange(0, 32): # scramble the machine ID, don't expose it!
+        for _ in range(0, 32): # scramble the machine ID, don't expose it!
             mid = hashlib.sha1(mid.encode("UTF-8")).hexdigest()
         name = "remote" + mid[0:8]  # (and only return a portion of it)
         return (kSupportEmail, name)
@@ -2022,6 +2052,32 @@ class BackEndApp(object):
             self._enableDiskLogging(True)
             if len(error) > 0:
                 self._logger.error("Failed to launch platform HTTP wrapper:" + error)
+
+    ###########################################################
+    def _child_exit_reason(self, name, proc):
+        """Text for BackEndApp.log when a child has stopped."""
+        pid = getattr(proc, "pid", None)
+        code = getattr(proc, "exitcode", None)
+        if code is None:
+            return "%s pid %s stopped with no exit code" % (name, pid)
+        if isinstance(code, int) and code < 0:
+            return "%s pid %s killed by signal %s" % (name, pid, -code)
+        return "%s pid %s exit code %s" % (name, pid, code)
+
+    ###########################################################
+    def _note_child_exit(self, name, proc):
+        """Log each child death once, including the exit code."""
+        if proc is None:
+            return
+        key = (str(name), getattr(proc, "pid", None), getattr(proc, "exitcode", None))
+        seen = getattr(self, "_loggedChildExits", None)
+        if seen is None:
+            seen = set()
+            self._loggedChildExits = seen
+        if key in seen:
+            return
+        seen.add(key)
+        self._logger.error(self._child_exit_reason(name, proc))
 
     ###########################################################
     def _initDiskCleanup(self, maxStorage):
@@ -2285,7 +2341,7 @@ class BackEndApp(object):
 
             tagged = self._lastTaggedTimes.get(cameraLocation, 0)
             self._processedTimesQueue.put([cameraLocation, ms, tagged])
-        except DatabaseError, e:
+        except DatabaseError as e:
             self._logger.error("Real time search database exception",
                                exc_info=True)
             if e.message in kCorruptDbErrorStrings:
@@ -2706,7 +2762,7 @@ class BackEndApp(object):
                 self._hardwareDevice = msg[2]
             try:
                 self._logger.info("turning off all cameras...")
-                for cameraLocation in self._captureStreams.keys():
+                for cameraLocation in list(self._captureStreams.keys()):
                     self._stopCamera(cameraLocation)
                 self._logger.info("loading updated camera info...")
                 camMgr = CameraManager(self._logger)
@@ -2743,20 +2799,20 @@ class BackEndApp(object):
             )
             self._startPacketCapture(cameraLocation, delaySeconds, pcapDir)
             self._netMsgServerClient.setPacketCaptureInfo(
-                    cPickle.dumps(self._pcapInfo)
+                    pickle.dumps(self._pcapInfo)
             )
         elif msgId == MessageIds.msgIdPacketCaptureStop:
             self._logger.info("Received msgIdPacketCaptureStop")
             self._stopPacketCapture()
             self._netMsgServerClient.setPacketCaptureInfo(
-                    cPickle.dumps({})
+                    pickle.dumps({})
             )
         elif msgId == MessageIds.msgIdPacketCaptureStatus:
             code = msg[1]
             description = msg[2]
             self._pcapInfo['pcapStatus'] = code
             self._netMsgServerClient.setPacketCaptureInfo(
-                    cPickle.dumps(self._pcapInfo)
+                    pickle.dumps(self._pcapInfo)
             )
             self._logger.info(
                 "Received msgIdPacketCaptureStatus, code: %s, description: %s" %
@@ -2766,7 +2822,7 @@ class BackEndApp(object):
             code = msg[1]
             self._pcapInfo['pcapEnabled'] = code
             self._netMsgServerClient.setPacketCaptureInfo(
-                    cPickle.dumps(self._pcapInfo)
+                    pickle.dumps(self._pcapInfo)
             )
             self._logger.info("Received msgIdPacketCaptureEnabled, code: %s" %
                               code)
@@ -2810,7 +2866,7 @@ class BackEndApp(object):
                 self._putMsgDC([MessageIds.msgIdDeleteFile, path])
         elif msgId == MessageIds.msgIdSetOnvifSettings:
             (uuid, selectedIp, username, password) = msg[1:]
-            print("Set onvif settings %s" % username)
+            print(("Set onvif settings %s" % username))
             self._onvifScanner.setDeviceSettings(uuid, (username, password), selectedIp)
         elif msgId == MessageIds.msgIdActiveCameraSearch:
             (isMajor, ) = msg[1:]
@@ -2915,8 +2971,8 @@ class BackEndApp(object):
             self._logger.info("Received msgIdRuleAdded, rule: %s" % ruleName)
 
             # Retrieve the new rule, query, schedule information, and responses
-            rule = cPickle.loads(msg[2])
-            queryModel = cPickle.loads(msg[3])
+            rule = pickle.loads(msg[2])
+            queryModel = pickle.loads(msg[3])
             query = queryModel.getUsableQuery(self._dataManager)
             camLoc = queryModel.getVideoSource().getLocationName()
             isScheduled, nextSchedChange = rule.getScheduleInfo()
@@ -3196,8 +3252,8 @@ class BackEndApp(object):
         # If there is no port file, we're not running
         try:
             portFile = open(
-                os.path.join(self._userLocalDataDir, kPortFileName), 'r')
-            port = cPickle.load(portFile)
+                os.path.join(self._userLocalDataDir, kPortFileName), 'rb')
+            port = pickle.load(portFile)
             portFile.close()
         except Exception:
             return None
@@ -3284,14 +3340,14 @@ class BackEndApp(object):
                               new location will not be removed and the
                               databases will not be reset.
         """
-        if type(location) == str:
+        if isinstance(location, (bytes, bytearray)):
             location = location.decode('utf-8')
         success = False
         try:
             self._logger.info("Shutting down processes.")
             # Stop cameras, disk cleaner, and response runner.
-            procs = [streamInfo[0] for streamInfo in self._captureStreams.values()]
-            for cameraLocation in self._captureStreams.keys():
+            procs = [streamInfo[0] for streamInfo in list(self._captureStreams.values())]
+            for cameraLocation in list(self._captureStreams.keys()):
                 self._stopCamera(cameraLocation)
 
             if self._diskCleanupProc:
@@ -3338,7 +3394,7 @@ class BackEndApp(object):
                     else:
                         self._logger.info("Source video directory did not exist.")
                     success = True
-                except Exception, e:
+                except Exception as e:
                     if WindowsError and (isinstance(e, WindowsError) and e.errno == errno.EACCES):
                         if os.path.isdir(destination):
                             # Windows error 32 = remove failed, file in use.
@@ -3364,7 +3420,7 @@ class BackEndApp(object):
                 # Ensure the new directory can be created.
                 try:
                     os.makedirs(destination)
-                except Exception, e:
+                except Exception as e:
                     pass
                 if os.path.isdir(destination):
                     success = True
@@ -3427,7 +3483,7 @@ class BackEndApp(object):
                                            # which previously failed to move to permanent storage location
 
 
-        for targetPath, (loc, lastTime) in self._pendingFileMoves.items():
+        for targetPath, (loc, lastTime) in list(self._pendingFileMoves.items()):
             src = os.path.join(self._tmpDir, loc, os.path.basename(targetPath))
             dst = os.path.join(self._videoDir, targetPath)
             moved = False
@@ -3437,7 +3493,7 @@ class BackEndApp(object):
                     moved = True
                 else:
                     self._logger.error("Pending move item " + ensureUtf8(src) + " does not exist")
-            except Exception, e:
+            except Exception as e:
                 self._logger.error("Failed to move file (" + ensureUtf8(src) + "->" + ensureUtf8(dst) + "): " + str(e))
 
             if moved:
@@ -3539,24 +3595,29 @@ __callbackFunc = registerForForcedQuitEvents(_forcedQuitCallback) #PYCHECKER OK:
 def main(userDataDir, *otherArgs):
     global _app
 
-    userDataDir = os.path.expanduser(userDataDir.decode('utf-8'))
+    if isinstance(userDataDir, (bytes, bytearray)):
+        userDataDir = userDataDir.decode('utf-8')
+    userDataDir = os.path.expanduser(userDataDir)
     wantQuit = False
+    restartDelay = 0
 
     # We want to continually launch the app unless it explicitly terminated.
     while not wantQuit:
         _app = BackEndApp(userDataDir)
+        crashed = False
         try:
             _app.run()
+        except (KeyboardInterrupt, SystemExit):
+            wantQuit = True
+            getLogger(_kLogName, None, _kLogSize).info("Backend interrupted")
         except BaseException:
-            # Catch ALL exceptions, not just subclasses of Exception.  That will
-            # catch things like KeyboardInterrupt.
-            #
-            # ...if we don't do this and we get a keyboard interrupt, badness
-            # ensues.
+            # A subsystem error must not spin the camera probe in a tight loop.
+            crashed = True
             getLogger(_kLogName, None, _kLogSize).error("Unhandled exception", exc_info=True)
 
         # Retrieve whether or not the app meant to quit.
-        wantQuit = _app.wantQuit
+        if _app is not None and _app.wantQuit:
+            wantQuit = True
 
         try:
             # Ensure all resources used by the app are freed and destroyed
@@ -3566,8 +3627,14 @@ def main(userDataDir, *otherArgs):
             # We always want the back end to restart, so ignore any exceptions.
             getLogger(_kLogName, None, _kLogSize).error("Unhandled exception in cleanup", exc_info=True)
 
-        sys.exc_clear()
         _app = None
+        if not wantQuit and crashed:
+            restartDelay = next_restart_delay(restartDelay)
+            getLogger(_kLogName, None, _kLogSize).error(
+                "Restarting backend in %s seconds" % restartDelay)
+            time.sleep(restartDelay)
+        else:
+            restartDelay = 0
 
     # make sure logging and all of its resources get closed properly
     logging.shutdown()

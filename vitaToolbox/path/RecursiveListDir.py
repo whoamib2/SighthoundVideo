@@ -75,7 +75,7 @@ def recursiveListDir(pathToDir, substitutePath=None):
                             directory tree that mirrors the original.
     @return files           A list of all files under the directory.
     """
-    if type(pathToDir) == str:
+    if isinstance(pathToDir, (bytes, bytearray)):
         pathToDir = pathToDir.decode('utf-8')
 
     pathList = []

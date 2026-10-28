@@ -41,7 +41,7 @@
 
 # Local imports...
 from backEnd import MessageIds
-from PushResponse import PushResponse
+from .PushResponse import PushResponse
 
 ###############################################################
 class IftttResponse(PushResponse):
@@ -53,6 +53,6 @@ class IftttResponse(PushResponse):
 
         @param ms  The ms of the trigger.
         """
-        msg = [MessageIds.msgIdTriggerIfttt, self._cam, self._rule, ms/1000]
+        msg = [MessageIds.msgIdTriggerIfttt, self._cam, self._rule, ms//1000]
         self._queue.put(msg)
 

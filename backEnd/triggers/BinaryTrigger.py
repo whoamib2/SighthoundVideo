@@ -40,7 +40,7 @@
 
 from copy import deepcopy
 
-from BaseTrigger import BaseTrigger
+from .BaseTrigger import BaseTrigger
 
 
 ###############################################################
@@ -267,7 +267,7 @@ class BinaryTrigger(BaseTrigger):
                         if result[1] in resultDict:
                             resultDict[result[1]].append(result)
 
-                    for frame, values in resultDict.iteritems():
+                    for frame, values in resultDict.items():
                         existingSets = setDict[frame]
                         setDict[frame] = []
                         for alert in values:
@@ -276,7 +276,7 @@ class BinaryTrigger(BaseTrigger):
                                 newSet.add(alert)
                                 setDict[frame].append(newSet)
 
-                for setList in setDict.itervalues():
+                for setList in setDict.values():
                     for frameSet in setList:
                         if len(frameSet) == len(triggerResults):
                             triggered = triggered.union(frameSet)

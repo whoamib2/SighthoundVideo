@@ -45,7 +45,7 @@ import string
 # Toolbox imports...
 
 # Local imports...
-from CreateMenuFromData import createMenuFromData
+from .CreateMenuFromData import createMenuFromData
 
 # Constants...
 _kLinkColor = (0, 102, 204, 255)
@@ -237,7 +237,7 @@ class CharValidator(wx.Validator):
             if key in self.allowedChars:
                 event.Skip()
                 return
-            if key in string.letters:
+            if key in string.ascii_letters:
                 self._processFlag(event, CharValidator.kAllowAlpha)
             elif key in string.digits:
                 self._processFlag(event, CharValidator.kAllowDigits)

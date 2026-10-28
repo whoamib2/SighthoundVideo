@@ -39,5 +39,5 @@
 
 
 if __name__ == '__main__':
-    from FrontEndApp import main
+    from .FrontEndApp import main
     main()

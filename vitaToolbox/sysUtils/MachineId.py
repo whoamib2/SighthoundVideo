@@ -36,11 +36,22 @@
 #
 #*****************************************************************************
 
-import sys, netifaces, hashlib
+import sys, hashlib
 
 ###############################################################################
 
 _kMachineID = None
+
+
+def _hash_machine_id(mid):
+    """SHA-1 hex digest. Registry and IOKit values may be text or bytes."""
+    if isinstance(mid, str):
+        data = mid.encode("utf-8")
+    elif isinstance(mid, (bytes, bytearray)):
+        data = bytes(mid)
+    else:
+        data = str(mid).encode("utf-8")
+    return hashlib.sha1(data).hexdigest()
 
 ###############################################################################
 
@@ -88,16 +99,19 @@ def _machine_id_osx():
 ###############################################################################
 def _machine_id_win():
     """ Get the serial number available under Windows via the registry value
-    HKEY_LOCAL_MACHINE\SOFTWARE\Microsoft\Cryptography\MachineGuid.
+    HKEY_LOCAL_MACHINE\\SOFTWARE\\Microsoft\\Cryptography\\MachineGuid.
 
     @return The machine identifier, None if the registry didn't yield anything.
     """
-    from _winreg import OpenKey, QueryValueEx, CloseKey
-    from _winreg import HKEY_LOCAL_MACHINE, KEY_READ
+    from winreg import OpenKey, QueryValueEx, CloseKey
+    from winreg import HKEY_LOCAL_MACHINE, KEY_READ, KEY_WOW64_64KEY
     try:
         key = OpenKey(HKEY_LOCAL_MACHINE, r"SOFTWARE\Microsoft\Cryptography", 0,
-          KEY_READ | 0x0100) # _winreg.KEY_WOW64_64KEY is Python 2.7
-        return QueryValueEx(key, "MachineGuid")[0]
+          KEY_READ | KEY_WOW64_64KEY)
+        value = QueryValueEx(key, "MachineGuid")[0]
+        if isinstance(value, (bytes, bytearray)):
+            value = bytes(value).decode("utf-8", errors="replace")
+        return value
     finally:
         if key is not None:
             try:
@@ -118,19 +132,8 @@ def _machine_id_fallback(logger=None):
     """
     found = []
     try:
-        for interfaceName in netifaces.interfaces():
-            interfaceAddresses = netifaces.ifaddresses(interfaceName)
-            linkAddresses = interfaceAddresses.get(netifaces.AF_LINK, None)
-            if linkAddresses is None:
-                continue
-            macs = []
-            for linkAddress in linkAddresses:
-                mac = linkAddress.get('addr', None)
-                if mac:
-                    if 0 == (2 & int(mac[0:2], 16)):
-                        macs.append(mac)
-            if len(macs) > 0:
-                found.append((interfaceName, macs))
+        from vitaToolbox.sysUtils.interfaces import mac_addresses
+        found = mac_addresses()
     except:
         if logger:
             logger.error("issue looking at MAC addresses (%s)" % sys.exc_info()[1])
@@ -142,7 +145,7 @@ def _machine_id_fallback(logger=None):
         # are not suitable for heuristics, at least not with this method ...
         pass
     else:
-        for n in xrange(0,31):
+        for n in range(0,31):
             preferred = "en%d" % n
             for f in found:
                 if preferred == f[0]:
@@ -172,7 +175,7 @@ def machineId(force=True,logger=None):
                 mid = _machine_id_win().lower()
             else:
                 mid = _machine_id_osx().lower()
-            _kMachineID = hashlib.sha1(mid).hexdigest()
+            _kMachineID = _hash_machine_id(mid)
         except:
             if logger is not None:
                 import traceback
@@ -193,8 +196,8 @@ if __name__ == "__main__":
     logger = logging.getLogger("main")
     tm = time.time()
     loops = int(sys.argv[1]) if 1 < len(sys.argv) else 10000
-    for i in xrange(0, loops):
+    for i in range(0, loops):
         mid = machineId(True, logger)
-    print "machine ID is '%s', %.2f calls/second" % \
-        (mid, loops/max(1, (time.time() - tm)))
+    print("machine ID is '%s', %.2f calls/second" % \
+        (mid, loops/max(1, (time.time() - tm))))
         # (got 1800 on OSX and 50K on Win8)

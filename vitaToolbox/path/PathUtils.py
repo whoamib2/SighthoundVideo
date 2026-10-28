@@ -61,7 +61,8 @@ def abspathU(path):
        part and relative part to unicode to join them.  This will fail, since
        the default str to unicode conversion assumes the str is ASCII.
 
-    The fix is to use os.getcwdu().  Note that we only do this upon failure.
+    Python 2 needed the wide-character form of getcwd for this case.  Note that
+    we only do this upon failure.
     Why?
     * On Windows, the default abspath() doesn't seem to have problems, and
       it goes through a different code path.  We want that other code path on
@@ -77,7 +78,7 @@ def abspathU(path):
     try:
         return os.path.abspath(path)
     except UnicodeDecodeError:
-        return os.path.normpath(os.path.join(os.getcwdu(), path))
+        return os.path.normpath(os.path.join(os.getcwd(), path))
 
 
 ###############################################################
@@ -87,7 +88,7 @@ def getDirSize(path):
     @param  path  The path to the directory whose size should be calculated.
     @return size  The size of the directory in bytes.
     """
-    if type(path) == str:
+    if isinstance(path, (bytes, bytearray)):
         path = path.decode('utf-8')
 
     dirSize = 0
@@ -131,7 +132,7 @@ def normalizePath(path):
     @param  forceConversion If true, convert regardless of platform
     @return normPath            The normalized path, in Unicode format
     """
-    if type(path) == str:
+    if isinstance(path, (bytes, bytearray)):
         path = path.decode('utf-8')
 
     if sys.platform == 'darwin':

@@ -41,12 +41,21 @@
 
 # Python imports...
 import ctypes
-from ctypes import c_ubyte, cast, POINTER
 
 
-# Not sure why this isn't the default for this function...
-ctypes.pythonapi.PyCObject_AsVoidPtr.argtypes = [ctypes.py_object]
-ctypes.pythonapi.PyCObject_AsVoidPtr.restype = ctypes.c_void_p
+def _bytes_from_pointer(ptr, size):
+    """Copy ``size`` bytes from a ctypes pointer or a ``c_void_p``.
+
+    ``PyBuffer_FromMemory`` and ``PyCObject`` were removed in Python 3.
+    ``ctypes.string_at`` returns an owned ``bytes`` object, so the caller
+    does not keep a dangling view of native memory.
+    """
+    address = getattr(ptr, "value", None)
+    if not isinstance(address, int):
+        address = ctypes.cast(ptr, ctypes.c_void_p).value
+    if not address:
+        raise ValueError("null frame buffer")
+    return ctypes.string_at(address, size)
 
 # Common 3rd-party imports...
 
@@ -125,9 +134,9 @@ def getPilImaging(pilImg):
     @param  pilImg   The PIL image.
     @return imaging  The internal PIL imaging structure.
     """
-    imaging = ctypes.cast(ctypes.pythonapi.PyCObject_AsVoidPtr(pilImg.getim()),
-                          ctypes.POINTER(Imaging)                              )
-    return imaging
+    raise NotImplementedError(
+        "PIL's internal Imaging capsule is not exposed through PyCObject on Python 3"
+    )
 
 
 
@@ -160,7 +169,9 @@ def convertPilToNumpy(pilImage):
         # 0.0 to 1.0 range _and_ copy the data.
         # NOTE: I think this handles the stride automatically, unlike the
         # PIL one (?)
-        a = numpy.fromstring(pilImage.tobytes(), "B") / f255
+        a = numpy.frombuffer(pilImage.tobytes(), dtype=numpy.uint8).astype(
+            numpy.float32
+        ) / f255
 
         # Separate channels; all of this happens without copying...
         numpyImg = numpy.rollaxis(a.reshape((height, width, 3)), 2)
@@ -228,12 +239,11 @@ def convertWxBitmapToPil(bitmap):
 
     size = tuple(bitmap.GetSize())
     try:
-        buf = size[0]*size[1]*3*"\x00"
+        buf = bytearray(size[0] * size[1] * 3)
         bitmap.CopyToBuffer(buf)
-    except:
-        del buf
-        buf = bitmap.ConvertToImage().GetData()
-    return Image.frombuffer("RGB", size, buf, "raw", "RGB", 0, 1)
+    except Exception:
+        buf = bytes(bitmap.ConvertToImage().GetData())
+    return Image.frombytes("RGB", size, bytes(buf))
 
 
 ##############################################################################
@@ -281,11 +291,7 @@ def convertClipFrameToWxBitmap(frame):
     """
     needWx()
 
-    buffer_from_memory = ctypes.pythonapi.PyBuffer_FromMemory
-    buffer_from_memory.restype = ctypes.py_object
-
-    buffSize = frame.width*frame.height*3
-    buff = buffer_from_memory(frame.buffer, buffSize)
+    buff = _bytes_from_pointer(frame.buffer, frame.width * frame.height * 3)
     bitmap = wx.Bitmap.FromBuffer(frame.width, frame.height, buff)
     return bitmap
 
@@ -304,23 +310,10 @@ def convertClipFrameToNumpy(frame):
         """
     needNumpy()
 
-    buffer_from_memory = ctypes.pythonapi.PyBuffer_FromMemory
-    buffer_from_memory.restype = ctypes.py_object
-
-    buffSize = numpy.dtype(numpy.uint8).itemsize*frame.width*frame.height*3
-    buff = buffer_from_memory(frame.buffer, buffSize)
-
-    # Create a "pythonic" ndarray sublcass that allows us to add additional
-    # parameters since numpy.ndarray does not.
-    class pyNdarray(numpy.ndarray): pass
-
-    numpyImg = pyNdarray((frame.height, frame.width, 3), numpy.uint8, buff)
-
-    # Add a reference to the buffer pointer so it isn't freed immediately.
-    # It will be freed when this ndarray leaves scope.
-    numpyImg.__sighthoundBufferRef = frame.structPtr
-
-    # Return it...
+    buff = _bytes_from_pointer(frame.buffer, frame.width * frame.height * 3)
+    numpyImg = numpy.frombuffer(buff, dtype=numpy.uint8).reshape(
+        (frame.height, frame.width, 3)
+    ).copy()
     return numpyImg
 
 
@@ -332,14 +325,7 @@ def convertClipFrameToBuffer( frame ):
         @return buffer PyBuffer_FromMemory
         """
 
-    print( 'make buffer_from_memory' )
-    buffer_from_memory          = ctypes.pythonapi.PyBuffer_FromMemory
-    buffer_from_memory.restype  = ctypes.py_object
-    print( 'use buffer_from_memory' )
-    buff                        = buffer_from_memory( frame.buffer,
-                                                      1 * frame.width * frame.height * 3 )
-                                                      #numpy.dtype(numpy.uint8).itemsize*frame.width*frame.height*3)
-    return buff
+    return _bytes_from_pointer(frame.buffer, frame.width * frame.height * 3)
 
 ##############################################################################
 def convertClipFrameToPIL( frame ):
@@ -350,13 +336,8 @@ def convertClipFrameToPIL( frame ):
         """
     needImage()
 
-    buffer_from_memory          = ctypes.pythonapi.PyBuffer_FromMemory
-    buffer_from_memory.restype  = ctypes.py_object
-    buff                        = buffer_from_memory( frame.buffer,
-                                                      1 * frame.width * frame.height * 3 )
-    pilImage = Image.frombuffer('RGB', (frame.width, frame.height), buff, 'raw', 'RGB', 0, 1)
-
-    return pilImage
+    buff = _bytes_from_pointer(frame.buffer, frame.width * frame.height * 3)
+    return Image.frombytes('RGB', (frame.width, frame.height), buff)
 
 ##############################################################################
 def convertProcFrameToPIL( frame ):

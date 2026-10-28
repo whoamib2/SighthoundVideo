@@ -44,7 +44,7 @@ import wx
 
 # Toolbox imports...
 from vitaToolbox.wx.BackgroundStyleUtils import kBackgroundStyle
-from TruncateText import truncateText
+from .TruncateText import truncateText
 
 
 
@@ -114,7 +114,7 @@ class TranslucentStaticText(wx.StaticText):
 
         textWidth, _ = dc.GetTextExtent(label)
         if style & wx.ALIGN_CENTER:
-            x = (width - textWidth) / 2
+            x = (width - textWidth) // 2
         elif style & wx.ALIGN_RIGHT:
             x = width - textWidth
         else:
@@ -161,4 +161,4 @@ if __name__ == '__main__':
     if len(sys.argv) > 1 and sys.argv[1] == "test":
         test_main()
     else:
-        print "Try calling with 'test' as the argument."
+        print("Try calling with 'test' as the argument.")

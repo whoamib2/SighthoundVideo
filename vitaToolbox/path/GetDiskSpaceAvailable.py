@@ -37,13 +37,12 @@
 #*****************************************************************************
 
 import ctypes
-from ctypes import c_char_p, c_void_p, c_longlong
+from ctypes import c_char_p, c_longlong
 import os
-import statvfs
 import sys
 
 from vitaToolbox.ctypesUtils.LoadLibrary import LoadLibrary
-from vitaToolbox.strUtils.EnsureUnicode import ensureUtf8
+from vitaToolbox.strUtils.EnsureUnicode import ensureUnicode, ensureUtf8
 
 
 _kMegabyte = 1024*1024
@@ -78,8 +77,11 @@ def checkFreeSpace(path, minSizeMb, minPercentage,logger=None):
     if (minSizeMb > 0 and free <= minSizeMb*_kMegabyte) or \
        (minPercentage > 0 and pctFree <= minPercentage):
         if not logger is None:
-            logger.error("Only " + str(free/_kMegabyte) + "MB (" + str(pctFree) + "%) are free on drive containing path " + ensureUtf8(path) + \
-                   ". Sighthound Video requires at least " + str(minSizeMb) + "MB and " + str(minPercentage) + "% free to record video.")
+            logger.error(
+                "Only %sMB (%s%%) are free on drive containing path %s. "
+                "Sighthound Video requires at least %sMB and %s%% free to record video."
+                % (free // _kMegabyte, pctFree, ensureUnicode(path), minSizeMb, minPercentage)
+            )
         return False
     return True
 
@@ -103,12 +105,20 @@ def getDiskUsage(path):
             break
         localPath = newLocalPath
 
-    if hasattr(os, 'statvfs'):  # POSIX
-        total = _volumeUtils.getTotalDiskspace(ensureUtf8(localPath))
-        free  = _volumeUtils.getFreeDiskspace(ensureUtf8(localPath))
+    if sys.platform == 'darwin':
+        encoded = ensureUtf8(localPath)
+        total = _volumeUtils.getTotalDiskspace(encoded)
+        free = _volumeUtils.getFreeDiskspace(encoded)
         used = total - free
         percentFree = pct(free, total)
-        #print "Total=" + str(total) + " free=" + str(free) + " pct=" + str(percentFree)
+        return (total, used, free, percentFree)
+
+    if hasattr(os, 'statvfs'):  # Linux and other POSIX
+        stats = os.statvfs(localPath)
+        total = stats.f_frsize * stats.f_blocks
+        free = stats.f_frsize * stats.f_bavail
+        used = total - free
+        percentFree = pct(free, total)
         return (total, used, free, percentFree)
 
     elif os.name == 'nt':       # Windows
@@ -116,7 +126,7 @@ def getDiskUsage(path):
 
         _, total, free = ctypes.c_ulonglong(), ctypes.c_ulonglong(), \
                            ctypes.c_ulonglong()
-        if sys.version_info >= (3,) or isinstance(localPath, unicode):
+        if sys.version_info >= (3,) or isinstance(localPath, str):
             fun = ctypes.windll.kernel32.GetDiskFreeSpaceExW
         else:
             fun = ctypes.windll.kernel32.GetDiskFreeSpaceExA

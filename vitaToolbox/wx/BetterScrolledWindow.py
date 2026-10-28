@@ -44,7 +44,7 @@ Contains the BetterScrolledWindow class.
 
 import wx
 
-from BindChildren import bindChildren
+from .BindChildren import bindChildren
 
 class BetterScrolledWindow(wx.ScrolledWindow):
     """Implements a version of wx.ScrolledWindow that is slightly saner.
@@ -249,7 +249,7 @@ class BetterScrolledWindow(wx.ScrolledWindow):
             # correctly. We add a 1 to the new virtual height calculation to
             # ensure we're always greater than or equal to the old virtual area.
             newVirtualSize = (clientWidth,
-                              virtualWidth*virtualHeight/clientWidth+1)
+                              virtualWidth*virtualHeight//clientWidth+1)
 
             # Set the new virtual size so that our sizer knows it needs to
             # reshape/relayout to update/draw correctly.
@@ -280,14 +280,14 @@ class BetterScrolledWindow(wx.ScrolledWindow):
         """
         x, y = self.GetViewStart()
         if event.GetOrientation() == wx.VERTICAL:
-            yScrollTo = y - (self._scrollRate[1]/self._scrollBasis)
+            yScrollTo = y - (self._scrollRate[1]//self._scrollBasis)
             # if you pass -1 into scroll, it is a noop, what we want is to scroll
             # to the top
             if yScrollTo==-1:
                 yScrollTo = 0
             self.Scroll(x, yScrollTo)
         else:
-            self.Scroll(x - (self._scrollRate[1]/self._scrollBasis), y)
+            self.Scroll(x - (self._scrollRate[1]//self._scrollBasis), y)
         self._applyFixes()
 
 
@@ -302,9 +302,9 @@ class BetterScrolledWindow(wx.ScrolledWindow):
         """
         x, y = self.GetViewStart()
         if event.GetOrientation() == wx.VERTICAL:
-            self.Scroll(x, y + (self._scrollRate[0]/self._scrollBasis))
+            self.Scroll(x, y + (self._scrollRate[0]//self._scrollBasis))
         else:
-            self.Scroll(x + (self._scrollRate[0]/self._scrollBasis), y)
+            self.Scroll(x + (self._scrollRate[0]//self._scrollBasis), y)
         self._applyFixes()
 
 
@@ -368,7 +368,7 @@ def _runTests():
     # Create our sizer, and the first 10 static texts...
     sizer = wx.BoxSizer(wx.VERTICAL)
     scrolledWindow.SetSizer(sizer)
-    for i in xrange(0, 10):
+    for i in range(0, 10):
         text = wx.StaticText(scrolledWindow, -1, "------------ %d ------------" % i)
         sizer.Add(text)
 
@@ -390,7 +390,7 @@ def _runTests():
     sizer.Add(textControl)
 
     # Add the last 10 static texts...
-    for i in xrange(10, 20):
+    for i in range(10, 20):
         text = wx.StaticText(scrolledWindow, -1, "------------ %d ------------" % i)
         sizer.Add(text)
 

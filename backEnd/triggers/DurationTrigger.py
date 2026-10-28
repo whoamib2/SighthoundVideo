@@ -40,7 +40,7 @@
 
 import operator
 
-from BaseTrigger import BaseTrigger
+from .BaseTrigger import BaseTrigger
 
 
 ###############################################################
@@ -188,7 +188,7 @@ class DurationTrigger(BaseTrigger):
         # We need the results to be sorted by time which they likely won't be
         triggerResults.sort(key=operator.itemgetter(2))
 
-        prevActive = set(self._activeObjects.iterkeys())
+        prevActive = set(self._activeObjects.keys())
         curActive = set()
 
         for result in triggerResults:

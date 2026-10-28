@@ -47,7 +47,7 @@ from vitaToolbox.wx.FontUtils import makeFontDefault
 
 # Local imports...
 
-from Upnp import ControlPointManager
+from .Upnp import ControlPointManager
 
 # Constants...
 
@@ -126,19 +126,19 @@ class UpnpUiTestFrame(wx.Frame):
         changedUsns, goneUsns = self._controlPointMgr.pollForChanges()
 
         for usn in changedUsns:
-            print "%s:\n%s\n%s\n%s\n%s\n\n---\n" % (
+            print("%s:\n%s\n%s\n%s\n%s\n\n---\n" % (
                 usn,
                 self._controlPointMgr.getDevice(usn).getFriendlyName(),
                 self._controlPointMgr.getDevice(usn).getPresentationUrl(),
                 self._controlPointMgr.getDevice(usn).getModelName(),
                 str(self._controlPointMgr.getDevice(usn))
-            )
+            ))
 
         for usn in goneUsns:
-            print "GONE: %s:\n\n---\n" % (usn)
+            print("GONE: %s:\n\n---\n" % (usn))
 
         # Kill the ones that are gone or modified...
-        for i in xrange(self._listBox.GetCount()-1, -1, -1):
+        for i in range(self._listBox.GetCount()-1, -1, -1):
             usn = self._listBox.GetClientData(i)
             if (usn in goneUsns) or (usn in changedUsns):
                 self._listBox.Delete(i)

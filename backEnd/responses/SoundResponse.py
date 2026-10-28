@@ -39,16 +39,15 @@
 
 # Python imports...
 import os
+import shutil
 from subprocess import Popen, PIPE
 import sys
 import time
 import wave
 
-# Common 3rd-party imports...
-import pyaudio
-
 # Local imports...
-from BaseResponse import BaseResponse
+from appCommon.resources import resource_path
+from .BaseResponse import BaseResponse
 
 from frontEnd.GetLaunchParameters import getLaunchParameters
 
@@ -77,8 +76,8 @@ class SoundResponse(BaseResponse):
 
         # We should always be passing as unicode, but we weren't previously,
         # hence this test.
-        if type(soundPath) == unicode:
-            soundPath = soundPath.encode('utf-8')
+        if isinstance(soundPath, (bytes, bytearray)):
+            soundPath = soundPath.decode('utf-8')
 
         self._popenParamList = getLaunchParameters()
         self._popenParamList.extend(["--sound", soundPath])
@@ -106,8 +105,8 @@ class SoundResponse(BaseResponse):
 
         alert = False
 
-        prevSeenObjs = self._itemDict.keys()
-        curObjs = rangeDict.keys()
+        prevSeenObjs = list(self._itemDict.keys())
+        curObjs = list(rangeDict.keys())
 
         for objId in curObjs:
             numRanges = len(rangeDict[objId])
@@ -170,24 +169,22 @@ def playSound(soundPath, catchExceptions=True):
     @param  catchExceptions  If True exceptions will be caught and ignored.
     """
     try:
-        if type(soundPath) == str:
+        if isinstance(soundPath, (bytes, bytearray)):
             soundPath = soundPath.decode('utf-8')
+        soundPath = resource_path(soundPath)
 
-        pyAudioInst = pyaudio.PyAudio()
-        waveFile = wave.open(soundPath, 'rb')
-
-        channels, width, framerate, _, _, _ = waveFile.getparams()
-        format = pyAudioInst.get_format_from_width(width)
-        stream = pyAudioInst.open(rate=framerate, channels=channels, format=format,
-                                  output=True)
-
-        data = waveFile.readframes(4096)
-        while data:
-            stream.write(data)
-            data = waveFile.readframes(4096)
-
-        stream.close()
-        pyAudioInst.terminate()
+        # PyAudio has no Windows wheel for Python 3.14. The standard library
+        # plays the same wave file on each desktop platform.
+        if sys.platform == "win32":
+            import winsound
+            winsound.PlaySound(soundPath, winsound.SND_FILENAME)
+        elif sys.platform == "darwin":
+            Popen(["afplay", soundPath])
+        else:
+            for player in ("paplay", "aplay"):
+                if shutil.which(player):
+                    Popen([player, soundPath])
+                    break
     except:
         if not catchExceptions:
             raise

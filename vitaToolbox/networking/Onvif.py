@@ -48,8 +48,8 @@ import sys
 import threading
 import time
 import traceback
-import urllib
-import urlparse
+import urllib.request, urllib.parse, urllib.error
+import urllib.parse
 
 import uuid as uuidlib
 
@@ -57,9 +57,9 @@ from xml.dom import minidom
 
 from collections import defaultdict
 
-import netifaces
+from vitaToolbox.sysUtils.interfaces import ipv4_addresses, multicast_ipv4_text
 
-from vitaToolbox.strUtils.EnsureUnicode import ensureUtf8
+from vitaToolbox.strUtils.EnsureUnicode import ensureUnicode, ensureUtf8
 from vitaToolbox.loggingUtils.LoggingUtils import MsgPrefixLogger
 from vitaToolbox.networking.HttpClient import HttpClient
 from vitaToolbox.networking.XmlUtils import vitaParseXML
@@ -71,6 +71,55 @@ _kDeviceTimeout = 30 # consider the device gone if not seen for that long
 # This is the official IP and port that we send multicast for the WS-Discovery.
 # <http://en.wikipedia.org/wiki/WS-Discovery>
 _kMulticastAddr = ("239.255.255.250", 3702)
+# Logged once per address so a bad adapter does not flood the log every cycle.
+_multicast_skip_logged = set()
+
+
+def _address_key(ip):
+    if isinstance(ip, (bytes, bytearray)):
+        return bytes(ip).decode("ascii", "ignore")
+    return str(ip)
+
+
+def _skip_multicast(ip, logger, reason):
+    key = _address_key(ip)
+    if key in _multicast_skip_logged:
+        return
+    _multicast_skip_logged.add(key)
+    if logger is not None:
+        logger.warning("skipping ONVIF multicast on %s: %s", key, reason)
+
+
+def open_multicast_socket(ip, logger=None):
+    """Bind one IPv4 interface for ONVIF discovery, or None if it cannot."""
+    text = multicast_ipv4_text(ip)
+    if text is None:
+        _skip_multicast(ip, logger, "address cannot be used for multicast")
+        return None
+    ip = text
+    sock = None
+    try:
+        sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+        sock.setsockopt(socket.IPPROTO_IP, socket.IP_MULTICAST_TTL, 1)
+        sock.setsockopt(socket.IPPROTO_IP, socket.IP_MULTICAST_IF,
+                        socket.inet_aton(ip))
+        sock.bind((ip, 0))
+        sock.setblocking(False)
+        return sock
+    except OSError as exc:
+        _skip_multicast(ip, logger, exc)
+        if sock is not None:
+            try:
+                sock.close()
+            except OSError:
+                pass
+        return None
+
+
+def _udp_payload(packet):
+    if isinstance(packet, (bytes, bytearray)):
+        return bytes(packet)
+    return str(packet).encode("utf-8")
 
 # This library follows the Onvif specification found here:
 # <http://www.onvif.org/specs/core/ONVIF-Core-Specification-v242.pdf>
@@ -117,7 +166,7 @@ _kAddressUnknown = "http://schemas.xmlsoap.org/ws/2004/08/addressing/role/anonym
 # perfom as a service.
 _kOnvifUrlScheme = "onvif"
 _kOnvifUrlAuthority = "www.onvif.org"
-_kOnvifUrl = urlparse.urlunparse((_kOnvifUrlScheme, _kOnvifUrlAuthority, '', '', '', ''))
+_kOnvifUrl = urllib.parse.urlunparse((_kOnvifUrlScheme, _kOnvifUrlAuthority, '', '', '', ''))
 _kMalformedWsScopes = "MalformedWsScopes"
 
 # ONVIF general/main Fault Codes
@@ -304,10 +353,10 @@ def _addSecurityHeader(doc, credentials, timeOffset):
 
     # Generate our nonce (a unique, one-time random number).
     try:
-        nonce = os.urandom(24).encode('base64')[:-1]
-    except:
-        nonce = "".join(chr(random.randint(0, 255)) for _ in range(24))
-        nonce = nonce.encode('base64')
+        nonceRaw = os.urandom(24)
+    except Exception:
+        nonceRaw = bytes(random.randint(0, 255) for _ in range(24))
+    nonce = base64.b64encode(nonceRaw).decode("ascii")
 
     nonceDecoded = base64.b64decode(nonce)
 
@@ -316,9 +365,12 @@ def _addSecurityHeader(doc, credentials, timeOffset):
                             time.gmtime(time.time() + timeOffset))
 
     # Concatenate everything together for the digest.
-    concatPassword = nonceDecoded + created + credentials[1]
+    password = credentials[1]
+    if isinstance(password, str):
+        password = password.encode("utf-8")
+    concatPassword = nonceDecoded + created.encode("utf-8") + password
 
-    passwordDigest = base64.b64encode(hashlib.sha1(concatPassword).digest())
+    passwordDigest = base64.b64encode(hashlib.sha1(concatPassword).digest()).decode("ascii")
 
     envelopeEl = doc.documentElement
     envelopeEl.setAttribute("xmlns:wsu", _kWsSecurityCreated)
@@ -792,8 +844,8 @@ def extractUuidFromOnvifUrl(url):
     try:
         if not url:
             raise ValueError("URL is None or Empty String.")
-        url = ensureUtf8(url)
-        splitResult = urlparse.urlsplit(url)
+        url = ensureUnicode(url)
+        splitResult = urllib.parse.urlsplit(url)
 
         # Get the host name. If blank or None, then it's not a valid ONVIF URL.
         hostname = splitResult.hostname
@@ -861,11 +913,11 @@ def realizeOnvifUrl(deviceDict, url):
         if not device.validOnvifIpAddrs:
             return ""
         base = device.validOnvifIpAddrs[-1]
-        hostname = ensureUtf8(base[0])
+        hostname = ensureUnicode(base[0])
 
         # Split the ONVIF URL.
-        url = ensureUtf8(url)
-        onvifSplitResult = urlparse.urlsplit(url)
+        url = ensureUnicode(url)
+        onvifSplitResult = urllib.parse.urlsplit(url)
 
         newUrl = "%s://" % onvifSplitResult.scheme
 
@@ -925,13 +977,13 @@ def constructOnvifUrl(uuid, username=None, password=None, streamUri=None):
     @return url          The ONVIF URL. Will be UTF-8.
     """
     if streamUri:
-        splitResult = urlparse.urlsplit(streamUri)
+        splitResult = urllib.parse.urlsplit(streamUri)
     else:
-        splitResult = urlparse.urlsplit('')
+        splitResult = urllib.parse.urlsplit('')
 
     scheme, _, path, query, fragment = splitResult
 
-    pathPart = urlparse.urlunsplit(('','',path,query,fragment))
+    pathPart = urllib.parse.urlunsplit(('','',path,query,fragment))
 
     port = ''
     try:
@@ -943,13 +995,13 @@ def constructOnvifUrl(uuid, username=None, password=None, streamUri=None):
     if not scheme:
         scheme = 'rtsp'
 
-    url = ensureUtf8(scheme + '://')
+    url = scheme + '://'
 
     if username or password:
         if username:
-            url += urllib.quote(ensureUtf8(username), "")
+            url += urllib.parse.quote(ensureUnicode(username), "")
         if password:
-            url += ":%s" % urllib.quote(ensureUtf8(password), "")
+            url += ":%s" % urllib.parse.quote(ensureUnicode(password), "")
         url += "@"
 
     # Encode into our terribly convoluted way of encoding a UUID into
@@ -959,7 +1011,7 @@ def constructOnvifUrl(uuid, username=None, password=None, streamUri=None):
     # replace it with 9 (which should be unused).  We also put a "."
     # every 16 characters, to make it look pretty and keep any part
     # from being >63 characters...
-    encodedUuid = base64.b32encode(ensureUtf8(uuid))
+    encodedUuid = base64.b32encode(ensureUtf8(uuid)).decode("ascii")
     encodedUuid = encodedUuid.lower()
     encodedUuid = encodedUuid.replace('=', '9')
     encodedUuid = re.sub(r'(.{16})', r'\1.', encodedUuid).rstrip('.')
@@ -972,7 +1024,7 @@ def constructOnvifUrl(uuid, username=None, password=None, streamUri=None):
     if pathPart:
         if not pathPart.startswith('/'):
             url += '/'
-        url += ensureUtf8(pathPart)
+        url += ensureUnicode(pathPart)
 
     return url
 
@@ -1031,9 +1083,9 @@ class OnvifDeviceState(object):
 
             for scope in scopes:
 
-                scope = urllib.unquote(scope)
+                scope = urllib.parse.unquote(scope)
                 (scheme, netloc, path, params, query, fragment) = \
-                    parseResult = urlparse.urlparse(scope)
+                    parseResult = urllib.parse.urlparse(scope)
 
                 # Parse for ONVIF capabilities...
                 if (scheme == _kOnvifUrlScheme) and \
@@ -1042,7 +1094,7 @@ class OnvifDeviceState(object):
                     category, _, value = path.lstrip('/').partition('/')
                     onvifScopes = self.scopes[_kOnvifUrl]
 
-                    if not onvifScopes.has_key(category):
+                    if category not in onvifScopes:
                         onvifScopes[category] = []
                     onvifScopes[category].append(value.lstrip('/').rstrip('/'))
 
@@ -1050,26 +1102,26 @@ class OnvifDeviceState(object):
                 # by the device...
                 elif scheme or netloc:
 
-                    unknownStdUrl = urlparse.urlunparse(
+                    unknownStdUrl = urllib.parse.urlunparse(
                         (scheme, netloc,'','','','')
                     )
-                    unknownStdResource = urlparse.urlunparse(
+                    unknownStdResource = urllib.parse.urlunparse(
                         ('', '', path, params, query, fragment)
                     )
                     category, _, value = unknownStdResource.lstrip('/').partition('/')
 
-                    if not self.scopes.has_key(unknownStdUrl):
+                    if unknownStdUrl not in self.scopes:
                         self.scopes[unknownStdUrl] = {}
                     unknownStdScopes = self.scopes[unknownStdUrl]
 
-                    if not unknownStdScopes.has_key(category):
+                    if category not in unknownStdScopes:
                         unknownStdScopes[category] = []
                     unknownStdScopes[category].append(value.lstrip('/').rstrip('/'))
 
                 # Don't parse any malformed capabilites; just store them...
                 else:
 
-                    if not self.scopes.has_key(_kMalformedWsScopes):
+                    if _kMalformedWsScopes not in self.scopes:
                         self.scopes[_kMalformedWsScopes] = []
                     self.scopes[_kMalformedWsScopes].append(scope)
 
@@ -1082,7 +1134,7 @@ class OnvifDeviceState(object):
                     # object without "find" as an attribute (which string
                     # objects do have). This should never happen, but we'll
                     # catch it and report it, just in case.
-                    p = urlparse.urlparse(url)
+                    p = urllib.parse.urlparse(url)
 
                     # This can throw a ValueError exception if the port number
                     # is a string that cannot be converted into a valid integer.
@@ -1160,18 +1212,18 @@ class OnvifDeviceState(object):
 
         if simpleCheck:
             return (
-                (cmp(self.scopes, formerState.scopes) != 0) or
+                (self.scopes != formerState.scopes) or
                 (sorted(self.announcedOnvifIpAddrs) != sorted(formerState.announcedOnvifIpAddrs)) or
                 (self.settings != formerState.settings)
             )
 
-        if ((cmp(self.scopes, formerState.scopes) != 0) or
-            (cmp(self.basicInfo, formerState.basicInfo) != 0) or
+        if ((self.scopes != formerState.scopes) or
+            (self.basicInfo != formerState.basicInfo) or
             (sorted(self.profiles) != sorted(formerState.profiles)) or
             (sorted(self.announcedOnvifIpAddrs) != sorted(formerState.announcedOnvifIpAddrs)) or
             (sorted(self.validOnvifIpAddrs) != sorted(formerState.validOnvifIpAddrs)) or
             (self.settings != formerState.settings) or
-            (cmp(self.streamUris, formerState.streamUris) != 0)):
+            (self.streamUris != formerState.streamUris)):
 
             return True
         return False
@@ -1394,13 +1446,13 @@ class OnvifDevicePoll(object):
         # Check if the device gave us an error code.
         faultCode = _parseFaultCode(msg, self._logger)
         if faultCode == kFaultSubcodeNotAuthorized:
-            logger.error("Incorrect username or password!")
+            self._logger.error("Incorrect username or password!")
             # and thus authentication is negated
             self.authenticated = False
         elif faultCode is not None:
-            logger.error("Fault code received: %s" % faultCode)
+            self._logger.error("Fault code received: %s" % faultCode)
 
-        if failtCode is not None:
+        if faultCode is not None:
             self.lastFailureReason = faultCode
 
     ###########################################################
@@ -1529,12 +1581,12 @@ class OnvifDevicePoll(object):
         """
         if url:
             # Strip out username and password from the URL...
-            scheme, netloc, path, query, fragment = urlparse.urlsplit(url)
+            scheme, netloc, path, query, fragment = urllib.parse.urlsplit(url)
             parts = netloc.split('@', 1)
             netloc = parts[-1]
             if len(parts) == 2:
                 netloc = "xxxx:xxxx@"+netloc
-            url = urlparse.urlunsplit((scheme, netloc, path, query, fragment))
+            url = urllib.parse.urlunsplit((scheme, netloc, path, query, fragment))
         return url
 
 
@@ -1637,17 +1689,7 @@ class OnvifDiscovery(object):
         """
         addrs = []
         try:
-            for ifName in netifaces.interfaces():
-                ifAddresses = netifaces.ifaddresses(ifName)
-                if netifaces.AF_INET in ifAddresses:
-                    for inetAddress in ifAddresses[netifaces.AF_INET]:
-                        addr = inetAddress.get('addr')
-                        if addr != '0.0.0.0':
-                            try:
-                                socket.inet_aton(addr) # IP4 for now
-                            except:
-                                continue
-                            addrs.append(inetAddress)
+            addrs = ipv4_addresses()
         except:
             self._logger.error(
                 "Could not retrieve local IP addresses!", exc_info=True
@@ -1687,24 +1729,12 @@ class OnvifDiscovery(object):
             return
         self._logger.debug("IP addresses found %s" % ipAddrs)
 
-        socks = []
         for ipAddr in ipAddrs:
             ip = ipAddr['addr']
             self._logger.debug("creating multicast socket for %s..." % ip)
-            try:
-                sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-                sock.setsockopt(socket.IPPROTO_IP, socket.IP_MULTICAST_TTL, 1)
-                sock.setsockopt(socket.IPPROTO_IP, socket.IP_MULTICAST_IF,
-                                socket.inet_aton(ip))
-                sock.bind((ip, socket.INADDR_ANY))
-                sock.setblocking(False)
+            sock = open_multicast_socket(ip, self._logger)
+            if sock is not None:
                 socks.append(sock)
-            except:
-                self._logger.error("cannot create multicast!", exc_info=True)
-                try:
-                    sock.close()
-                except:
-                    pass
         if not socks:
             self._logger.warn("no multicast socket could be created")
             return
@@ -1733,7 +1763,7 @@ class OnvifDiscovery(object):
                     )
                 )
                 try:
-                    sock.sendto(probeXml, _kMulticastAddr)
+                    sock.sendto(_udp_payload(probeXml), _kMulticastAddr)
                     recvSocks.append(sock)
                 except:
                     self._logger.error(
@@ -1772,7 +1802,7 @@ class OnvifDiscovery(object):
                                         msgUUID
                                     )
                                 )
-                                sock.sendto(probeXml, _kMulticastAddr)
+                                sock.sendto(_udp_payload(probeXml), _kMulticastAddr)
                             except:
                                 self._logger.error(
                                     "Failed to send probe request!",
@@ -1970,7 +2000,7 @@ class OnvifDeviceManager(object):
             changedUuids = []
             addedUuids = []
             # which of the formerly known devices are still there?
-            for uuid, oldDevice in self._lastPollDevices.iteritems():
+            for uuid, oldDevice in self._lastPollDevices.items():
                 currentDevice = currentDevices.get(uuid, None)
 
                 if currentDevice is None:
@@ -1985,7 +2015,7 @@ class OnvifDeviceManager(object):
                     changedUuids.append(uuid)
 
             # also look for new devices
-            for uuid, _ in currentDevices.iteritems():
+            for uuid, _ in currentDevices.items():
                 if self._lastPollDevices.get(uuid, None) is None:
                     addedUuids.append(uuid)
             # log devices when a change is detected
@@ -2176,7 +2206,7 @@ class OnvifDeviceManager(object):
         """
         self._lock.acquire()
         try:
-            if self._deviceStates.has_key(uuid):
+            if uuid in self._deviceStates:
                 diff = time.time()-self._deviceLastSeenTime[uuid]
                 if diff > _kDeviceTimeout:
                     del self._deviceStates[uuid]

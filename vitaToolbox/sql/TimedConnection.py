@@ -43,7 +43,7 @@ import time
 import weakref
 
 # Local imports
-from TimedCursor import TimedCursor
+from .TimedCursor import TimedCursor
 
 kDefaultArraySize=1000
 
@@ -59,10 +59,37 @@ class TimedConnection(sql.Connection):
     def __init__(self, *args, **kwargs):
         """TimedConnection constructor.
 
-        Since this is called directly by sqlite, it doesn't get any parameters.
-        See setParameters().
+        sqlite3.connect() constructs the factory with positional arguments for
+        timeout and the other options. Python 3.15 makes every parameter after
+        the database path keyword-only, so those values are passed by name.
+        See setParameters() for the logger and the slow-query threshold.
         """
-        super(TimedConnection, self).__init__(*args, **kwargs)
+        # Order matches sqlite3.connect() / Connection.__init__.
+        names = (
+            "database",
+            "timeout",
+            "detect_types",
+            "isolation_level",
+            "check_same_thread",
+            "factory",
+            "cached_statements",
+            "uri",
+            "autocommit",
+        )
+        if args:
+            if len(args) > len(names):
+                raise TypeError(
+                    "TimedConnection() takes at most %d positional arguments (%d given)"
+                    % (len(names), len(args))
+                )
+            for name, value in zip(names, args):
+                if name in kwargs:
+                    raise TypeError(
+                        "TimedConnection() got multiple values for argument %r" % name
+                    )
+                kwargs[name] = value
+        database = kwargs.pop("database")
+        super(TimedConnection, self).__init__(database, **kwargs)
 
         # An instance of a VitaLogger to use...
         self._logger = None
@@ -121,7 +148,7 @@ class TimedConnection(sql.Connection):
         # Notify cursors, deleting stale references...
         # ...and keep a list of commands that modified the database...
         modifyExecs = []
-        for i in xrange(len(self._cursors)-1, -1, -1):
+        for i in range(len(self._cursors)-1, -1, -1):
             cursor = self._cursors[i]()
             if cursor is None:
                 del self._cursors[i]

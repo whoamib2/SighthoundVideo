@@ -42,18 +42,26 @@ from PIL import ImageDraw, ImageFont
 
 from io import BytesIO
 import base64
-import httplib
-import sys
+import http.client
 import json
 import os
 import ssl
 import threading
 import traceback
-from Queue import Queue
+from queue import Queue
 
 from vitaToolbox.math.Rect import Rect as VitaRect
 from vitaToolbox.image.ImageConversion import convertProcFrameToPIL
+from vitaToolbox.image.PilCompat import text_size
+from backEnd.native.detector import (
+    Detection,
+    SIOObjectDetector,
+    TrackMatch,
+    parse_detection_response,
+    parse_rgb_body,
+)
 from vitaToolbox.path.PathUtils import safeMkdir
+from appCommon.resources import model_dir
 
 
 _kGreen = (0, 255, 0)
@@ -70,19 +78,7 @@ _kCloud = False
 ################################################################################
 # TODO: duplicated into ObjectDetectorClient.py, too small for its own module ... resolve the redundancy
 def _getModelDir():
-    if hasattr(sys, 'frozen'):
-        path = os.path.dirname(sys.executable)
-        if sys.platform == 'darwin':
-            return os.path.join(path, "..", "Resources", "models" )
-        return os.path.join(path, "models" )
-    else:
-        devLibFolder = os.getenv("SV_DEVEL_LIB_FOLDER_CONAN")
-        if devLibFolder is not None and devLibFolder != "":
-            res = os.path.join(devLibFolder, "..", "models")
-            if os.path.isdir(res):
-                return res
-        # This likely won't work
-        return os.path.join("..", "models")
+    return model_dir()
 
 ##############################################################################
 class ObjectDetectorClient(threading.Thread):
@@ -92,6 +88,8 @@ class ObjectDetectorClient(threading.Thread):
     #---------------------------------------------------------------------------
     def __init__(self, id, logger):
         threading.Thread.__init__(self)
+        # A stuck inference must not keep the camera process alive after quit.
+        self.daemon = True
         self._id = id
         self._visualizeDebug = False
         self.setDebugFolder(None)
@@ -144,7 +142,7 @@ class ObjectDetectorClient(threading.Thread):
 
     #---------------------------------------------------------------------------
     def _getTextOrigin(self, image, draw, box, text, lineNo, lineCount):
-        txtW, txtH = draw.textsize(text)
+        txtW, txtH = text_size(draw, text)
         txtH += 1 #include spacing
         if box.br().y-box.tl().y > lineCount*txtH:
             y = box.tl().y + (lineNo-1)*txtH + 1
@@ -185,7 +183,20 @@ class ObjectDetectorClient(threading.Thread):
             return
         draw = ImageDraw.Draw(image)
         label = ""
-        for type, box, score in objects:
+        if not objects:
+            return
+        for det in objects:
+            if isinstance(det, Detection):
+                type = det.type
+                box = VitaRect(
+                    det.bounding_box.x,
+                    det.bounding_box.y,
+                    det.bounding_box.width,
+                    det.bounding_box.height,
+                )
+                score = det.score
+            else:
+                type, box, score = det
             color = _kRed if type == "person" else _kBlue
             draw.rectangle((box.tl().x+offset[0], \
                             box.tl().y+offset[1], \
@@ -239,8 +250,10 @@ class ObjectDetectorClient(threading.Thread):
 
         # add required growth on both sides, as much as the dimensions allow
         toGrow = minSize - curSize
-        growTop = min( toGrow/2, dimSize - p2 - 1 )
-        growBottom = min( toGrow/2, p1 )
+        # Pixel growth is an integer split. Python 3's / would turn the
+        # coordinates into floats and shift the crop by a fraction of a pixel.
+        growTop = min(toGrow // 2, dimSize - p2 - 1)
+        growBottom = min(toGrow // 2, p1)
 
         newP1 = p1 - growBottom
         newP2 = p2 + growTop
@@ -317,7 +330,16 @@ class ObjectDetectorClient(threading.Thread):
         objId, frameId, sentryRect = sentryBox
 
         # Iterate on external results, and match them up with Sentry results
-        for type, boxRect, score in objects:
+        for det in objects:
+            if isinstance(det, Detection):
+                type = det.type
+                box = det.bounding_box
+                boxRect = VitaRect(box.x, box.y, box.width, box.height)
+                score = det.score
+                attributes = det.attributes
+            else:
+                type, boxRect, score = det
+                attributes = {}
             # when using 'ss', a person passing in front of the car, may receive a 'vehicle' label
             # when using 'jaccard', a group of people in a single bounding box may receive an 'unknown' label
             # ... choose your poison.
@@ -326,7 +348,7 @@ class ObjectDetectorClient(threading.Thread):
             containment = boxRect.containment(sentryRect)
             if overlap >= _kMinOverlap or containment >= _kMinContainment:
                 status = "match"
-                output.append( (objId, type, score, overlap) )
+                output.append(TrackMatch(objId, type, score, overlap, attributes))
             else:
                 status = "ignored, insufficient overlap"
             self._logger.debug( "SentryID=%d, frame=%d: Detection %s: %s rect=%s sentryRect=%s score=%.2f overlap=%.2f" %
@@ -351,7 +373,8 @@ class ObjectDetectorClient(threading.Thread):
             try:
                 retries += 1
                 self._refreshHTTPConnection()
-                self._httpConn.request("POST", url, params, self._httpHeaders)
+                body = params.encode("utf-8") if isinstance(params, str) else params
+                self._httpConn.request("POST", url, body, self._httpHeaders)
                 response = self._httpConn.getresponse()
             except:
                 self._httpConn = None # start with a fresh connection object for the next attempt
@@ -432,9 +455,9 @@ class ObjectDetectorClientCloud(ObjectDetectorClient):
     def _doRefreshHTTPConnection(self):
         """ Establish HTTP/S connection
         """
-        self._httpHeaders = {"Content-type": "application/json", "X-Access-Token": ObjectDetectorClient._kCloudToken}
-        self._httpConn = httplib.HTTPSConnection("dev.sighthoundapi.com",
-            context=ssl.SSLContext(ssl.PROTOCOL_TLSv1),
+        self._httpHeaders = {"Content-type": "application/json", "X-Access-Token": ObjectDetectorClientCloud._kCloudToken}
+        self._httpConn = http.client.HTTPSConnection("dev.sighthoundapi.com",
+            context=ssl.create_default_context(),
             timeout=self._httpTimeout)
 
     #---------------------------------------------------------------------------
@@ -446,7 +469,7 @@ class ObjectDetectorClientCloud(ObjectDetectorClient):
         """
         with BytesIO() as f:
             image.save(f, format='JPEG')
-            image_data= base64.b64encode(f.getvalue())
+            image_data = base64.b64encode(f.getvalue()).decode("ascii")
 
         params = json.dumps({"image": image_data})
         try:
@@ -470,15 +493,7 @@ class ObjectDetectorClientCloud(ObjectDetectorClient):
         response = self._sendHTTPRequest( "/v1/detections?type=person", params )
 
         if response.status == 200:
-            result = response.read()
-            jsonResult = json.loads(result)
-            objects = jsonResult.get("objects", None)
-            for x in objects:
-                type = x["type"]
-                box = x["boundingBox"]
-                boxRect = VitaRect(box["x"], box["y"], box["width"], box["height"])
-                output.append((type, boxRect))
-            return output
+            return parse_detection_response(response.read())
         else:
             self._logger.error("Error %d in detections: reason=%s msg=%s" % (response.status, response.reason, response.msg))
             output = None
@@ -512,7 +527,7 @@ class ObjectDetectorClientLocal(ObjectDetectorClient):
     def _doRefreshHTTPConnection(self):
         """ Establish HTTP/S connection
         """
-        self._httpConn = httplib.HTTPConnection("127.0.0.1", self._nextAnalyticsPort,
+        self._httpConn = http.client.HTTPConnection("127.0.0.1", self._nextAnalyticsPort,
                                                 timeout=self._httpTimeout)
         self._analyticsPort = self._nextAnalyticsPort
 
@@ -531,21 +546,13 @@ class ObjectDetectorClientLocal(ObjectDetectorClient):
             self._skippedDetections += 1
             return output
 
-        binData = image.tobytes()
+        if image.mode != "RGB":
+            image = image.convert("RGB")
+        binData = parse_rgb_body(image.tobytes(), image.size[0], image.size[1])
         self._httpHeaders = { "Content-Length":str(len(binData)), "X-Width":str(image.size[0]), "X-Height":str(image.size[1]) }
         response = self._sendHTTPRequest("/", binData)
         if response.status == 200:
-            result = response.read()
-            # self._logger.debug("Got output! " + str(result))
-            jsonResult = json.loads(result)
-            objects = jsonResult.get("objects", None)
-            for x in objects:
-                type = x["type"]
-                box = x["boundingBox"]
-                score = x["score"] if "score" in x else 0
-                boxRect = VitaRect(box["x"], box["y"], box["width"], box["height"])
-                output.append((type, boxRect, score))
-            return output
+            return parse_detection_response(response.read())
         else:
             self._logger.error("Error %d in detections: reason=%s msg=%s" % (response.status, response.reason, response.msg))
             output = []
@@ -558,11 +565,8 @@ class ObjectDetectorClientInProcess(ObjectDetectorClient):
 
     #---------------------------------------------------------------------------
     def __init__(self, id, logger):
-        from SIOWrapper.SIOWrapper import SIOWrapper
         super(ObjectDetectorClientInProcess, self).__init__(id, logger)
-        self._sio = SIOWrapper(self._logger, _getModelDir(), False)
-        if self._sio.init() <= 0:
-            raise Exception("Failed to init SIO!")
+        self._detector = SIOObjectDetector(self._logger, _getModelDir(), enable_gpu=False)
 
     #---------------------------------------------------------------------------
     def _doRefreshHTTPConnection(self):
@@ -577,24 +581,12 @@ class ObjectDetectorClientInProcess(ObjectDetectorClient):
         @param  image    PIL Image
         @return objects  list of (objectType, objectRectangle)
         """
-        w, h = image.size
-        idIn = self._sio.addInput(image.tobytes(), w, h)
-        if idIn < 0:
+        if image.mode != "RGB":
+            image = image.convert("RGB")
+        width, height = image.size
+        try:
+            return self._detector.detect_rgb(image.tobytes(), width, height)
+        except Exception:
             self._logger.error("Failed to submit input for processing")
+            self._logger.error(traceback.format_exc())
             return None
-
-        idOut, detections = self._sio.getOutput(True)
-        if idOut != idIn:
-            # TODO: keep this until we do multi-threaded HTTP request processing
-            self._logger.error("Something went terribly wrong")
-            return None
-
-        output = []
-        objects = detections.get("objects", None)
-        for x in objects:
-            type = x["type"]
-            box = x["boundingBox"]
-            score = x["score"] if "score" in x else 0
-            boxRect = VitaRect(box["x"], box["y"], box["width"], box["height"])
-            output.append((type, boxRect, score))
-        return output

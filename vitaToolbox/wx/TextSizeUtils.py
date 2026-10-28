@@ -38,4 +38,4 @@
 
 # This is just a wrapper around the new FontUtils.  People should move to
 # importing from FontUtils...
-from FontUtils import *
+from .FontUtils import *

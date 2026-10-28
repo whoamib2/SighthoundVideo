@@ -73,7 +73,7 @@ import traceback
 
 if sys.platform=='darwin':
     def doRunCapture(*args):
-        import CameraCapture
+        from . import CameraCapture
         CameraCapture.runCapture(*args)
 
     def startCapture(*args):
@@ -82,49 +82,49 @@ if sys.platform=='darwin':
         return p
 
     def startDiskCleaner(*args):
-        from DiskCleaner import runDiskCleaner
+        from .DiskCleaner import runDiskCleaner
         p = Process(target=runDiskCleaner, args=args)
         p.start()
         return p
 
     def startNetworkMessageServer(*args):
-        from NetworkMessageServer import runNetworkMessageServer
+        from .NetworkMessageServer import runNetworkMessageServer
         p = Process(target=runNetworkMessageServer, args=args)
         p.start()
         return p
 
     def startResponseRunner(*args):
-        from ResponseRunner import runResponseRunner
+        from .ResponseRunner import runResponseRunner
         p = Process(target=runResponseRunner, args=args)
         p.start()
         return p
 
     def startStream(*args):
-        from TestStream import runStream
+        from .TestStream import runStream
         p = Process(target=runStream, args=args)
         p.start()
         return p
 
     def startWebServer(*args):
-        from WebServer import runWebServer
+        from .WebServer import runWebServer
         p = Process(target=runWebServer, args=args)
         p.start()
         return p
 
     def startPlatformHTTPWrapper(*args):
-        from PlatformHTTPWrapper import runPlatformHTTPWrapper
+        from .PlatformHTTPWrapper import runPlatformHTTPWrapper
         p = Process(target=runPlatformHTTPWrapper, args=args)
         p.start()
         return p
 
     def startPacketCapture(*args):
-        from PacketCaptureStream import runPacketCapture
+        from .PacketCaptureStream import runPacketCapture
         p = Process(target=runPacketCapture, args=args)
         p.start()
         return p
 else:
     def runCapture(*args):
-        import CameraCapture
+        from . import CameraCapture
         CameraCapture.runCapture(*args)
     def startCapture(*args): #PYCHECKER OK: redefining attribute startCapture
         p = Process(target=runCapture, args=args)
@@ -132,7 +132,7 @@ else:
         return p
 
     def runDiskCleaner(*args):
-        import DiskCleaner
+        from . import DiskCleaner
         DiskCleaner.runDiskCleaner(*args)
     def startDiskCleaner(*args): #PYCHECKER OK: redefining attribute startDiskCleaner
         p = Process(target=runDiskCleaner, args=args)
@@ -140,7 +140,7 @@ else:
         return p
 
     def runNetworkMessageServer(*args):
-        import NetworkMessageServer
+        from . import NetworkMessageServer
         NetworkMessageServer.runNetworkMessageServer(*args)
     def startNetworkMessageServer(*args): #PYCHECKER OK: redefining attribute startNetworkMessageServer
         p = Process(target=runNetworkMessageServer, args=args)
@@ -148,7 +148,7 @@ else:
         return p
 
     def runResponseRunner(*args):
-        import ResponseRunner
+        from . import ResponseRunner
         ResponseRunner.runResponseRunner(*args)
     def startResponseRunner(*args): #PYCHECKER OK: redefining attribute startResponseRunner
         p = Process(target=runResponseRunner, args=args)
@@ -156,7 +156,7 @@ else:
         return p
 
     def runStream(*args):
-        import TestStream
+        from . import TestStream
         TestStream.runStream(*args)
     def startStream(*args): #PYCHECKER OK: redefining attribute startStream
         p = Process(target=runStream, args=args)
@@ -164,7 +164,7 @@ else:
         return p
 
     def runWebServer(*args):
-        import WebServer
+        from . import WebServer
         WebServer.runWebServer(*args)
     def startWebServer(*args):
         p = Process(target=runWebServer, args=args)
@@ -172,23 +172,26 @@ else:
         return p
 
     def runPlatformHTTPWrapper(*args):
-        import PlatformHTTPWrapper
+        from . import PlatformHTTPWrapper
         PlatformHTTPWrapper.runPlatformHTTPWrapper(*args)
 
     def startPlatformHTTPWrapper(*args):
         import os
+        # The open ONNX runtime does not need the legacy Intel compiler redistributable.
+        # If a developer still has INTEL_DEV_REDIST set, keep those DLLs on PATH.
         intelPath = os.environ.get('INTEL_DEV_REDIST')
-        if intelPath is None or len(intelPath) == 0:
-            raise Exception( "Error: INTEL_DEV_REDIST not defined; analytics process will fail" )
-        backupPath = os.environ.get('PATH',None)
-        os.environ['PATH'] = os.path.join(intelPath, "redist", "intel64", "compiler") + ";" + backupPath
+        backupPath = os.environ.get('PATH', None)
+        if intelPath:
+            compiler = os.path.join(intelPath, "redist", "intel64", "compiler")
+            os.environ['PATH'] = compiler + os.pathsep + (backupPath or "")
         p = Process(target=runPlatformHTTPWrapper, args=args)
         p.start()
-        os.environ['PATH'] = backupPath
+        if intelPath and backupPath is not None:
+            os.environ['PATH'] = backupPath
         return p
 
     def runPacketCapture(*args):
-        import PacketCaptureStream
+        from . import PacketCaptureStream
         PacketCaptureStream.runPacketCapture(*args)
     def startPacketCapture(*args):
         p = Process(target=runPacketCapture, args=args)

@@ -39,7 +39,7 @@
 
 # Python imports...
 import os, time, pickle, sys, threading, socket, random
-from SocketServer import TCPServer, BaseRequestHandler
+from socketserver import TCPServer, BaseRequestHandler
 
 # Common 3rd-party imports...
 import wx
@@ -59,14 +59,14 @@ from appCommon.CommonStrings import kStatusKeyCertificateId
 from appCommon.CommonStrings import kStorageDetailUrl
 from appCommon.CommonStrings import kRemoteAccessUrl
 from appCommon.LicenseUtils import hasPaidEdition
-from LocateVideoDialog import LocateVideoDialog
-from MoveVideoDialog import MoveVideoDialog
-from FrontEndUtils import setServiceStartsBackend
-from FrontEndUtils import setServiceAutoStart, getServiceAutoStart
-from FrontEndUtils import getUserLocalDataDir
-from FrontEndUtils import promptUserIfAutoStartEvtHandler
-from FrontEndUtils import determineGridViewCameras
-from FrontEndPrefs import getFrontEndPref, setFrontEndPref
+from .LocateVideoDialog import LocateVideoDialog
+from .MoveVideoDialog import MoveVideoDialog
+from .FrontEndUtils import setServiceStartsBackend
+from .FrontEndUtils import setServiceAutoStart, getServiceAutoStart
+from .FrontEndUtils import getUserLocalDataDir
+from .FrontEndUtils import promptUserIfAutoStartEvtHandler
+from .FrontEndUtils import determineGridViewCameras
+from .FrontEndPrefs import getFrontEndPref, setFrontEndPref
 import backEnd.BackEndPrefs as Prefs
 
 # vitaToolbox imports...
@@ -337,7 +337,7 @@ class OptionsDialog(wx.Dialog):
 
             try:
                 self._hasPaid = hasPaidEdition(backEndClient.getLicenseData())
-            except Exception, e:
+            except Exception as e:
                 self._logger.error(str(e))
                 self._hasPaid = False
 
@@ -627,7 +627,7 @@ class OptionsDialog(wx.Dialog):
         rowsLabel = wx.StaticText(panel, -1, _kGridRowsLabel)
         colsLabel = wx.StaticText(panel, -1, _kGridColsLabel)
         orderLabel = wx.StaticText(panel, -1, _kGridOrderLabel)
-        choices = list(map(lambda i: str(i), xrange(1, 10)))
+        choices = list([str(i) for i in range(1, 10)])
         style = wx.CB_DROPDOWN + wx.CB_READONLY
         cols = str(getFrontEndPref("gridViewCols"))
         rows = str(getFrontEndPref("gridViewRows"))
@@ -681,7 +681,7 @@ class OptionsDialog(wx.Dialog):
         # Create the framerate controls and add it to the grid.
         fpsValue = getFrontEndPref("gridViewFps")
         fpsLabel = wx.StaticText(panel, -1, _kGridFpsLabel)
-        choices = list(map(lambda i: str(i), (2, 5, 10, 30)))
+        choices = list([str(i) for i in (2, 5, 10, 30)])
         self._gridFpsComboBox = wx.ComboBox(panel, value=str(fpsValue), choices=choices, style=style)
         flexGridSizer.AddMany([
             (fpsLabel, 0, wx.LEFT | wx.ALIGN_CENTER_VERTICAL, _kPaddingSize),
@@ -1236,9 +1236,9 @@ class OptionsDialog(wx.Dialog):
         certificateIdLong = ''
         if certificateId:
             certificateId = certificateId.upper()
-            for i in xrange(0,len(certificateId)/2):
+            for i in range(0, len(certificateId)//2):
                 certificateIdLong += \
-                    '\n' if i == len(certificateId)/4 else ':' if i else ''
+                    '\n' if i == len(certificateId)//4 else ':' if i else ''
                 certificateIdLong += certificateId[i*2:i*2+2]
             certificateIdShort = certificateIdLong[0:23]
 

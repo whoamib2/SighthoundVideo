@@ -35,7 +35,7 @@
 #*****************************************************************************
 
 import sys, threading
-import Queue
+import queue
 
 from vitaToolbox.loggingUtils.LoggingUtils import EmptyLogger
 
@@ -54,7 +54,7 @@ class ThreadPool:
         @param logger            Logger to report trouble. Can be None.
         """
         self._threads = []
-        self._queue = Queue.Queue(queueSize)
+        self._queue = queue.Queue(queueSize)
         self._running = True
         self._logger = EmptyLogger() if logger is None else logger
         if threadNamePrefix is None:
@@ -121,5 +121,5 @@ class ThreadPool:
         try:
             self._queue.put(runnable, block)
             return True
-        except Queue.Full:
+        except queue.Full:
             return False

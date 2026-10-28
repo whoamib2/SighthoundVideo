@@ -37,9 +37,9 @@
 #*****************************************************************************
 
 
-from BaseTrigger import BaseTrigger
-from TriggerUtils import getBboxTrackingPoint, optimizedDidObjCrossLine, BBOX
-from TriggerUtils import kTrackPointStrToInt, kDirectionStrToInt
+from .BaseTrigger import BaseTrigger
+from .TriggerUtils import getBboxTrackingPoint, optimizedDidObjCrossLine, BBOX
+from .TriggerUtils import kTrackPointStrToInt, kDirectionStrToInt
 
 # If an object disappears for > this long, we assume it's gone...
 _kStaleObjMs = 5000
@@ -62,7 +62,7 @@ class LineTrigger(BaseTrigger):
         self._trigLineSegment = segment
 
         # Save the tracking location preference
-        assert point in kTrackPointStrToInt.keys()
+        assert point in list(kTrackPointStrToInt.keys())
         self._point = point
 
         # Save the data manager
@@ -178,7 +178,7 @@ class LineTrigger(BaseTrigger):
             prevBoxMap = self._prevBboxMap
 
             # Delete stale objects from the prevBoxMap
-            for (_, _, _, _, _, frameTime, objId) in prevBoxMap.values():
+            for (_, _, _, _, _, frameTime, objId) in list(prevBoxMap.values()):
                 if timeStart - frameTime > _kStaleObjMs:
                     del prevBoxMap[objId]
         else:

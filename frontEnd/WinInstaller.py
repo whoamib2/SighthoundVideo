@@ -497,8 +497,8 @@ class InnoScript:
     def compile(self):
         """Execute InnoSetup to compile the script"""
         compilerOptions = [
-            "C:\Program Files\Inno Setup 5\ISCC.exe",
-            "C:\Program Files (x86)\Inno Setup 5\ISCC.exe",
+            r"C:\Program Files\Inno Setup 5\ISCC.exe",
+            r"C:\Program Files (x86)\Inno Setup 5\ISCC.exe",
         ]
         for compiler in compilerOptions:
             if os.path.exists(compiler):
@@ -506,7 +506,7 @@ class InnoScript:
         else:
             assert False, "Missing %s. Please install Inno Setup." % compiler
 
-        print compiler, self._pathName
+        print(compiler, self._pathName)
         subprocess.call([compiler, self._pathName])
 
 
@@ -519,11 +519,11 @@ if __name__ == '__main__':
     else:
         script = InnoScript("%s Setup.iss" % kAppName)
 
-    print "*** creating the InnoSetup script***"
+    print("*** creating the InnoSetup script***")
     script.create()
 
-    print "*** compiling the InnoSetup script***"
+    print("*** compiling the InnoSetup script***")
     script.compile()
 
-    print "*** InnoSetup installer creation complete***"
+    print("*** InnoSetup installer creation complete***")
 

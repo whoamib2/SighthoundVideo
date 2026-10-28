@@ -61,7 +61,8 @@ def sharedLibrary():
     if hasattr(sys, "frozen"):
         return os.path.join(os.path.dirname(sys.executable), _kSharedLib)
     else:
-        return os.path.join(os.getenv("SV_DEVEL_LIB_FOLDER_LOCAL"), _kSharedLib)
+        libFolder = os.getenv("SV_DEVEL_LIB_FOLDER_LOCAL") or ""
+        return os.path.join(libFolder, _kSharedLib)
 
 
 ###############################################################################
@@ -76,10 +77,17 @@ def runXNAT(outp, *args):
     exitcode = -1
     try:
         cdll = ctypes.CDLL(sharedLibrary())
-        argv = (ctypes.c_char_p * (len(args) + 1))()
-        argv[:-1] = args
+        encoded = []
+        for arg in args:
+            if isinstance(arg, str):
+                arg = arg.encode("utf-8")
+            encoded.append(arg)
+        argv = (ctypes.c_char_p * (len(encoded) + 1))()
+        argv[:-1] = encoded
         argv[-1] = None
-        exitcode = cdll.dylibMain(ctypes.c_char_p(outp), len(args), argv)
+        if isinstance(outp, str):
+            outp = outp.encode("utf-8")
+        exitcode = cdll.dylibMain(ctypes.c_char_p(outp), len(encoded), argv)
     except:
         f = None
         try:
@@ -133,7 +141,8 @@ class XNAT:
         if hasattr(sys, "frozen"):
             self._exe = os.path.join(os.path.dirname(sys.executable), exe)
         else:
-            self._exe = os.path.join(os.getenv("SV_DEVEL_LIB_FOLDER_LOCAL"), "..", "bin", exe)
+            libFolder = os.getenv("SV_DEVEL_LIB_FOLDER_LOCAL") or ""
+            self._exe = os.path.join(libFolder, "..", "bin", exe)
 
 
     ###########################################################################

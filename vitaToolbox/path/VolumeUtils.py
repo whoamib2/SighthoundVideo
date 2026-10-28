@@ -47,7 +47,7 @@ import os
 import sys
 import subprocess
 
-from PathUtils import abspathU
+from .PathUtils import abspathU
 
 from vitaToolbox.ctypesUtils.LoadLibrary import LoadLibrary
 
@@ -111,15 +111,19 @@ def getVolumeNameAndType(path):
     volType = ""
 
     # Make sure our path is Unicode.  Convert to Unicode if it isn't.
-    if type(path) == str:
+    if isinstance(path, (bytes, bytearray)):
         path = path.decode('utf-8')
 
     if sys.platform == 'darwin':
         volNamePtr = _volumeUtils.getVolumeName(path.encode('utf-8'))
         if volNamePtr:
             volName = c_char_p(volNamePtr).value
+            if isinstance(volName, (bytes, bytearray)):
+                volName = bytes(volName).decode("utf-8", errors="replace")
             _volumeUtils.freeVolumeName(volNamePtr)
         volType = _volumeUtils.getVolumeType(path.encode('utf-8'))
+        if isinstance(volType, (bytes, bytearray)):
+            volType = bytes(volType).decode("utf-8", errors="replace")
     else:
         # The path must end in a trailing backslash, see
         # http://msdn.microsoft.com/en-us/library/aa364993%28VS.85%29.aspx
@@ -129,12 +133,11 @@ def getVolumeNameAndType(path):
         volType = kWinIntToDriveType.get(volInt, kWinIntToDriveType[0])
 
         path = abspathU(path)
+        # splitdrive includes a UNC share (\\server\share). os.path.splitunc
+        # was removed in Python 3.
         volName, _ = os.path.splitdrive(path)
-        if not volName:
-            # If we weren't on a drive attpmpt to get the unc volume name
-            unc, _ = os.path.splitunc(path)
-            if unc:
-                volName = unc.split('\\')[-1]
+        if volName.startswith("\\\\") or volName.startswith("//"):
+            volName = volName.strip("\\/").split("\\")[-1].split("/")[-1]
 
     return volName, volType
 
@@ -152,7 +155,7 @@ def automountDisksWithoutUserLoginEnabled():
                 "/Library/Preferences/SystemConfiguration/autodiskmount",
                 "AutomountDisksWithoutUserLogin"]
         try:
-            output = subprocess.check_output(args)
+            output = subprocess.check_output(args, text=True, errors="replace")
             output = output.strip()
             if output == "1":
                 return True

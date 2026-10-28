@@ -91,7 +91,7 @@ class HoverBitmapButton(wx.Control):
 
     ###########################################################
     def __init__(self, parent, id=wx.ID_ANY, bmpNormal=None, #PYCHECKER OK: Lots of args OK in this case...
-                 label=wx.EmptyString, bmpPressed=None, bmpDisabled=None,
+                 label="", bmpPressed=None, bmpDisabled=None,
                  bmpHovered=None, wantRepeats=False, platformBmps=True,
                  pos=wx.DefaultPosition, size=wx.DefaultSize, useMask=True,
                  normalTextColor=_kNormalTextColor,
@@ -152,25 +152,25 @@ class HoverBitmapButton(wx.Control):
         self._hoverTextColor = hoverTextColor
 
         # Keep track of bitmaps, loading if needed.
-        if isinstance(bmpNormal, basestring):
+        if isinstance(bmpNormal, str):
             self._bmpNormal = bitmapFromFile(bmpNormal, platformBmps)
         else:
             self._bmpNormal = bmpNormal
         if bmpPressed is None:
             self._bmpPressed = self._bmpNormal
-        elif isinstance(bmpPressed, basestring):
+        elif isinstance(bmpPressed, str):
             self._bmpPressed = bitmapFromFile(bmpPressed, platformBmps)
         else:
             self._bmpPressed = bmpPressed
         if bmpDisabled is None:
             self._bmpDisabled = self._bmpNormal
-        elif isinstance(bmpDisabled, basestring):
+        elif isinstance(bmpDisabled, str):
             self._bmpDisabled = bitmapFromFile(bmpDisabled, platformBmps)
         else:
             self._bmpDisabled = bmpDisabled
         if bmpHovered is None:
             self._bmpHovered = self._bmpNormal
-        elif isinstance(bmpHovered, basestring):
+        elif isinstance(bmpHovered, str):
             self._bmpHovered = bitmapFromFile(bmpHovered, platformBmps)
         else:
             self._bmpHovered = bmpHovered
@@ -312,7 +312,7 @@ class HoverBitmapButton(wx.Control):
         if bmp is not None:
             dc.DrawBitmap(bmp, 0, 0, True)
 
-        if self._label == wx.EmptyString:
+        if self._label == "":
             return
 
         dc.SetFont(self.GetFont())
@@ -358,11 +358,11 @@ class HoverBitmapButton(wx.Control):
         style = self.GetWindowStyle()
         x = offset
         if style & wx.ALIGN_CENTER:
-            x += (widthForText - textWidth) / 2
+            x += (widthForText - textWidth) // 2
         elif style & wx.ALIGN_RIGHT:
             x += widthForText - textWidth
 
-        dc.DrawText(label, x, (height - textHeight) / 2)
+        dc.DrawText(label, x, (height - textHeight) // 2)
 
 
     ###########################################################
@@ -608,7 +608,7 @@ def test_main():
     """OB_REDACT
        Contains various self-test code.
     """
-    from ImagePanel import ImagePanel
+    from .ImagePanel import ImagePanel
     app = wx.App(False)
 
     frame = wx.Frame(None)
@@ -678,7 +678,7 @@ def test_main():
     )
 
     def OnButtonClick(event):
-        print "Click", event
+        print("Click", event)
 
     for button in buttons:
         button.Bind(wx.EVT_BUTTON, OnButtonClick)
@@ -713,4 +713,4 @@ if __name__ == '__main__':
     if len(sys.argv) > 1 and sys.argv[1] == "test":
         test_main()
     else:
-        print "Try calling with 'test' as the argument."
+        print("Try calling with 'test' as the argument.")

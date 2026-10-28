@@ -38,7 +38,7 @@
 
 import os
 import wx
-import cPickle
+import pickle
 import sys
 
 from appCommon.CommonStrings import kAppName
@@ -120,7 +120,10 @@ def getUserLocalDataDir():
                         pass
         return _kDataDir
     dataDir = wx.StandardPaths.Get().GetUserLocalDataDir()
-    return os.path.join(os.path.dirname(dataDir), kAppName)
+    new_dir = os.path.join(os.path.dirname(dataDir), kAppName)
+    # First launch after the VigilCam rename picks up the old folder.
+    from appCommon.startuplog import migrate_legacy_data_dir
+    return migrate_legacy_data_dir(os.path.dirname(new_dir))
 
 
 ###############################################################################
@@ -217,15 +220,15 @@ def getRemotePathsFromSettings():
             try:
                 # Load the rule
                 ruleFilePath = os.path.join(ruleDir, fileName)
-                ruleFile = file(ruleFilePath, 'r')
-                rule = cPickle.load(ruleFile)
+                ruleFile = open(ruleFilePath, 'rb')
+                rule = pickle.load(ruleFile)
                 ruleFile.close()
 
                 # Load it's associated query
                 queryFileName = rule.getQueryName()+kQueryExt
                 queryFilePath = os.path.join(ruleDir, queryFileName)
-                queryFile = file(queryFilePath, 'r')
-                queryModel = cPickle.load(queryFile)
+                queryFile = open(queryFilePath, 'rb')
+                queryModel = pickle.load(queryFile)
                 queryFile.close()
 
                 responses = queryModel.getResponses()

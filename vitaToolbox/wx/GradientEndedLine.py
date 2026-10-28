@@ -43,7 +43,7 @@ import wx
 
 # Toolbox imports...
 from vitaToolbox.wx.BackgroundStyleUtils import kBackgroundStyle
-from DoubleBufferCompatGc import createDoubleBufferCompatGc
+from .DoubleBufferCompatGc import createDoubleBufferCompatGc
 
 
 
@@ -103,9 +103,9 @@ class GradientEndedLine(wx.Window):
         style = self.GetWindowStyle()
 
         if (style & wx.LI_HORIZONTAL):
-            gradientWidth = w/2
+            gradientWidth = w//2
         else:
-            gradientWidth = h/2
+            gradientWidth = h//2
 
         if self._maxEndWidth != -1:
             # If we have a max gradient size ensure we're within bounds

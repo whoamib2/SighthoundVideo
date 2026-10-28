@@ -202,18 +202,18 @@ class SearchResultsTimelineControl(wx.Control):
             # We'll do things based on today's mightnight by default...
             midnightSecs = int(time.mktime(datetime.date.today().timetuple()))
         else:
-            midnightSecs = self._curMidnightMs/1000
+            midnightSecs = int(self._curMidnightMs) // 1000
 
         midnightDate = datetime.date.fromtimestamp(midnightSecs)
         nextMidnightDate = midnightDate + datetime.timedelta(1)  # Handles DST!
         nextMidnightSec = int(time.mktime(nextMidnightDate.timetuple()))
 
-        hoursInThisDay = (nextMidnightSec - midnightSecs) / _kSecIn1H
+        hoursInThisDay = (nextMidnightSec - midnightSecs) // _kSecIn1H
         self._numMsToday = hoursInThisDay*_kMsIn1H
 
         # Adjust labels...
         self._labels = []
-        for i in xrange(hoursInThisDay + 1):
+        for i in range(hoursInThisDay + 1):
             dt = datetime.datetime.fromtimestamp(midnightSecs + i * _kSecIn1H)
             if self._is12:
                 self._labels.append(_kLabels12[dt.hour])
@@ -277,13 +277,13 @@ class SearchResultsTimelineControl(wx.Control):
             rightAnything = None
             rightClip = None
 
-            for i in xrange(divNum, -1, -1):
+            for i in range(divNum, -1, -1):
                 if self._divisionMap[i] is not None:
                     if leftAnything is None:
                         leftAnything = i
                         break
 
-            for i in xrange(divNum, self._getNumDivisions()):
+            for i in range(divNum, self._getNumDivisions()):
                 if self._divisionMap[i] is not None:
                     if rightAnything is None:
                         rightAnything = i
@@ -518,7 +518,7 @@ class SearchResultsTimelineControl(wx.Control):
 
             # Next, do matching clips, again in reversed order so that
             # earlier clips take priority.
-            for i in xrange(len(matchingClips)-1, -1, -1):
+            for i in range(len(matchingClips)-1, -1, -1):
                 startMs = matchingClips[i].startTime
                 stopMs = matchingClips[i].stopTime
 
@@ -540,7 +540,7 @@ class SearchResultsTimelineControl(wx.Control):
             return
 
         self._timebarWidth = w
-        self._timebarX = self._width12a/2
+        self._timebarX = self._width12a//2
 
         bitmap = wx.Bitmap.FromRGBA(w, _kTimebarHeight)
         dc = wx.MemoryDC()
@@ -571,7 +571,7 @@ class SearchResultsTimelineControl(wx.Control):
             )
             clipBrush = wx.Brush(_kClipColor)
 
-            for i in xrange(len(self._divisionMap) + 1):
+            for i in range(len(self._divisionMap) + 1):
                 if i == self._getNumDivisions():
                     divisionData = None
                 else:
@@ -647,7 +647,7 @@ class SearchResultsTimelineControl(wx.Control):
         for i, label in enumerate(self._labels):
             cx = int(round((self._timebarX) + (i * spacePerLabel)))
             labelWidth, _ = dc.GetTextExtent(label)
-            dc.DrawText(label, cx - labelWidth/2, _kTimebarHeight + _kSpacing)
+            dc.DrawText(label, cx - labelWidth//2, _kTimebarHeight + _kSpacing)
 
         # Draw the blue line at the bottom
         dc.SetPen(wx.Pen(_kBlueLineColor))
@@ -791,7 +791,7 @@ if __name__ == '__main__':
     if len(sys.argv) > 1 and sys.argv[1] == "test":
         test_main()
     else:
-        print "Try calling with 'test' as the argument."
+        print("Try calling with 'test' as the argument.")
 
 
 

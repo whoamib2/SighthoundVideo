@@ -44,6 +44,6 @@ Starts the back end.
 import sys
 
 if __name__ == '__main__':
-    from BackEndApp import main
+    from .BackEndApp import main
     assert len(sys.argv) == 2
     main(sys.argv[1])

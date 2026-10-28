@@ -43,7 +43,20 @@ from vitaToolbox.ctypesUtils.LoadLibrary import LoadLibrary
 
 
 _libName = 'optsearches'
-_searchlib = LoadLibrary(None, _libName)
+_searchlib = None
+
+
+def _lib():
+    """Load optsearches the first time a search actually runs."""
+    global _searchlib
+    if _searchlib is None:
+        lib = LoadLibrary(None, _libName)
+        lib.is_obj_inside.argtypes = [BBOX, c_int, POINTER(BBOX), c_int]
+        lib.is_obj_inside.restype = c_int
+        lib.did_obj_cross.argtypes = [BBOX, BBOX, BBOX, c_int, c_int]
+        lib.did_obj_cross.restype = c_int
+        _searchlib = lib
+    return _searchlib
 
 
 ###############################################################
@@ -55,11 +68,6 @@ class BBOX(Structure):
                 ("y2", c_int)]
 
 
-
-_searchlib.is_obj_inside.argtypes = [BBOX, c_int, POINTER(BBOX), c_int]
-_searchlib.is_obj_inside.restype = c_int
-_searchlib.did_obj_cross.argtypes = [BBOX, BBOX, BBOX, c_int, c_int]
-_searchlib.did_obj_cross.restype = c_int
 
 kTrackPointStrToInt = {'center' : 0,
                        'top'    : 1,
@@ -83,7 +91,7 @@ def optimizedDidObjCrossLine(prevBbox, curBbox, boundary, location, direction):
     @param  direction  A value from kDirectionStrToInt.
     @return didCross   True if the object tracking point crossed boundary.
     """
-    retVal = _searchlib.did_obj_cross(prevBbox, curBbox, boundary, location,
+    retVal = _lib().did_obj_cross(prevBbox, curBbox, boundary, location,
                                       direction)
     if retVal == 1:
         return True
@@ -101,7 +109,7 @@ def optimizedIsPointInside(bbox, trackLocation, cSegments, numSegments):
     @param  numSegments    The number of segments in cSegments.
     @return isInside       True if the point is inside the region, else False.
     """
-    retVal = _searchlib.is_obj_inside(bbox, trackLocation, cSegments,
+    retVal = _lib().is_obj_inside(bbox, trackLocation, cSegments,
                                       numSegments)
     if retVal == 1:
         return True
@@ -116,19 +124,19 @@ def getBboxTrackingPoint(bbox, location='center'):
     @param  location  The location on the box to track
     @return point     X,Y coordinates of the requested point
     """
-    assert location in kTrackPointStrToInt.keys()
+    assert location in list(kTrackPointStrToInt.keys())
 
     # Remember that (x2, y2) on bbox are _outside_ the object; adjust so they're
     # not for the math below...
     bbox = (bbox[0], bbox[1], bbox[2]-1, bbox[3]-1)
 
     if location == 'center':
-        return ((bbox[2]+bbox[0])/2, (bbox[3]+bbox[1])/2)
+        return ((bbox[2]+bbox[0])//2, (bbox[3]+bbox[1])//2)
     elif location == 'top':
-        return ((bbox[2]+bbox[0])/2, bbox[1])
+        return ((bbox[2]+bbox[0])//2, bbox[1])
     elif location == 'bottom':
-        return ((bbox[2]+bbox[0])/2, bbox[3])
+        return ((bbox[2]+bbox[0])//2, bbox[3])
     elif location == 'left':
-        return (bbox[0], (bbox[3]+bbox[1])/2)
+        return (bbox[0], (bbox[3]+bbox[1])//2)
     elif location == 'right':
-        return (bbox[2], (bbox[3]+bbox[1])/2)
+        return (bbox[2], (bbox[3]+bbox[1])//2)

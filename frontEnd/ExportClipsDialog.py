@@ -71,9 +71,9 @@ class ExportSingleClipDialog(wx.Dialog):
 
 
     ###########################################################
-    def __init__(self, parent, title=wx.EmptyString,
-                 message=wx.FileSelectorPromptStr, defaultDir=wx.EmptyString,
-                 defaultFile=wx.EmptyString,
+    def __init__(self, parent, title="",
+                 message=wx.FileSelectorPromptStr, defaultDir="",
+                 defaultFile="",
                  types=None,
                  flags=0,
                  style=wx.DEFAULT_DIALOG_STYLE,  pos=wx.DefaultPosition,
@@ -607,7 +607,7 @@ class ExportTimeRangeDialog(ExportSingleClipDialog):
         endDTTime = datetime.date.fromtimestamp(endDT)
         endDTStr = getTimeAsString(endDT*1000, ":", True, use24Hr)
 
-        fromToSizer = wx.FlexGridSizer(3, 3, _kBorderSize/2, _kBorderSize)
+        fromToSizer = wx.FlexGridSizer(3, 3, _kBorderSize//2, _kBorderSize)
 
         camListLabel = TranslucentStaticText(self, wx.ID_ANY, "Camera:")
         self._camListBox = wx.Choice(self, choices=self._camList, style=wx.CB_SORT)

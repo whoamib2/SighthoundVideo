@@ -51,12 +51,12 @@ from vitaToolbox.wx.FontUtils import makeFontDefault
 from appCommon.CommonStrings import kAboutAccountsUrl
 from appCommon.CommonStrings import kLoginStatusLastUser
 from appCommon.LicenseUtils import kEditionField, kStarterEdition
-from LoginDialog import LoginDialog
-from TrialBanner import kBackgroundColor, styleBannerLink
+from .LoginDialog import LoginDialog
+from .TrialBanner import kBackgroundColor, styleBannerLink
 
-_kWarningPaidText = ("""Link your license with a Sighthound Account """
+_kWarningPaidText = ("""Link your license with a VigilCam account """
         """to continue receiving updates.""")
-_kWarningStarterText = ("""Sign in with a Sighthound Account to """
+_kWarningStarterText = ("""Sign in with a VigilCam account to """
         """continue receiving updates.""")
 _kLearnMoreText = "Learn More"
 _kSignInText = "Sign In"

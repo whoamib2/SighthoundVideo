@@ -168,7 +168,7 @@ class BaseTrigger(object):
             lastFramePerObj[objId] = frameNum
 
         # Extend with the end of each object's ranges...
-        resultList.extend((item[0], item[1], None) for item in resultDict.iteritems())
+        resultList.extend((item[0], item[1], None) for item in resultDict.items())
 
         return resultList
 

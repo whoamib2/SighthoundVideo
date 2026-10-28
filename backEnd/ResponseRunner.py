@@ -37,15 +37,15 @@
 #*****************************************************************************
 
 # Python imports...
-from Queue import Empty as QueueEmpty
+from queue import Empty as QueueEmpty
 import ftplib
 import os, sys
 import shutil
 import time
-import urllib
+import urllib.request, urllib.parse, urllib.error
 import threading
 import traceback
-import Queue
+import queue
 
 # Common 3rd-party imports...
 
@@ -69,13 +69,13 @@ from appCommon.CommonStrings import kDefaultNotificationSubject
 
 from appCommon.hostedServices.ServicesClient import ServicesClient
 
-from ClipManager import ClipManager
-from DataManager import DataManager
-from ResponseDbManager import ResponseDbManager
+from .ClipManager import ClipManager
+from .DataManager import DataManager
+from .ResponseDbManager import ResponseDbManager
 from appCommon.hostedServices.IftttClient import IftttClient
-from DebugLogManager import DebugLogManager
+from .DebugLogManager import DebugLogManager
 
-import MessageIds
+from . import MessageIds
 
 # Constants...
 _kLogName = "Response.log"
@@ -135,7 +135,7 @@ _kDefaultResponseRes = (320, 240)
 # for milliseconds, which isn't standard.
 # IMPORTANT: This name must be unique enough that clips won't clobber each
 # other...
-_kFtpNameTemplate = u"%%(ruleName)s %Y-%m-%d %H-%M-%S-%L"
+_kFtpNameTemplate = "%%(ruleName)s %Y-%m-%d %H-%M-%S-%L"
 _kStrftimeMsCode = "%L"
 
 
@@ -228,16 +228,16 @@ def _jsonEncodeDict(d):
     @return The JSON expression.
     """
     result = ""
-    for k, v in d.iteritems():
+    for k, v in d.items():
         item = '"%s":' % k
-        if isinstance(v, (int, long, float, complex)):
+        if isinstance(v, (int, float, complex)):
             item += str(v)
-        elif isinstance(v, unicode):
+        elif isinstance(v, str):
             v = v.replace('"', '\\"')
             enc = ""
             for c in v:
                 o = ord(c)
-                enc += ("\u%04X" % o) if o > 127 else c
+                enc += ("\\u%04X" % o) if o > 127 else c
             item += '"%s"' % enc
         else:
             v = str(v).replace('"', '\\"')
@@ -527,7 +527,7 @@ class ClipSender(threading.Thread):
 class ResponseWorkerThread(threading.Thread):
     def __init__(self, owner, execContext, msgId):
         threading.Thread.__init__(self)
-        self._queue = Queue.Queue()
+        self._queue = queue.Queue()
         self._owner = owner
         self._msgId = msgId
         self._executionContext = execContext
@@ -636,7 +636,7 @@ class LocalClipSender(ClipSender):
         # Try a move, followed by a copy if that fails.
         try:
             shutil.move(clipPath, targetPath)
-        except Exception, e:
+        except Exception as e:
             self._logger.error("%s: move failed - %s" % (logInfo, str(e)))
 
         try:
@@ -835,13 +835,13 @@ class ResponseRunner(object):
         self._logger = getLogger(_kLogName, logDir)
         self._logger.grabStdStreams()
 
-        assert type(clipMgrPath) == unicode
-        assert type(dataMgrPath) == unicode
-        assert type(responseDbMgrPath) == unicode
-        assert type(videoDir) == unicode
-        assert type(tmpDir) == unicode
-        assert type(logDir) == unicode
-        assert type(configDir) == unicode
+        assert type(clipMgrPath) == str
+        assert type(dataMgrPath) == str
+        assert type(responseDbMgrPath) == str
+        assert type(videoDir) == str
+        assert type(tmpDir) == str
+        assert type(logDir) == str
+        assert type(configDir) == str
 
         self._cameraResolutions = {}
 
@@ -932,7 +932,7 @@ class ResponseRunner(object):
             # Calculate timeout
             currentTime=time.time()
             latestWakeup=_kQueueSleepSeconds+currentTime
-            for i in xrange(len(self._retryList)):
+            for i in range(len(self._retryList)):
                 retryAfter, _, _ = self._retryList[i]
                 latestWakeup = min(latestWakeup, retryAfter)
             queueTimeout = latestWakeup-currentTime if latestWakeup>currentTime else 0
@@ -956,7 +956,7 @@ class ResponseRunner(object):
             # retrying; but keep track of indices to delete (if we actually
             # retried them)...
             toDeleteFromRetryList = []
-            for i in xrange(len(self._retryList)):
+            for i in range(len(self._retryList)):
                 (retryAfter, tryNum, msg) = self._retryList[i]
 
                 if time.time() >= retryAfter:
@@ -976,12 +976,12 @@ class ResponseRunner(object):
 
 
         # Bring down the senders
-        for _, sender in self._senders.iteritems():
+        for _, sender in self._senders.items():
             sender.shutdown.set()
 
         # Wait a little bit on each sender to exit, this is mostly useful to
         # just let idle threads exit and clean up properly.
-        for _, sender in self._senders.iteritems():
+        for _, sender in self._senders.items():
             sender.join(1)
         # Prevent the response DB from getting corrupted, a still existing
         # sender thread will then block on this and (because of its daemon
@@ -1321,7 +1321,7 @@ class ResponseRunner(object):
                    'svversionstring': kVersionString }
 
         url = "https://%s%s" % (kGatewayHost, kGatewayPath)
-        payload = urllib.urlencode(params)
+        payload = urllib.parse.urlencode(params)
         headers = { 'Content-Type': 'application/x-www-form-urlencoded;' +
                                     'charset=utf-8',
                     'Accept': 'text/plain' }
@@ -1445,7 +1445,7 @@ class ResponseRunner(object):
                             imageInline )
             msg = "imgWait=%d imgRetrieval=%d imgSending=%d objs=%s" % ( hasVideoTime-startTime, frameAquiredTime-hasVideoTime, int(time.time()*1000)-frameAquiredTime, str(objList) )
             actionCtx.setStatus(True, msg)
-        except Exception, e:
+        except Exception as e:
             if tryNum < _kSendEmailNumTries:
                 triesLeft = (_kSendEmailNumTries - tryNum)
                 actionCtx.setStatus(False, _kEmailWarningFormatStr % (ruleName, str(e), triesLeft, traceback.format_exc()))

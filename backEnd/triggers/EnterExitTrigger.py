@@ -38,7 +38,7 @@
 
 
 
-from BaseTrigger import BaseTrigger
+from .BaseTrigger import BaseTrigger
 
 # NOTE: This trigger doesn't currently return the same results when running in
 #       real time and non-real time.  When running in non-real time it will

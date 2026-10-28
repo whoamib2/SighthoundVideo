@@ -100,8 +100,8 @@ class AbstractModel(object):
         if (not strongRef) and hasattr(listenerFunc, "im_self"):
             # Get the weakObj and actual function now.  That way newListenerFunc
             # will not create a reference to the original listenerFunc...
-            weakObj = weakref.ref(listenerFunc.im_self)
-            actualFunc = listenerFunc.im_func
+            weakObj = weakref.ref(listenerFunc.__self__)
+            actualFunc = listenerFunc.__func__
 
             # We'll use this as the listener func...
             def newListenerFunc(*args, **kwargs):
@@ -123,9 +123,9 @@ class AbstractModel(object):
                     # the assert in so we can try to figure out how it's
                     # hapening in debug mode...
                     if __debug__:
-                        print "Shouldn't have dead object lying around."
+                        print("Shouldn't have dead object lying around.")
                         import gc
-                        print str(gc.get_referrers(origObj))
+                        print(str(gc.get_referrers(origObj)))
 
                     model.removeListener(newListenerFunc, wantKeyParam, key)
                 else:
@@ -308,7 +308,7 @@ def _simpleTest():
 
     assert len(outputs) == 0
 
-    print "AbstractModel test: Success..."
+    print("AbstractModel test: Success...")
 
 
 ##############################################################################

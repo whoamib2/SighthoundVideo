@@ -64,8 +64,8 @@ from appCommon.SearchUtils import MatchingClipInfo, SearchConfig
 from backEnd.ClipManager import ClipManager
 from backEnd.DataManager import DataManager
 
-from FrontEndPrefs import getFrontEndPref
-from FrontEndPrefs import setFrontEndPref
+from .FrontEndPrefs import getFrontEndPref
+from .FrontEndPrefs import setFrontEndPref
 
 
 def OB_ASID(a): return a
@@ -1315,7 +1315,7 @@ class SearchResultsDataModel(wx.EvtHandler, AbstractModel):
                     # Fill in filename, then sort by that...  TODO: Optimize?
                     # We'll delete anything that doesn't have a clip yet.  User can
                     # refresh to get them...
-                    for i in xrange(len(matchingClips)-1, -1, -1):
+                    for i in range(len(matchingClips)-1, -1, -1):
                         matchingClip = matchingClips[i]
 
                         # We'll assume that the startList[0] is the best
@@ -1397,7 +1397,7 @@ class SearchResultsDataModel(wx.EvtHandler, AbstractModel):
 
         except delayedresult.AbortedException:
             pass
-        except Exception, e:
+        except Exception as e:
             logger.warning("Search failed: " + traceback.format_exc())
 
         finally:
@@ -1823,9 +1823,9 @@ def _findPlaceInRangeList(rangeList, x):
     1.5
 
     # Stress test a bit...
-    >>> [_findPlaceInRangeList([(1,2), (4,5), (7,8), (10,11)], i) for i in xrange(13)]
+    >>> [_findPlaceInRangeList([(1,2), (4,5), (7,8), (10,11)], i) for i in range(13)]
     [-0.5, 0, 0, 0.5, 1, 1, 1.5, 2, 2, 2.5, 3, 3, 3.5]
-    >>> [_findPlaceInRangeList([(1,2), (4,5), (7,8)], i) for i in xrange(10)]
+    >>> [_findPlaceInRangeList([(1,2), (4,5), (7,8)], i) for i in range(10)]
     [-0.5, 0, 0, 0.5, 1, 1, 1.5, 2, 2, 2.5]
 
     # Special case of empty list: returns 0.5
@@ -1869,4 +1869,4 @@ if __name__ == '__main__':
     if len(sys.argv) > 1 and sys.argv[1] == "test":
         test_main()
     else:
-        print "Try calling with 'test' as the argument."
+        print("Try calling with 'test' as the argument.")

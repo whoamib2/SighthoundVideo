@@ -46,7 +46,7 @@ import time
 # Toolbox imports...
 
 # Local imports...
-from BaseResponse import BaseResponse
+from .BaseResponse import BaseResponse
 
 from backEnd import MessageIds
 
@@ -154,7 +154,7 @@ class EmailResponse(BaseResponse):
                            emailTime > 0
             if shouldEmail:
                 # print "Going to email %d" % objId
-                toEmailList.append( (objId, firstMs if emailTime is 0 else emailTime, lastMs) )
+                toEmailList.append( (objId, firstMs if emailTime == 0 else emailTime, lastMs) )
             else:
                 # print "Not emailing %d - diff=%d, lastEmail at %d" % (objId, ms-firstMs, emailTime)
                 pass
@@ -173,7 +173,7 @@ class EmailResponse(BaseResponse):
             # This one is going out!
             objSet = set([objId])
             alreadyEmailed.add(objId)
-            print "Requesting notification for %d, delay=%d, rtDelay=%d" % (objId, ms-firstMs, int(time.time()*1000)-ms)
+            print("Requesting notification for %d, delay=%d, rtDelay=%d" % (objId, ms-firstMs, int(time.time()*1000)-ms))
 
             for objId2, firstMs2, lastMs2 in toEmailList:
                 if objId2 in alreadyEmailed:
@@ -186,7 +186,7 @@ class EmailResponse(BaseResponse):
                     overlapLen = overlapLastMs - overlapFirstMs
                     overlapRatio = overlapLen*2/lenSum
                     if overlapRatio > _kMinObjectOverlapRatio:
-                        print "Merging notifications for %d and %d" % (objId, objId2)
+                        print("Merging notifications for %d and %d" % (objId, objId2))
                         alreadyEmailed.add(objId2)
                         objSet.add(objId2)
                         firstMs = overlapFirstMs
@@ -217,7 +217,7 @@ class EmailResponse(BaseResponse):
                                        self._ruleName, self._camLoc,
                                        self._emailSettings, self._configDict,
                                        numTriggers, objList, firstMs, lastMs,
-                                       make_msgid("SighthoundEmailResponse")])
+                                       make_msgid("VigilCamEmailResponse")])
 
         self._lastEmailTime = firstMs
 

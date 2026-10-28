@@ -71,7 +71,7 @@ typedef struct point {
 // Finds the point on an object to track.  Takes a bbox defining the object
 // boundaries, an int defining the location on the box that should be tracked,
 // and a point struct in which to place the calculated point.
-inline static void get_object_track_point(bbox box, int location, point* trackPt)
+static inline void get_object_track_point(bbox box, int location, point* trackPt)
 {
     // (x2, y2) on bbox are outside the object so we need to adjust.
     box.x2--;

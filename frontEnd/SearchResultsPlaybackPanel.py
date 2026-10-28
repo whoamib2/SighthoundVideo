@@ -69,11 +69,11 @@ from vitaToolbox.sysUtils.TimeUtils import formatTime
 from backEnd.ClipManager import ClipManager
 from backEnd.DataManager import DataManager
 from appCommon.LicenseUtils import hasPaidEdition
-from FrontEndPrefs import getFrontEndPref
-from FrontEndPrefs import setFrontEndPref
-from SubmitClipDialog import SubmitClipConsentDialog, SubmitClipDetailsDialog
-from LicensingHelpers import canImport
-from SearchResultsTimelineControl import SearchResultsTimelineControl
+from .FrontEndPrefs import getFrontEndPref
+from .FrontEndPrefs import setFrontEndPref
+from .SubmitClipDialog import SubmitClipConsentDialog, SubmitClipDetailsDialog
+from .LicensingHelpers import canImport
+from .SearchResultsTimelineControl import SearchResultsTimelineControl
 from frontEnd.ExportClipsDialog import ExportSingleClipDialog
 from frontEnd.ExportClipsDialog import ExportMultipleClipsDialog
 from frontEnd.ExportClipsDialog import ExportTimeRangeDialog, kUseFpsLimit, kUseSizeLimit
@@ -82,7 +82,7 @@ from frontEnd.FrontEndUtils import getUserLocalDataDir
 from appCommon.ConfigBitmapWindow import ConfigBitmapWindow
 from appCommon.CommonStrings import kOpenSourceVersion
 
-import MenuIds
+from . import MenuIds
 
 _ctrlPadding = 4
 
@@ -306,7 +306,7 @@ class SearchResultsPlaybackPanel(BorderImagePanel):
         try:
             try:
                 videoWindow = OsCompatibleGLCanvas(self)
-            except GLExceptionSV, e:
+            except GLExceptionSV as e:
                 if e.version.startswith("1"):
                     # chances are we're in RDP land ... init as bitmap for now
                     # and try re-init later
@@ -397,14 +397,14 @@ class SearchResultsPlaybackPanel(BorderImagePanel):
         self._prevClipButton = \
             HoverBitmapButton(self._playbackControlPanel, wx.ID_ANY,
                               prefix+'PB_Prev_Clip_Enabled.png',
-                              wx.EmptyString,
+                              "",
                               prefix+'PB_Prev_Clip_Pressed.png',
                               prefix+'PB_Prev_Clip_Disabled.png',
                               prefix+'PB_Prev_Clip_Hover.png')
         self._minus2Button = \
             HoverBitmapButton(self._playbackControlPanel, wx.ID_ANY,
                               prefix+'PB_Minus2_Enabled.png',
-                              wx.EmptyString,
+                              "",
                               prefix+'PB_Minus2_Pressed.png',
                               prefix+'PB_Minus2_Disabled.png',
                               prefix+'PB_Minus2_Hover.png',
@@ -412,7 +412,7 @@ class SearchResultsPlaybackPanel(BorderImagePanel):
         self._frameBackButton = \
             HoverBitmapButton(self._playbackControlPanel, wx.ID_ANY,
                               prefix+'PB_Frame_Back_Enabled.png',
-                              wx.EmptyString,
+                              "",
                               prefix+'PB_Frame_Back_Pressed.png',
                               prefix+'PB_Frame_Back_Disabled.png',
                               prefix+'PB_Frame_Back_Hover.png',
@@ -420,14 +420,14 @@ class SearchResultsPlaybackPanel(BorderImagePanel):
         self._playButton = \
             HoverBitmapButton(self._playbackControlPanel, wx.ID_ANY,
                               prefix+'PB_Play_Enabled.png',
-                              wx.EmptyString,
+                              "",
                               prefix+'PB_Play_Pressed.png',
                               prefix+'PB_Play_Disabled.png',
                               prefix+'PB_Play_Hover.png')
         self._pauseButton = \
             HoverBitmapButton(self._playbackControlPanel, wx.ID_ANY,
                               prefix+'PB_Pause_Enabled.png',
-                              wx.EmptyString,
+                              "",
                               prefix+'PB_Pause_Pressed.png',
                               prefix+'PB_Pause_Disabled.png',
                               prefix+'PB_Pause_Hover.png')
@@ -435,7 +435,7 @@ class SearchResultsPlaybackPanel(BorderImagePanel):
         self._frameForwardButton = \
             HoverBitmapButton(self._playbackControlPanel, wx.ID_ANY,
                               prefix+'PB_Frame_Fwd_Enabled.png',
-                              wx.EmptyString,
+                              "",
                               prefix+'PB_Frame_Fwd_Pressed.png',
                               prefix+'PB_Frame_Fwd_Disabled.png',
                               prefix+'PB_Frame_Fwd_Hover.png',
@@ -443,7 +443,7 @@ class SearchResultsPlaybackPanel(BorderImagePanel):
         self._plus2Button = \
             HoverBitmapButton(self._playbackControlPanel, wx.ID_ANY,
                               prefix+'PB_Plus2_Enabled.png',
-                              wx.EmptyString,
+                              "",
                               prefix+'PB_Plus2_Pressed.png',
                               prefix+'PB_Plus2_Disabled.png',
                               prefix+'PB_Plus2_Hover.png',
@@ -451,14 +451,14 @@ class SearchResultsPlaybackPanel(BorderImagePanel):
         self._nextClipButton = \
             HoverBitmapButton(self._playbackControlPanel, wx.ID_ANY,
                               prefix+'PB_Next_Clip_Enabled.png',
-                              wx.EmptyString,
+                              "",
                               prefix+'PB_Next_Clip_Pressed.png',
                               prefix+'PB_Next_Clip_Disabled.png',
                               prefix+'PB_Next_Clip_Hover.png')
         self._updateNavigationControls()
 
         # Speed toggle buttons; use min size so large fonts will work...
-        self._halfSpeedButton = RadioPushButton(self, u"½x")
+        self._halfSpeedButton = RadioPushButton(self, "½x")
         self._halfSpeedButton.SetMinSize((24, 20))
         self._fullSpeedButton = RadioPushButton(self, "1x")
         self._fullSpeedButton.SetMinSize((24, 20))
@@ -489,7 +489,7 @@ class SearchResultsPlaybackPanel(BorderImagePanel):
             assert bmp.IsOk()
 
         self._audioButton = HoverBitmapButton(
-            self, wx.ID_ANY, self._audioButtonOnBmps[0], wx.EmptyString, None,
+            self, wx.ID_ANY, self._audioButtonOnBmps[0], "", None,
             None, None, False, False, wx.DefaultPosition, wx.DefaultSize, False,
             "AudioButton",
         )
@@ -1006,7 +1006,7 @@ class SearchResultsPlaybackPanel(BorderImagePanel):
                     try:
                         wx.PostEvent(event.GetEventObject().GetEventHandler(),
                             wx.CommandEvent(wx.EVT_MENU.typeId, event.GetId()))
-                    except Exception, e:
+                    except Exception as e:
                         self._logger.error("Exception calling menu: " + str(e))
 
                 arm.Bind(wx.EVT_BUTTON, callMenuItem)
@@ -1232,7 +1232,7 @@ class SearchResultsPlaybackPanel(BorderImagePanel):
 
     ###########################################################
     def _dbgPlayback(self,str):
-        print "Playback:" + str
+        print("Playback:" + str)
         pass
 
     ###########################################################
@@ -1368,7 +1368,7 @@ class SearchResultsPlaybackPanel(BorderImagePanel):
 
         if self._playbackSpeed != 0:
             speedLog2 = math.log(self._playbackSpeed,2)
-            self._maxFramesToSkip = _kMaxFramesToSkip*(speedLog2+1) if speedLog2 > 0 else _kMaxFramesToSkip/2
+            self._maxFramesToSkip = _kMaxFramesToSkip*(speedLog2+1) if speedLog2 > 0 else _kMaxFramesToSkip//2
 
         menu.Check()
         button.SetValue(1)
@@ -1630,13 +1630,13 @@ class SearchResultsPlaybackPanel(BorderImagePanel):
         clipManager = ClipManager(self._logger)
         clipManager.open(clipDbPath)
         cameraLocations = clipManager.getCameraLocations()
-        cameraLocations.sort(cmp=lambda x,y: cmp(x.lower(), y.lower()))
+        cameraLocations.sort(key=lambda x: x.lower())
 
         currentCamera = self._resultsModel.getCurrentCameraName()
         if self._resultsModel.isVideoLoaded():
             centerTimeAround = self._resultsModel.getCurrentAbsoluteMs()
         else:
-            centerTimeAround = self._resultsModel.getMidnightMs() + 24*60*60*1000 / 2
+            centerTimeAround = self._resultsModel.getMidnightMs() + 24*60*60*1000 // 2
 
         defName = "export"
         defPath = self._getClipExportPath()
@@ -2166,7 +2166,7 @@ class _openGLWarningDialog(wx.Dialog):
             buttonSizer = self.CreateStdDialogButtonSizer(wx.OK)
             self.FindWindowById(wx.ID_OK, self).Bind(wx.EVT_BUTTON, self.OnDialogExit)
             sizer.Add(buttonSizer, 0, wx.LEFT | wx.RIGHT | wx.BOTTOM |
-                      wx.EXPAND | wx.ALIGN_RIGHT, self.kDialogPadding)
+                      wx.EXPAND, self.kDialogPadding)
 
             self.Bind(wx.EVT_CLOSE, self.OnDialogExit)
 
@@ -2195,7 +2195,7 @@ def test_main():
     """OB_REDACT
        Contains various self-test code.
     """
-    print "NO TESTS"
+    print("NO TESTS")
 
 
 ##############################################################################
@@ -2203,4 +2203,4 @@ if __name__ == '__main__':
     if len(sys.argv) > 1 and sys.argv[1] == "test":
         test_main()
     else:
-        print "Try calling with 'test' as the argument."
+        print("Try calling with 'test' as the argument.")

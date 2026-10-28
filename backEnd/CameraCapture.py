@@ -48,7 +48,7 @@ import os, glob
 import sys
 import time
 import collections
-import cStringIO, PIL, random, cgi, traceback, re, threading
+import io, PIL, random, traceback, re, threading, urllib.parse
 
 # Toolbox imports...
 from vitaToolbox.loggingUtils.LoggingUtils import getLogger
@@ -58,27 +58,25 @@ from vitaToolbox.networking.SanitizeUrl import processUrlAuth
 from vitaToolbox.networking.WsgiServer import WsgiServer
 from vitaToolbox.networking.WsgiServer import makeServerAddressInfos
 from vitaToolbox.listUtils.RandomRange import randomRange
-from vitaToolbox.strUtils.EnsureUnicode import simplifyString, ensureUtf8
+from vitaToolbox.strUtils.EnsureUnicode import simplifyString, ensureUnicode
 from vitaToolbox.path.GetDiskSpaceAvailable import checkFreeSpace
 
 # Local imports...
 from appCommon.CommonStrings import kRemoteFolder, isLocalCamera, kMinFreeSysDriveSpaceMB
-from ClipManager import ClipManager
-import MessageIds
-from QueuedDataManagerCloud import QueuedDataManagerCloud
-from VideoPipeline import VideoPipeline
-from videoLib2.python.StreamReader import StreamReader
-from videoLib2.python.ffmpegLog import FFmpegLog
-from videoLib2.python.VideoLibUtils import getTimestampFlags
+from .ClipManager import ClipManager
+from . import MessageIds
+from .QueuedDataManagerCloud import QueuedDataManagerCloud
+from .VideoPipeline import VideoPipeline
+from backEnd.native.capture import StreamReader, FFmpegLog, getTimestampFlags
 
 from appCommon.TimingInfo import TimingInfo
 from appCommon.DebugPrefs import getDebugPrefAsInt
 
-from BackEndPrefs import BackEndPrefs, kLiveMaxBitrate, kLiveMaxBitrateDefault, kHardwareAccelerationDevice
-from BackEndPrefs import kLiveEnableTimestamp, kLiveEnableTimestampDefault, kLiveMaxResolution, kLiveMaxResolutionDefault
-from BackEndPrefs import kLiveEnableFastStart, kLiveEnableFastStartDefault, kGenThumbnailResolution, kGenThumbnailResolutionDefault
-from BackEndPrefs import kClipMergeThreshold, kClipMergeThresholdDefault
-from DebugLogManager import DebugLogManager
+from .BackEndPrefs import BackEndPrefs, kLiveMaxBitrate, kLiveMaxBitrateDefault, kHardwareAccelerationDevice
+from .BackEndPrefs import kLiveEnableTimestamp, kLiveEnableTimestampDefault, kLiveMaxResolution, kLiveMaxResolutionDefault
+from .BackEndPrefs import kLiveEnableFastStart, kLiveEnableFastStartDefault, kGenThumbnailResolution, kGenThumbnailResolutionDefault
+from .BackEndPrefs import kClipMergeThreshold, kClipMergeThresholdDefault
+from .DebugLogManager import DebugLogManager
 
 def OB_KEYARG(a): return a
 
@@ -148,6 +146,13 @@ _kMemoryStatsInterval = 15*60*1000
 # Message when we drop camera connection due to insufficient space
 _kDiskSpaceMessage = "Low disk space on system volume"
 
+
+def _wsgi_body(payload):
+    """WSGI response chunks are bytes. A str body is rejected by wsgiref."""
+    if isinstance(payload, (bytes, bytearray)):
+        return bytes(payload)
+    return str(payload).encode("utf-8")
+
 ###############################################################
 def runCapture(msgQueue, cameraPipe, dataMgrPipe, dataMgrId, cameraLocation, #PYCHECKER OK: Function has too many arguments
                cameraUri, clipMgrPath, tmpPath, archivePath, userDir, extras):
@@ -213,8 +218,8 @@ class CameraCapture(object):
         self._logger = getLogger(cameraLocation + '.log', self._logDir)
         self._logger.grabStdStreams()
 
-        assert type(userDir) == unicode
-        assert type(clipMgrPath) == unicode
+        assert type(userDir) == str
+        assert type(clipMgrPath) == str
 
         self._lastMemoryStats = 0
         self._lastFreeSpaceCheck = 0
@@ -250,6 +255,10 @@ class CameraCapture(object):
 
         self._wsgiServer = None
         self._wsgiServerMessages = collections.deque()
+        self._streamReader = None
+        self._streamReaderOpened = False
+        self._streamReaderLock = threading.RLock()
+        self._queuedDataMgr = None
 
         self._hasMmap = False
 
@@ -280,8 +289,6 @@ class CameraCapture(object):
         # We need to protect against WSGI requests on arbitrary threads talking
         # to a stream reader which is closed, so during the image fetch time we
         # won't be able to change its status.
-        self._streamReaderOpened = False
-        self._streamReaderLock = threading.RLock()
         self._streamReader = StreamReader(cameraLocation,
                                                        self._clipMgr, self._clipMgrLock, tmpPath,
                                                        archivePath, userDir,
@@ -307,9 +314,9 @@ class CameraCapture(object):
         #       file name written; we don't have a mechanism yet telling the
         #       client "this is the path you want", has to do with historical
         #       reasons, but sooner or later it has to be solved, seriously...
-        self._reGetFile = re.compile(".*/+(.*)\.m3u8");  # TODO: can we share this?
+        self._reGetFile = re.compile(r".*/+(.*)\.m3u8");  # TODO: can we share this?
         self._reGetProfile = re.compile("([^-]*)-([0-9]+)")
-        self._reGetIndex = re.compile(".*-[0-9]([0-9]+)\.ts")
+        self._reGetIndex = re.compile(r".*-[0-9]([0-9]+)\.ts")
 
         self._maxFileIndex = 0
         self._videoSettingsChanged = True
@@ -351,12 +358,12 @@ class CameraCapture(object):
                     continue
                 filePath = os.path.join(subdir, name)
                 self._logger.info("Removing tmp file " +
-                            ensureUtf8(filePath))
+                            ensureUnicode(filePath))
                 try:
                     os.remove(filePath)
                 except:
                     self._logger.warning("Couldn't remove %s: %s" %
-                            (ensureUtf8(filePath), traceback.format_exc()))
+                            (ensureUnicode(filePath), traceback.format_exc()))
 
     ###########################################################
     def _openStream(self):
@@ -450,11 +457,12 @@ class CameraCapture(object):
             # exit, to be restarted by the backend
             e = sys.exc_info()[1]
             self._logger.error(e)
-        except:
-            t = traceback.format_exc()
-            e = sys.exc_info()[1]
-            self._logger.error(traceback.format_exc(t))
-            self._logger.error(e)
+        except Exception:
+            # format_exc() takes an integer limit. Passing the already
+            # formatted traceback (a str) raises TypeError and hides the
+            # original failure.
+            self._logger.error(traceback.format_exc())
+            self._logger.error(str(sys.exc_info()[1]))
 
     ###########################################################
     def _checkFreeSpace(self):
@@ -645,7 +653,7 @@ class CameraCapture(object):
                 cameraUri = msg[1]
                 if self._cameraUri != cameraUri:
                     _, sanitizedPath = processUrlAuth(cameraUri)
-                    self._logger.info("Camera URI had been updated to " + ensureUtf8(sanitizedPath))
+                    self._logger.info("Camera URI had been updated to " + ensureUnicode(sanitizedPath))
                     self._cameraUri = cameraUri
         except Exception:
             self._logger.error("Message exception: %s" % (msg), exc_info=True)
@@ -662,6 +670,9 @@ class CameraCapture(object):
         self._timingInfo.inputItemMark( 'capture.ANoFrame' )
         self._timingInfo.inputItemMark( 'capture.BSkipped' )
         self._timingInfo.inputItemMark( 'capture.CToNumpy' )
+
+        if not self._hasMmap and self._liveViewEnabled:
+            self._openSharedMemory(self._liveViewFile)
 
         frame = self._streamReader.getNewFrame(self._liveViewEnabled)
         currentTimeMs = int(time.time()*1000)
@@ -692,9 +703,6 @@ class CameraCapture(object):
         self._timingInfo.inputIncrement( int( 1 ))
 
         self._ms = frame.ms
-
-        if not self._hasMmap and self._liveViewEnabled:
-            self._openSharedMemory(self._liveViewFile)
 
         # Process the frame
         if (isLocalCamera(self._cameraUri) and
@@ -798,6 +806,15 @@ class CameraCapture(object):
         """
 
 
+        if getattr(self, "_streamReader", None) is None:
+            manager = getattr(self, "_queuedDataMgr", None)
+            if manager is not None:
+                try:
+                    manager.terminate()
+                except Exception:
+                    pass
+            return
+
         self._streamReaderLock.acquire()
         self._streamReaderOpened = False
         self._streamReaderLock.release()
@@ -856,7 +873,7 @@ class CameraCapture(object):
 
                 # Clear out the file...
                 f.seek(0)
-                f.write('\x00'*fileSize)
+                f.write(b'\x00' * fileSize)
 
                 # Close it up...
                 f.close()
@@ -1019,7 +1036,7 @@ class CameraCapture(object):
         @param  startResponse  The WSGI response sender.
         """
         queryStr = environ.get('QUERY_STRING', '')
-        query = cgi.parse_qs(queryStr)
+        query = urllib.parse.parse_qs(queryStr)
         paramsWidth  = query.get(_kWsgiParamWidth , [_kWsgiParamWidthDefault])
         paramsHeight = query.get(_kWsgiParamHeight, [_kWsgiParamHeightDefault])
         width  = int(paramsWidth [0])
@@ -1029,7 +1046,7 @@ class CameraCapture(object):
             # undocumented query parameter: for testing purpose we can request a
             # dummy picture, which is rendered on the fly and right now consists
             # of random green lines on a black background. Nice to look at.
-            outp = cStringIO.StringIO()
+            outp = io.BytesIO()
             img = PIL.Image.new("RGB", (width, height), "black")
             draw = PIL.ImageDraw.ImageDraw(img)
             for b in range(0, 255):
@@ -1064,13 +1081,14 @@ class CameraCapture(object):
                     raise Exception("frame retrieval failed")
                 #self._logger.debug("got %d bytes of JPEG data" % len(jpeg))
             except:
-                err = str(sys.exc_info()[1])
+                err = _wsgi_body(sys.exc_info()[1])
                 startResponse('404 NO IMAGE',
                        [('Content-Type' , 'text/plain'),
                         ('Content-Length', str(len(err)))])
                 return err
             finally:
                 self._streamReaderLock.release()
+        jpeg = _wsgi_body(jpeg)
         startResponse('200 OK',
                [('Content-Type' , 'image/jpeg'),
                 ('Content-Length', str(len(jpeg))),
@@ -1116,7 +1134,7 @@ class CameraCapture(object):
             startResponse('404 NOT FOUND',
                [('Content-Type', 'text/plain'),
                 ('Content-Length', "0")])
-            return ""
+            return b""
 
         filePath = os.path.join(self._userLocalDataDir, kRemoteFolder, fileName+".m3u8local")
 
@@ -1151,14 +1169,14 @@ class CameraCapture(object):
             startResponse('404 NOT FOUND',
                [('Content-Type', 'text/plain'),
                 ('Content-Length', "0")])
-            return ""
+            return b""
         finally:
             if h is not None:
                 try: h.close()
                 except: pass
 
         fileIndex = -1
-        for ln in cStringIO.StringIO(m3u8):
+        for ln in io.StringIO(m3u8):
             ln = ln.rstrip()
             if ln.endswith(".ts"):
                 if fileIndex < 0:
@@ -1176,13 +1194,14 @@ class CameraCapture(object):
         if fileIndex > self._maxFileIndex:
             self._maxFileIndex = fileIndex
 
+        body = _wsgi_body(result)
         startResponse('200 OK',
            [('Content-Type' , 'application/x-mpegurl'),
-            ('Content-Length', str(len(result))),
+            ('Content-Length', str(len(body))),
             ('Cache-Control', 'no-cache, no-store, must-revalidate'),
             ('Pragma', 'no-cache'),
             ('Expires', '0')])
-        return result
+        return body
 
 
     ###########################################################
@@ -1197,26 +1216,26 @@ class CameraCapture(object):
         try:
             path = environ.get('PATH_INFO', "")
             if self._cleaningUp:
-                errorText = "camera process about to stop"
+                errorText = _wsgi_body("camera process about to stop")
                 startResponse('500 UNAVAILABLE',
                    [('Content-Type' , 'text/plain'),
                     ('Content-Length', str(len(errorText)))])
                 yield errorText
             else:
                 if path == "/image.jpg":
-                    yield self._wsgiAppImage(environ, startResponse)
+                    yield _wsgi_body(self._wsgiAppImage(environ, startResponse))
                 elif path.endswith(".m3u8"):
-                    yield self._wsgiAppStreaming(environ, startResponse)
+                    yield _wsgi_body(self._wsgiAppStreaming(environ, startResponse))
                 else:
-                    errorText = "unknown request path '%s'" % path
+                    errorText = _wsgi_body("unknown request path '%s'" % path)
                     startResponse('404 WRONG PATH',
                        [('Content-Type' , 'text/plain'),
                         ('Content-Length', str(len(errorText)))])
                     yield errorText
-        except:
+        except Exception:
             self._logger.error("uncaught WSGI error for path '%s'" % path)
             self._logger.error(traceback.format_exc())
-            errorText = str(sys.exc_info()[1])
+            errorText = _wsgi_body(sys.exc_info()[1])
             try:
                 startResponse('500 UNCAUGHT ERROR',
                    [('Content-Type' , 'text/plain'),

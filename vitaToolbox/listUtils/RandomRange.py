@@ -44,7 +44,7 @@ def randomRange(minVal, maxVal):
     @param minVal The lowest number.
     @param maxVal The highest number (exclusive).
     """
-    result = range(minVal, maxVal)
+    result = list(range(minVal, maxVal))
     i = 0
     c = len(result)
     while i < c:

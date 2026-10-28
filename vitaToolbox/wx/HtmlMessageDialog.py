@@ -86,15 +86,15 @@ class HtmlMessageDialog(wx.Dialog):
 
         panelSizer = wx.BoxSizer(wx.VERTICAL)
         panelSizer.Add(htmlWin, 1, wx.EXPAND | wx.BOTTOM, 12)
-
-        panelSizer.Add(wx.StaticLine(self), 0,
-                       wx.EXPAND | wx.LEFT | wx.RIGHT, 12)
-        panelSizer.Add(buttonSizer, 0, wx.EXPAND | wx.ALL, 12)
-
         panel.SetSizer(panelSizer)
 
-        dialogSizer = wx.BoxSizer()
+        # The standard buttons and the separator are children of the dialog,
+        # so they belong on the dialog sizer, not the inner panel.
+        dialogSizer = wx.BoxSizer(wx.VERTICAL)
         dialogSizer.Add(panel, 1, wx.EXPAND)
+        dialogSizer.Add(wx.StaticLine(self), 0,
+                       wx.EXPAND | wx.LEFT | wx.RIGHT, 12)
+        dialogSizer.Add(buttonSizer, 0, wx.EXPAND | wx.ALL, 12)
 
         self.SetSizer(dialogSizer)
 
@@ -123,4 +123,4 @@ if __name__ == '__main__':
     if len(sys.argv) > 1 and sys.argv[1] == "test":
         test_main()
     else:
-        print "Try calling with 'test' as the argument."
+        print("Try calling with 'test' as the argument.")

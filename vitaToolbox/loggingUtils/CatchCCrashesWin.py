@@ -67,7 +67,7 @@ def setSilentCrashHandler():
         global _crashed
         if not _crashed:
             _crashed = True
-            print >>sys.stderr, "Silent crash handler executed: Unhandled exception!"
+            print("Silent crash handler executed: Unhandled exception!", file=sys.stderr)
             traceback.print_exc()
         os._exit(0)
     TOPLEVEL_EXCEPTION_FILTER_FN = ctypes.WINFUNCTYPE(None, ctypes.c_void_p)
@@ -98,13 +98,17 @@ def _unhandledExceptionFilter(exceptionInfo):
     global _crashed
     if not _crashed:
         _crashed = True
-        print >>sys.stderr, "Unhandled exception!"
+        print("Unhandled exception!", file=sys.stderr)
         traceback.print_exc()
         raise
     #return 1
 
-# Make a CTypes-wrapped pointer to our exception handler...
-TOPLEVEL_EXCEPTION_FILTER_FN = ctypes.WINFUNCTYPE(None, ctypes.c_void_p)
-_cUnhandledExceptionFilter = \
-    TOPLEVEL_EXCEPTION_FILTER_FN(_unhandledExceptionFilter)
+# Make a CTypes-wrapped pointer to our exception handler. WINFUNCTYPE exists
+# only on Windows; other platforms import this module only for scanning.
+if sys.platform == "win32":
+    TOPLEVEL_EXCEPTION_FILTER_FN = ctypes.WINFUNCTYPE(None, ctypes.c_void_p)
+    _cUnhandledExceptionFilter = TOPLEVEL_EXCEPTION_FILTER_FN(_unhandledExceptionFilter)
+else:
+    TOPLEVEL_EXCEPTION_FILTER_FN = None
+    _cUnhandledExceptionFilter = None
 

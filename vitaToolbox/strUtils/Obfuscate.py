@@ -94,5 +94,5 @@ def load(text, secret=_kSecret):
 ###############################################################################
 
 if __name__ == '__main__':
-    print save(sys.argv[1])
+    print(save(sys.argv[1]))
 

@@ -36,20 +36,13 @@
 import os
 import sys
 
+from appCommon.resources import resource_path
+
 
 #===========================================================================
 def cacertLocation():
-    """ overrides certifi.core.where to return actual location of cacert.pem"""
-
-    path1 = os.path.realpath(__file__)  # ./library.zip/vitaToolbox/networking/RequestsUtils.py
-    path2 = os.path.dirname(path1)      # ./library.zip/vitaToolbox/networking
-    path3 = os.path.dirname(path2)      # ./library.zip/vitaToolbox
-    path4 = os.path.dirname(path3)      # ./library.zip
-    path5 = os.path.dirname(path4)      # ./
-    if sys.platform == "darwin":
-        path5 = os.path.dirname(path5)  # out of MacOS
-        path5 = os.path.join(path5, "Resources") # and into ./Resources
-    return os.path.join(path5, "config", "cacert.pem")
+    """Return the bundled CA bundle, not a path relative to the working directory."""
+    return resource_path(os.path.join("config", "cacert.pem"))
 
 
 #===========================================================================

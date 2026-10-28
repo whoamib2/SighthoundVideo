@@ -37,10 +37,10 @@
 #*****************************************************************************
 
 # Python imports...
-import cPickle
+import pickle
 import os
 import time
-import urlparse
+import urllib.parse
 import webbrowser
 import traceback
 
@@ -51,6 +51,7 @@ import wx
 
 # Toolbox imports...
 from vitaToolbox.mvc.AbstractModel import AbstractModel
+from frontEnd.BackEndClient import BackendNotReady
 from vitaToolbox.networking.Upnp import isUpnpUrl
 from vitaToolbox.networking.Upnp import realizeUpnpUrl
 from vitaToolbox.networking.Onvif import isOnvifUrl
@@ -75,29 +76,29 @@ from vitaToolbox.wx.FixedMultiSplitterWindow import FixedMultiSplitterWindow
 # Local imports...
 from appCommon.CommonStrings import kCameraOn, kCameraOff
 from appCommon.CommonStrings import kCameraConnecting, kCameraFailed
-from CameraSetupWizard import CameraSetupWizard
-from CameraTable import kWebcamCamType
+from .CameraSetupWizard import CameraSetupWizard
+from .CameraTable import kWebcamCamType
 from appCommon.CommonStrings import kSlowFpsUrl, kSlowProcessingUrl
-import FrontEndEvents
-from LicensingHelpers import checkForMaxCameras
-from LicensingHelpers import showHiddenCamsWarning
-from RuleListPanel import RuleListPanel
-from RenameCameraDialog import RenameCameraDialog
-from RemoveCameraDialog import removeCamera
+from . import FrontEndEvents
+from .LicensingHelpers import checkForMaxCameras
+from .LicensingHelpers import showHiddenCamsWarning
+from .RuleListPanel import RuleListPanel
+from .RenameCameraDialog import RenameCameraDialog
+from .RemoveCameraDialog import removeCamera
 from frontEnd.FrontEndUtils import getUserLocalDataDir
 from frontEnd.PacketCaptureDialog import HandlePacketCaptureRequest
-from FrontEndPrefs import getFrontEndPref
-from FrontEndPrefs import setFrontEndPref
+from .FrontEndPrefs import getFrontEndPref
+from .FrontEndPrefs import setFrontEndPref
 from appCommon.ConfigBitmapWindow import ConfigBitmapWindow
-from BaseView import BaseMonitorView
-from BaseView import makeVideoStatusBitmap as _makeVideoStatusBitmap
-from BaseView import kStatusTextConnecting
-from BaseView import kStatusTextCouldNotConnect
-from BaseView import kStatusTextNoRulesScheduled
-from BaseView import kStatusTextNoActiveRules
-from BaseView import kStatusTextCameraTurnedOff
-from BaseView import kStatusStartColor
-from BaseView import kStatusEndColor
+from .BaseView import BaseMonitorView
+from .BaseView import makeVideoStatusBitmap as _makeVideoStatusBitmap
+from .BaseView import kStatusTextConnecting
+from .BaseView import kStatusTextCouldNotConnect
+from .BaseView import kStatusTextNoRulesScheduled
+from .BaseView import kStatusTextNoActiveRules
+from .BaseView import kStatusTextCameraTurnedOff
+from .BaseView import kStatusStartColor
+from .BaseView import kStatusEndColor
 
 # Constants...
 
@@ -267,7 +268,7 @@ class MonitorView(BaseMonitorView):
             try:
                 largeView = OsCompatibleGLCanvas(self._topLeftPanel)
                 largeView.SetMinSize(_kFullVideoSize)
-            except GLExceptionSV, e:
+            except GLExceptionSV as e:
                 if e.version.startswith("1"):
                     # chances are we're in RDP land ... init as bitmap for now
                     # and try re-init later
@@ -951,14 +952,14 @@ class MonitorView(BaseMonitorView):
         recordOn = \
             HoverBitmapButton(self._previewWin, wx.ID_ANY,
                               'frontEnd/bmps/Monitor_On_Small_Enabled.png',
-                              wx.EmptyString,
+                              "",
                               'frontEnd/bmps/Monitor_On_Small_Pressed.png',
                               'frontEnd/bmps/Monitor_Off_Small_Enabled.png',
                               'frontEnd/bmps/Monitor_On_Small_Hover.png')
         recordOff = \
             HoverBitmapButton(self._previewWin, wx.ID_ANY,
                               'frontEnd/bmps/Monitor_Off_Small_Enabled.png',
-                              wx.EmptyString,
+                              "",
                               'frontEnd/bmps/Monitor_Off_Small_Pressed.png',
                               'frontEnd/bmps/Monitor_Off_Small_Enabled.png',
                               'frontEnd/bmps/Monitor_Off_Small_Hover.png')
@@ -994,7 +995,7 @@ class MonitorView(BaseMonitorView):
         self._previewSizer.Clear(False)
 
         # Sort the names so we display in alphabetical order
-        self._cameraLocations.sort(cmp=lambda x,y: cmp(x.lower(), y.lower()))
+        self._cameraLocations.sort(key=lambda x: x.lower())
 
         for cameraLocation in self._cameraLocations:
             if cameraLocation not in self._previewControls:
@@ -1016,7 +1017,7 @@ class MonitorView(BaseMonitorView):
             overlapSizer.Add(recordOn)
             overlapSizer.Add(recordOff)
             labelSizer.Add(overlapSizer, 0, wx.ALL | wx.ALIGN_CENTER_VERTICAL,
-                           _kCtrlPadding/2)
+                           _kCtrlPadding//2)
             labelSizer.Add(nameLabel, 1, wx.ALIGN_CENTER_VERTICAL)
 
             # ...extra craziness to make sure that the warning takes up space
@@ -1027,7 +1028,7 @@ class MonitorView(BaseMonitorView):
             labelSizer.Add(warningSizer, 0, wx.ALIGN_CENTER_VERTICAL)
 
             cameraSizer.Add(labelSizer, 0, wx.TOP | wx.EXPAND,
-                            _kCtrlPadding/2)
+                            _kCtrlPadding//2)
 
             self._previewSizer.Add(cameraSizer, 0)
 
@@ -1145,7 +1146,7 @@ class MonitorView(BaseMonitorView):
                     else:
                         del self._previewControls[camera]
                         continue
-                except wx._core.PyDeadObjectError:
+                except RuntimeError:
                     # Under windows when we close the application a background
                     # draw will be requested after the preview controls have
                     # been destroyed.  We'll catch this, remove the controls
@@ -1161,7 +1162,7 @@ class MonitorView(BaseMonitorView):
                     # can just ignore.
                     try:
                         self._setActiveCamera(None)
-                    except wx._core.PyDeadObjectError:
+                    except RuntimeError:
                         pass
                     return
 
@@ -1939,7 +1940,7 @@ class MonitorView(BaseMonitorView):
         """
         assert debugModeModel == self._debugModeModel
         if not debugModeModel.isDebugMode():
-            for loc, (_,_,_, nameLabel,_) in self._previewControls.iteritems():
+            for loc, (_,_,_, nameLabel,_) in self._previewControls.items():
                 nameLabel.SetLabel(loc)
 
 
@@ -1953,15 +1954,34 @@ class MonitorView(BaseMonitorView):
         if checkForMaxCameras(self._backEndClient, self.GetTopLevelParent()):
             return
 
-        wizard = CameraSetupWizard(self.GetTopLevelParent(),
-                                   self._backEndClient, self._dataManager)
+        wizard = None
         try:
+            wizard = CameraSetupWizard(self.GetTopLevelParent(),
+                                       self._backEndClient, self._dataManager)
             if wizard.run():
                 # If the dialog wasn't canceled make sure the Monitor view is
                 # displayed.
                 self._activateFunc()
+        except BackendNotReady as exc:
+            wx.MessageBox(
+                str(exc),
+                "Backend starting",
+                wx.OK | wx.ICON_INFORMATION,
+                self.GetTopLevelParent(),
+            )
+            return
+        except Exception as exc:
+            self._logger.exception("Add Camera failed")
+            wx.MessageBox(
+                "Add Camera could not open.\n\n%s" % exc,
+                "Add Camera",
+                wx.OK | wx.ICON_ERROR,
+                self.GetTopLevelParent(),
+            )
+            return
         finally:
-            wizard.Destroy()
+            if wizard is not None:
+                wizard.Destroy()
 
         # Any changes to the menu likely didn't update due to a bug in wx...
         # We'll re-call self._setActiveCamera to make sure things are correct.
@@ -2065,7 +2085,7 @@ class MonitorView(BaseMonitorView):
         _, url, _ = self._cameraSettings[cameraName]
 
         if isUpnpUrl(url):
-            upnpDeviceDict = cPickle.loads(self._backEndClient.getUpnpDevices())
+            upnpDeviceDict = pickle.loads(self._backEndClient.getUpnpDevices())
             url = realizeUpnpUrl(upnpDeviceDict, url)
 
             if not url:
@@ -2076,7 +2096,7 @@ class MonitorView(BaseMonitorView):
                 return
 
         if isOnvifUrl(url):
-            onvifDeviceDict = cPickle.loads(self._backEndClient.getOnvifDevices())
+            onvifDeviceDict = pickle.loads(self._backEndClient.getOnvifDevices())
             url = realizeOnvifUrl(onvifDeviceDict, url)
 
             if not url:
@@ -2091,7 +2111,7 @@ class MonitorView(BaseMonitorView):
         # Make a new URL with just the hostname and port...
         # ...we'll also force to http port 80 (as a guess) if the URL
         # is non-http...
-        splitResult = urlparse.urlsplit(url)
+        splitResult = urllib.parse.urlsplit(url)
         scheme = splitResult.scheme
         netloc = splitResult.hostname
 
@@ -2110,7 +2130,7 @@ class MonitorView(BaseMonitorView):
             # Http, and there's a port.  Add it in...
             netloc += ':%d' % port
 
-        linkStr = urlparse.urlunsplit((scheme, netloc, "/", "", ""))
+        linkStr = urllib.parse.urlunsplit((scheme, netloc, "/", "", ""))
         webbrowser.open(linkStr)
 
 
@@ -2410,5 +2430,5 @@ class _cameraEnabledModel(AbstractModel):
 ##############################################################################
 
 if __name__ == '__main__':
-    from FrontEndApp import main
+    from .FrontEndApp import main
     main()

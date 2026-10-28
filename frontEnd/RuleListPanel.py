@@ -72,8 +72,8 @@ from appCommon.CommonStrings import kSoundResponse
 from appCommon.CommonStrings import kFtpResponse
 from appCommon.CommonStrings import kLocalExportResponse
 from backEnd.SavedQueryDataModel import SavedQueryDataModel
-from QueryEditorDialog import QueryEditorDialog
-from RuleScheduleDialog import RuleScheduleDialog
+from .QueryEditorDialog import QueryEditorDialog
+from .RuleScheduleDialog import RuleScheduleDialog
 
 
 _kCtrlPadding = 8
@@ -171,14 +171,14 @@ class RuleListPanel(BorderImagePanel):
         self._recordingEnabledButton = \
             HoverBitmapButton(self, wx.ID_ANY,
                                 'frontEnd/bmps/Monitor_On_Enabled.png',
-                                wx.EmptyString,
+                                "",
                                 'frontEnd/bmps/Monitor_On_Pressed.png',
                                 'frontEnd/bmps/Monitor_Off_Enabled.png',
                                 'frontEnd/bmps/Monitor_On_Hover.png')
         self._recordingDisabledButton = \
             HoverBitmapButton(self, wx.ID_ANY,
                                 'frontEnd/bmps/Monitor_Off_Enabled.png',
-                                wx.EmptyString,
+                                "",
                                 'frontEnd/bmps/Monitor_Off_Pressed.png',
                                 'frontEnd/bmps/Monitor_Off_Enabled.png',
                                 'frontEnd/bmps/Monitor_Off_Hover.png')
@@ -206,7 +206,7 @@ class RuleListPanel(BorderImagePanel):
         overlapSizer.Add(self._recordingEnabledButton)
         overlapSizer.Add(self._recordingDisabledButton)
         hSizer.Add(overlapSizer, 0, wx.ALL | wx.ALIGN_CENTER_VERTICAL,
-                   _kCtrlPadding/2)
+                   _kCtrlPadding//2)
         hSizer.Add(self._offText, 0, wx.LEFT | wx.RIGHT | wx.ALIGN_CENTER_VERTICAL,
                    _kCtrlPadding)
         hSizer.Add(self._onText, 0, wx.LEFT | wx.RIGHT | wx.ALIGN_CENTER_VERTICAL,
@@ -238,8 +238,8 @@ class RuleListPanel(BorderImagePanel):
                                              style=wx.TRANSPARENT_WINDOW,
                                              redrawFix=isWin)
         self._ruleWin.SetBackgroundStyle(kBackgroundStyle)
-        self._ruleSizer = wx.FlexGridSizer(cols=5, vgap=_kCtrlPadding/2,
-                                           hgap=_kCtrlPadding/2)
+        self._ruleSizer = wx.FlexGridSizer(cols=5, vgap=_kCtrlPadding//2,
+                                           hgap=_kCtrlPadding//2)
         self._ruleSizer.AddGrowableCol(1, 1)
         self._ruleSizer.AddGrowableCol(2, 1)
         self._ruleWin.SetSizer(self._ruleSizer)
@@ -269,9 +269,9 @@ class RuleListPanel(BorderImagePanel):
 
         # The following will be used for the popup menu we create when
         # the user selects a rule.
-        self._editId = wx.NewId()
-        self._newId = wx.NewId()
-        self._deleteId = wx.NewId()
+        self._editId = wx.NewIdRef()
+        self._newId = wx.NewIdRef()
+        self._deleteId = wx.NewIdRef()
         self.Bind(wx.EVT_MENU, self.OnEdit, id=self._editId)
         self.Bind(wx.EVT_MENU, self.OnNew, id=self._newId)
         self.Bind(wx.EVT_MENU, self.OnDelete, id=self._deleteId)
@@ -364,7 +364,7 @@ class RuleListPanel(BorderImagePanel):
         # Create a shortcut to the search
         searchIcon = HoverBitmapButton(self._ruleWin, wx.ID_ANY,
                                    'frontEnd/bmps/Search_link_enabled.png',
-                                    wx.EmptyString,
+                                    "",
                                    'frontEnd/bmps/Search_link_pressed.png',
                                    'frontEnd/bmps/Search_link_disabled.png',
                                    'frontEnd/bmps/Search_link_hover.png',
@@ -397,7 +397,7 @@ class RuleListPanel(BorderImagePanel):
         for response in responses:
             enabledBmp, disabledBmp = _kResponseBitmapMap[response]
             if ((enabledBmp, disabledBmp)) not in alreadyAdded:
-                button = HoverBitmapButton(self._ruleWin, wx.ID_ANY, enabledBmp, wx.EmptyString,
+                button = HoverBitmapButton(self._ruleWin, wx.ID_ANY, enabledBmp, "",
                                            bmpDisabled=disabledBmp, useMask=False)
                 button.Enable(enabled)
                 responseControls.append(button)
@@ -422,8 +422,8 @@ class RuleListPanel(BorderImagePanel):
         """Add all controls to the list in a sorted order."""
         self._ruleSizer.Clear(False)
 
-        names = self._controls.keys()
-        names.sort(cmp=lambda x,y: cmp(x.lower(), y.lower()))
+        names = list(self._controls.keys())
+        names.sort(key=lambda x: x.lower())
 
         enabled = []
         disabled = []
@@ -530,14 +530,14 @@ class RuleListPanel(BorderImagePanel):
             newQuery.setCoordSpace(procSize)
         newQuery.getVideoSource().setLocationName(self._curLocation)
 
-        dlg = QueryEditorDialog(self.GetTopLevelParent(), self._dataManager,
-                                self._backEndClient,
-                                newQuery,
-                                kSearchViewDefaultRules +
-                                self._backEndClient.getRuleNames(),
-                                [self._curLocation])
-
+        dlg = None
         try:
+            dlg = QueryEditorDialog(self.GetTopLevelParent(), self._dataManager,
+                                    self._backEndClient,
+                                    newQuery,
+                                    kSearchViewDefaultRules +
+                                    self._backEndClient.getRuleNames(),
+                                    [self._curLocation])
             result = dlg.ShowModal()
 
             # If the user cancels the dialog, do nothing
@@ -545,9 +545,17 @@ class RuleListPanel(BorderImagePanel):
                 # Save the new rule
                 self._backEndClient.addRule(newQuery, True)
                 ruleCreated = True
-
+        except Exception as exc:
+            wx.MessageBox(
+                "New rule could not open.\n\n%s" % exc,
+                "New rule",
+                wx.OK | wx.ICON_ERROR,
+                self.GetTopLevelParent(),
+            )
+            return
         finally:
-            dlg.Destroy()
+            if dlg is not None:
+                dlg.Destroy()
 
         if ruleCreated:
             info = self._backEndClient.getRuleInfo(newQuery.getName())
@@ -598,16 +606,26 @@ class RuleListPanel(BorderImagePanel):
 
         if responseEdit:
             query.setLastEdited('response', None)
-        dlg = QueryEditorDialog(self.GetTopLevelParent(), self._dataManager,
-                                self._backEndClient, query,
-                                set(kSearchViewDefaultRules +
-                                    self._backEndClient.getRuleNames()) -
-                                set([query.getName()]),
-                                [origLocation])
+        dlg = None
         try:
+            dlg = QueryEditorDialog(self.GetTopLevelParent(), self._dataManager,
+                                    self._backEndClient, query,
+                                    set(kSearchViewDefaultRules +
+                                        self._backEndClient.getRuleNames()) -
+                                    set([query.getName()]),
+                                    [origLocation])
             result = dlg.ShowModal()
+        except Exception as exc:
+            wx.MessageBox(
+                "Edit rule could not open.\n\n%s" % exc,
+                "Edit rule",
+                wx.OK | wx.ICON_ERROR,
+                self.GetTopLevelParent(),
+            )
+            return
         finally:
-            dlg.Destroy()
+            if dlg is not None:
+                dlg.Destroy()
 
         if result == wx.ID_CANCEL:
             return

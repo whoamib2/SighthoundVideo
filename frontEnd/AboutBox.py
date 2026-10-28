@@ -52,7 +52,6 @@ import wx
 
 # Toolbox imports...
 from vitaToolbox.wx.BindChildren import bindChildren
-from vitaToolbox.wx.FixedStaticBitmap import FixedStaticBitmap
 from vitaToolbox.wx.TextSizeUtils import makeFontDefault
 from vitaToolbox.wx.TextCtrlUtils import setHyperlinkColors
 
@@ -65,7 +64,7 @@ from appCommon.CommonStrings import kCopyrightStr
 from appCommon.CommonStrings import kCopyrightMoreInfoStr
 from appCommon.CommonStrings import kCopyrightMoreInfoUrl
 from appCommon.CommonStrings import kVersionString, kVersionStringModifier
-from LicensingHelpers import getLicense
+from .LicensingHelpers import getLicense
 
 
 # Constants
@@ -115,9 +114,13 @@ class _AboutBox(wx.Dialog):
         This function exists so we can put a "try" around it easily...
         """
 
-        mainBitmap = wx.Bitmap("frontEnd/bmps/About_Image.png")
-
-        mainStaticBitmap = FixedStaticBitmap(self, -1, mainBitmap)
+        # The old about artwork was a Sighthound logo. The dialog is text.
+        titleLabel = wx.StaticText(self, -1, kAppName)
+        makeFontDefault(titleLabel)
+        titleFont = titleLabel.GetFont()
+        titleFont.SetPointSize(int(titleFont.GetPointSize() + 6))
+        titleFont.SetWeight(wx.FONTWEIGHT_BOLD)
+        titleLabel.SetFont(titleFont)
 
         intMatch = re.search('[0-9]+', wx.GetApp().getAppBuildStr())
         buildStr = 'unknown'
@@ -146,11 +149,11 @@ class _AboutBox(wx.Dialog):
 
         makeFontDefault(appInfoLabel, copyrightLabel, copyrightMoreInfoCtrl,
                         okButton)
-        copyrightLabel.Wrap(mainBitmap.Size[0]-24)
+        copyrightLabel.Wrap(420)
 
         sizer = wx.BoxSizer(wx.VERTICAL)
-        sizer.Add(mainStaticBitmap,  0, wx.ALIGN_RIGHT | wx.BOTTOM, 5)
-        sizer.Add(appInfoLabel, 0, wx.LEFT, 12)
+        sizer.Add(titleLabel, 0, wx.LEFT | wx.TOP, 12)
+        sizer.Add(appInfoLabel, 0, wx.LEFT | wx.TOP, 12)
         sizer.Add(copyrightLabel, 0, wx.EXPAND | wx.TOP | wx.LEFT | wx.RIGHT, 12)
         sizer.Add(copyrightMoreInfoCtrl, 0, wx.LEFT | wx.RIGHT, 12)
 
@@ -188,7 +191,7 @@ def test_main():
     """OB_REDACT
        Contains various self-test code.
     """
-    print "No tests"
+    print("No tests")
 
 
 ##############################################################################
@@ -196,4 +199,4 @@ if __name__ == '__main__':
     if len(sys.argv) > 1 and sys.argv[1] == "test":
         test_main()
     else:
-        print "Try calling with 'test' as the argument."
+        print("Try calling with 'test' as the argument.")

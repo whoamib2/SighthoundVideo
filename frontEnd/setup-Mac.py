@@ -94,7 +94,7 @@ for rootdir, dirs, files in os.walk(os.path.abspath('.')):
 INCLUDE_FILES = LIBRARIES + [
 ]
 
-ICON_FILE = 'icons/SmartVideoApp.icns'
+ICON_FILE = 'icons/VigilCam.icns'
 
 # This is where the .app file will be moved when cxFreeze is finished bundling.
 TARGET_DIR = '../../../app-out/FrontEnd-Mac'
@@ -134,7 +134,10 @@ PLIST = {
     'NSHighResolutionCapable': True,
     'NSCameraUsageDescription' : 'Sighthound Video needs access to local camera (optional)'
 }
-plistlib.writePlist(PLIST, PLIST_FILENAME)
+def write_info_plist(path=PLIST_FILENAME):
+    """Write the bundle plist. ``plistlib.writePlist`` was removed in Python 3."""
+    with open(path, "wb") as handle:
+        plistlib.dump(PLIST, handle)
 
 # Dependencies are automatically detected, but it might need fine tuning.
 BUILD_EXE_OPTIONS = {
@@ -189,14 +192,13 @@ BUILD_EXE_OPTIONS = {
     # Modules that we need to include because cxFreeze missed them, or because
     # it has no way of finding out that we need them.
     'includes': [
-        'netifaces',
+        'psutil',
     ],
 
     # Include a module with all of its submodules.
     'packages': [
         'OpenGL',
         'PIL',
-        'pyaudio',
         'requests',
         'wx',
         'wx.adv',
@@ -225,137 +227,24 @@ OPTIONS = {
 }
 
 
-# Third party imports...
-import cx_Freeze
-
-# There's some monkey patching going on here, because without it cxFreeze is
-# unable to find dependent .so and .dylib files. Specifically, cxFreeze does
-# intelligently find bin and lib dependencies of python extensions, BUT when
-# it goes to _find_ and _copy_ the dependency, it assumes that the dependency
-# will be located in the paths shown by by "otool -L python_extension_here.so".
-# This might work well for many dependencies, but it won't work for dependencies
-# that have no paths in front of the dependency's file name. For example, when
-# "otool -L cv2.so" is run, "libopencv_core.dylib" is listed. So cxFreeze tries
-# to copy this file without a path (because there was no path listed with the
-# dependency), which gives a "file not found or does not exist" error. To fix
-# this, whenever we see a dependency with no path to it, we assume it's in the
-# same directory as the file that had "otool -L" used on it.
-_GetDependentFilesOriginal = cx_Freeze.Freezer._GetDependentFiles #cx_Freeze.Freezer._GetDependentFiles
-
-def _GetDependentFiles(self, sourcePath):
-
-    # First get the dependencies from the original cx_Freeze private function...
-    originalDependencies = _GetDependentFilesOriginal(self, sourcePath)
-
-    # Get the directory that contains the source file...
-    sourceDir = os.path.dirname(sourcePath)
-
-    # Our new (possibly) modified list of depencies for this source file that
-    # we will return.
-    dependencies = []
-
-    # A dict with key=sourcePath and value=dependency where the values are
-    # dependencies that could not be found.
-    filesNotFound = {}
-
-    for dependency in originalDependencies:
-
-        # If the file exists, make sure that it is prepended with an absolute
-        # path just to be paranoid...
-        if os.path.isfile(dependency):
-            dependencies.append(os.path.abspath(dependency))
-            continue
-
-        depFilename = os.path.basename(dependency)
-
-        # The file doesn't exist; check if it exists in the source file's
-        # directory as a relative path...
-        newDepPath = os.path.join(sourceDir, dependency)
-        if os.path.isfile(newDepPath):
-            dependencies.append(os.path.abspath(newDepPath))
-            continue
-
-        # The file doesn't exist; check if it exists in the source file's
-        # directory directly...
-        newDepPath = os.path.join(sourceDir, depFilename)
-        if os.path.isfile(newDepPath):
-            dependencies.append(os.path.abspath(newDepPath))
-            continue
-
-        # Still no luck; as a last resort, let's see if we've seen the file
-        # before in our search for dylibs above...
-        if filenameToFilepath.has_key(depFilename):
-            dependencies.append(os.path.abspath(filenameToFilepath[depFilename]))
-            continue
-
-        # We should never really reach this point, so let's keep track of the
-        # source file and the dependency that we couldn't find to report it
-        # later...
-        filesNotFound[sourcePath] = dependency
-
-    # Report our missing dependencies...
-    if filesNotFound:
-        print(
-            "=== DEPENDENCIES NOT FOUND === \n" +
-            pformat(filesNotFound)
-        )
-
-    return dependencies
-
-# Do our monkey patch...
-cx_Freeze.Freezer._GetDependentFiles = _GetDependentFiles
-
-# Import cx_Freeze.setup and cx_Freeze.Executable *_AFTER_* the monkey patch
-# just in case they instantiate the Freezer related classes that use our patch.
-from cx_Freeze import setup, Executable
-
-
-# GUI applications require a different base on Windows (the default is for a
-# console application).
-base = None
-if sys.platform == 'win32':
-    base = 'Win32GUI'
-
-
-################################################################################
+# Packaging moved to scripts/package_app.py (PyInstaller). The cx_Freeze
+# options above are kept so the historical Mac bundle settings stay readable.
 def main():
+    write_info_plist()
+    repo = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
+    if repo not in sys.path:
+        sys.path.insert(0, repo)
+    from scripts.package_app import main as package_main
+    return package_main()
 
-    executables = [
-        Executable(
-            APP,
-            base=base,
-            targetName=kAppName,
-        ),
-    ]
 
-    print("Options=%s" % str(OPTIONS))
-
-    setup(
-        name = kAppName.replace(' ', '_'),
-        version = kVersionString.replace(' ', '_'),
-        description = DESCRIPTION,
-        options = OPTIONS,
-        executables = executables,
-    )
-
-    # For some reason, we can't seem to specify a target directory for our app,
-    # so we let cxFreeze do its thing, then we copy the app to the target
-    # directory ourselves.
-    sourcePath = os.path.abspath(os.path.join('.', 'build', BUNDLE_NAME + '.app'))
-    destinationPath = os.path.abspath(os.path.join(TARGET_DIR, kAppName + '.app'))
-    print('Moving App %s --> %s' % (sourcePath, destinationPath))
-    shutil.move(sourcePath, destinationPath)
-
-    # This is a list of file we need to manually move as
-
-################################################################################
-if __name__ == '__main__':
+if __name__ == "__main__":
     try:
-        main()
-    except:
+        raise SystemExit(main())
+    except SystemExit:
+        raise
+    except Exception:
         import traceback
-        print(
-            "Exception while executing cxFreeze script!! " +
-            traceback.format_exc()
-        )
-        sys.exit(-1)
+        print("Exception while packaging: " + traceback.format_exc())
+        sys.exit(1)
+

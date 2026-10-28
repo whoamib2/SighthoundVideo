@@ -54,7 +54,6 @@ if sys.platform == 'win32':
         pass
 
 from glob import glob
-from distutils.core import setup
 import sys
 import os
 
@@ -71,23 +70,22 @@ class Target:
         self.copyright = kCopyrightYear
         self.name = kAppName
 
-ARCH = os.getenv("SVARCH")
+ARCH = os.getenv("SVARCH") or ""
 MS_VC90_CRT = "Microsoft.VC90.CRT"
 
 cwd = os.path.abspath(os.path.curdir)
 
 # Get the paths to the MSVC CRT dll's folders.
 # They should be in the current working directory.
-msvc90Dir = os.path.join(cwd, MS_VC90_CRT+"."+ARCH)
-print("msvc90Dir=%s" % msvc90Dir)
-
-# Add those locations to the path so that py2exe can find them during packaging.
-sys.path.extend([msvc90Dir,])
-
-# Prepare to tell py2app what DLL's to collect from those directories.
-DATA_FILES = [
-    (MS_VC90_CRT, glob(os.path.join(msvc90Dir,"*.*"))),
-]
+msvc90Dir = os.path.join(cwd, MS_VC90_CRT + "." + ARCH) if ARCH else ""
+if msvc90Dir:
+    print(("msvc90Dir=%s" % msvc90Dir))
+    sys.path.extend([msvc90Dir,])
+    DATA_FILES = [
+        (MS_VC90_CRT, glob(os.path.join(msvc90Dir, "*.*"))),
+    ]
+else:
+    DATA_FILES = []
 
 
 ################################################################
@@ -364,39 +362,8 @@ RT_MANIFEST = 24
 
 ################################################################
 if __name__ == '__main__':
-    import py2exe
-
-    # If run without args, build executables, in quiet mode.
-    if len(sys.argv) == 1:
-        sys.argv.append("py2exe")
-        sys.argv.append("-q")
-
-    comCtl=""
-    try:
-        svarch = os.getenv("SVARCH")
-        if svarch == "x86_64":
-            processorArchitecture = "amd64"
-        elif svarch == "i386":
-            processorArchitecture = "x86"
-            comCtl=comctl_template
-        else:
-            processorArchitecture = "amd64"
-    except:
-        processorArchitecture = "amd64"
-
-
-    myApp = Target(
-        # used for the versioninfo resource
-        description = kAppName,
-
-        # what to build
-        script = "FrontEndLaunchpad.py",
-        other_resources = [(RT_MANIFEST, 1, manifest_template % dict(prog=kExeName, arch=processorArchitecture, comctlasm=comCtl))],
-        icon_resources = [(0, "icons/SmartVideoApp.ico")],
-        dest_base = kExeName)
-
-    setup(
-        data_files = DATA_FILES,
-        options = options,
-        windows = [myApp],
-        )
+    repo = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
+    if repo not in sys.path:
+        sys.path.insert(0, repo)
+    from scripts.package_app import main as package_main
+    raise SystemExit(package_main())

@@ -49,7 +49,7 @@ import sys
 from vitaToolbox.path.PathUtils import existsInPath
 
 # Local imports...
-from BaseResponse import BaseResponse
+from .BaseResponse import BaseResponse
 
 from appCommon.CommonStrings import kCommandResponseLookup
 
@@ -75,8 +75,8 @@ class CommandResponse(BaseResponse):
         command = paramDict.get(kCommandResponseLookup, '')
 
         # We should always be passing as unicode.
-        if type(command) == unicode:
-            command = command.encode('utf-8')
+        if isinstance(command, (bytes, bytearray)):
+            command = command.decode('utf-8')
 
         # Since shlex.split only supports POSIX parsing, we
         # recreate that function manually here, but setting the
@@ -125,8 +125,8 @@ class CommandResponse(BaseResponse):
 
         alert = False
 
-        prevSeenObjs = self._itemDict.keys()
-        curObjs = rangeDict.keys()
+        prevSeenObjs = list(self._itemDict.keys())
+        curObjs = list(rangeDict.keys())
 
         for objId in curObjs:
             numRanges = len(rangeDict[objId])

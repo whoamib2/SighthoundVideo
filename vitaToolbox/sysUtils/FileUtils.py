@@ -34,7 +34,7 @@
 #
 #*****************************************************************************
 
-import cPickle
+import pickle
 import ctypes
 import os
 import sys
@@ -42,7 +42,7 @@ import traceback
 import subprocess
 
 from vitaToolbox.path.GetDiskSpaceAvailable import checkFreeSpace
-from vitaToolbox.strUtils.EnsureUnicode import ensureUtf8
+from vitaToolbox.strUtils.EnsureUnicode import ensureUnicode, ensureUtf8
 
 _kMegabyte = 1024*1024
 
@@ -56,13 +56,14 @@ def writeStringToFile(filename, strToWrite, logger=None):
     """
     objectFile = None
     try:
-        needMB = len(strToWrite)/_kMegabyte+1
+        needMB = len(strToWrite)//_kMegabyte+1
         if not checkFreeSpace(filename, needMB, 0, None):
             raise Exception("Not enough free disk space (" + str(needMB) +
-                            ") to write " + ensureUtf8(filename))
-        objectFile = file(filename, 'w+')
+                            ") to write " + ensureUnicode(filename))
+        mode = "wb" if isinstance(strToWrite, (bytes, bytearray)) else "w"
+        objectFile = open(filename, mode)
         if objectFile is None:
-            raise Exception("Failed to open file at " + ensureUtf8(filename))
+            raise Exception("Failed to open file at " + ensureUnicode(filename))
         objectFile.write(strToWrite)
     except:
         if logger is not None:
@@ -83,8 +84,8 @@ def writeObjectToFile(filename, object, logger=None):
     @return                 True if successful, False if fails for whatever reason
     """
     try:
-        pickledObject = cPickle.dumps(object)
-        if not writeStringToFile(pickledObject):
+        pickledObject = pickle.dumps(object)
+        if not writeStringToFile(filename, pickledObject, logger):
             return False
     except:
         if logger is not None:

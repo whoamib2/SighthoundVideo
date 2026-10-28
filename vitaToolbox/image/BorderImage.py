@@ -171,7 +171,7 @@ def loadBorderImage(src, desiredSize, borderWidth, borderHeight=None):
     # Draw the top row...
     dst.paste(tlPiece, (x, y))
     x += borderWidth
-    for _ in xrange(numMiddleCols):
+    for _ in range(numMiddleCols):
         dst.paste(tPiece, (x, y))
         x += srcMiddleWidth
     if extraWidth:
@@ -184,7 +184,7 @@ def loadBorderImage(src, desiredSize, borderWidth, borderHeight=None):
     # Draw the edges of the middle region...
     # TODO: I think the only plausible "middle" pieces have to be all one solid
     # color.  Could we just fill with that color to speed things up?
-    for _ in xrange(numMiddleRows):
+    for _ in range(numMiddleRows):
         dst.paste(lPiece, (0, y))
         dst.paste(rPiece, (dstWidth-borderWidth, y))
         y += srcMiddleHeight
@@ -198,7 +198,7 @@ def loadBorderImage(src, desiredSize, borderWidth, borderHeight=None):
     # Draw the bottom row...
     dst.paste(blPiece, (x, y))
     x += borderWidth
-    for _ in xrange(numMiddleCols):
+    for _ in range(numMiddleCols):
         dst.paste(bPiece, (x, y))
         x += srcMiddleWidth
     if extraWidth:
@@ -226,4 +226,4 @@ if __name__ == '__main__':
     if len(sys.argv) > 1 and sys.argv[1] == "test":
         test_main()
     else:
-        print "Try calling with 'test' as the argument."
+        print("Try calling with 'test' as the argument.")

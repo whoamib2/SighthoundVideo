@@ -133,7 +133,7 @@ class MemStore(object):
         self._cond.acquire()
         notify = False
         try:
-            notify = self._data.has_key(key)
+            notify = key in self._data
             return self._data.pop(key) if notify else None
         finally:
             try:
@@ -156,7 +156,7 @@ class MemStore(object):
         notify = False
         try:
             now = self._now()
-            for key in self._data.keys():
+            for key in list(self._data.keys()):
                 item = self._data[key]
                 expiresAt = item[1]
                 if expiresAt != -1 and expiresAt <= now:

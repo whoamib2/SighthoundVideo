@@ -39,7 +39,7 @@
 # Python imports...
 import copy
 import sys
-import cPickle
+import pickle
 import os
 
 # Common 3rd-party imports...
@@ -61,16 +61,16 @@ from appCommon.CommonStrings import kLocalExportResponse
 from appCommon.CommonStrings import kDefaultPreRecord
 from appCommon.CommonStrings import kTargetSettingToLabel
 
-from triggers.BinaryTrigger import BinaryTrigger
-from triggers.DoorTrigger import DoorTrigger
-from triggers.DurationTrigger import DurationTrigger
-from triggers.LineTrigger import LineTrigger
-from triggers.MinSizeTrigger import MinSizeTrigger
-from triggers.RegionTrigger import RegionTrigger
-from triggers.TargetTrigger import TargetTrigger
+from .triggers.BinaryTrigger import BinaryTrigger
+from .triggers.DoorTrigger import DoorTrigger
+from .triggers.DurationTrigger import DurationTrigger
+from .triggers.LineTrigger import LineTrigger
+from .triggers.MinSizeTrigger import MinSizeTrigger
+from .triggers.RegionTrigger import RegionTrigger
+from .triggers.TargetTrigger import TargetTrigger
 
-from triggers.TriggerRegion import TriggerRegion
-from triggers.TriggerLineSegment import TriggerLineSegment
+from .triggers.TriggerRegion import TriggerRegion
+from .triggers.TriggerLineSegment import TriggerLineSegment
 
 
 
@@ -98,11 +98,11 @@ kDefaultResponseList = [
     }),
     (kSoundResponse, {
         'isEnabled':  False,
-        'soundPath':  u"",        # Must be of type unicode
+        'soundPath':  "",        # Must be of type unicode
     }),
     (kCommandResponse, {
         'isEnabled':  False,
-        'command':    u"",        # Must be of type unicode
+        'command':    "",        # Must be of type unicode
     }),
     (kFtpResponse, {
         'isEnabled':  False,
@@ -110,7 +110,7 @@ kDefaultResponseList = [
     }),
     (kLocalExportResponse, {
         'isEnabled':  False,
-        'exportPath': u"",
+        'exportPath': "",
     }),
     (kPushResponse, {
         'isEnabled':  False,
@@ -1048,7 +1048,7 @@ def test_main():
 
     Contains various self-test code.
     """
-    print "NO TEST CODE"
+    print("NO TEST CODE")
 
 
 ##############################################################################
@@ -1056,4 +1056,4 @@ if __name__ == '__main__':
     if len(sys.argv) > 1 and sys.argv[1] == "test":
         test_main()
     else:
-        print "Try calling with 'test' as the argument."
+        print("Try calling with 'test' as the argument.")

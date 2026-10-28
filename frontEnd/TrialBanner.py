@@ -39,7 +39,7 @@
 # Python imports...
 import os
 import time
-import urllib
+import urllib.request, urllib.parse, urllib.error
 import webbrowser
 
 # Common 3rd-party imports...
@@ -239,5 +239,5 @@ def getAccountAndToken(backEndClient):
     if not machineId or not accountId:
         return ("", "")
 
-    return (urllib.quote(accountId), urllib.quote(machineId))
+    return (urllib.parse.quote(accountId), urllib.parse.quote(machineId))
 

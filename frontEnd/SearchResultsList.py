@@ -65,7 +65,7 @@ from appCommon.CommonStrings import kFrontEndLogName
 from appCommon.CommonStrings import kImportSuffix
 from appCommon.CommonStrings import kSearchingString, kSearchingOnString
 
-import MenuIds
+from . import MenuIds
 
 
 _kItemHeight = 64
@@ -350,8 +350,8 @@ class SearchResultsList(wx.VListBox):
 
         itemCount = len(self._curResults)
 
-        clientIndexes = range(itemCount)
-        selectionIndexes = range(itemCount)
+        clientIndexes = list(range(itemCount))
+        selectionIndexes = list(range(itemCount))
 
         if not self._isAscending:
             selectionIndexes.reverse()
@@ -466,8 +466,8 @@ class SearchResultsList(wx.VListBox):
         self._curResults = searchResults
         self.SetItemCount(itemCount)
 
-        clientIndexes = range(itemCount)
-        selectionIndexes = range(itemCount)
+        clientIndexes = list(range(itemCount))
+        selectionIndexes = list(range(itemCount))
 
         if not self._isAscending:
             selectionIndexes.reverse()
@@ -587,7 +587,7 @@ class SearchResultsList(wx.VListBox):
         @param  dataMgr     Our own private instance of the data manger.
         @param  clipMgr     Our own private instance of the clip manager.
         """
-        unloadedIndicies = set(xrange(numResults))
+        unloadedIndicies = set(range(numResults))
         loadedIndicies = set([])
         retryLookup = {}
 
@@ -596,7 +596,7 @@ class SearchResultsList(wx.VListBox):
             lastVisible = self.GetVisibleEnd()
 
             # Convert to indices in our list...
-            viewIndices = xrange(firstVisible, lastVisible)
+            viewIndices = range(firstVisible, lastVisible)
             viewIndices = [x for x in viewIndices if x in unloadedIndicies]
 
             if viewIndices:
@@ -604,7 +604,7 @@ class SearchResultsList(wx.VListBox):
             else:
                 # If we've loaded what's in our current view, load a few after
                 # and before to speed scrolling.
-                viewIndices = xrange(firstVisible-5, lastVisible+5)
+                viewIndices = range(firstVisible-5, lastVisible+5)
                 viewIndices = [x for x in viewIndices if x in unloadedIndicies]
                 shouldSleep = True
 
@@ -789,7 +789,7 @@ class SearchResultsList(wx.VListBox):
         # Draw image
         if img:
             w, h = img.size
-            wxImage = wx.ImageFromBuffer(w, h, img.convert('RGB').tobytes())
+            wxImage = wx.Image(w, h, img.convert('RGB').tobytes())
 
             dc.DrawBitmap(wx.Bitmap(wxImage), rect.X+_kImgXOffset,
                           rect.Y+_kImgYOffset)
@@ -958,7 +958,7 @@ class SearchResultsList(wx.VListBox):
                 typeStrs.append('Unknown')
 
             # Add unexpected types...
-            for (typeStr, count) in badTypes.iteritems():
+            for (typeStr, count) in badTypes.items():
                 if count == 1:
                     typeStrs.append(typeStr)
                 else:
@@ -1139,5 +1139,5 @@ class SearchResultsList(wx.VListBox):
 
 ################################################################################
 if __name__ == '__main__':
-    from FrontEndApp import main
+    from .FrontEndApp import main
     main()

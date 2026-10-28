@@ -43,9 +43,9 @@ Contains the CameraManager class.
 """
 
 # Python imports...
-import cPickle
+import pickle
 import os
-import StringIO
+import io
 import sys
 import time
 from vitaToolbox.strUtils.EnsureUnicode import ensureUtf8
@@ -92,7 +92,7 @@ class CameraManager(object):
 
             try:
                 self._openDb(self._mgrPath)
-            except Exception, e:
+            except Exception as e:
                 self._logger.error("Couldn't load camdb: " + str(e))
                 # If we couldn't open the camdb see if we have any backups.
                 if not os.path.exists(self._backupDir):
@@ -123,7 +123,7 @@ class CameraManager(object):
 
         @param  path  Path to the file to open.
         """
-        f = open(path, "r")
+        f = open(path, "rb")
         data = f.read()
         f.close()
         self.load(data)
@@ -298,8 +298,8 @@ class CameraManager(object):
         """
         if self._mgrPath is not None:
             try:
-                f = open(self._mgrPath, "w")
-                cPickle.dump(self._camSettings, f)
+                f = open(self._mgrPath, "wb")
+                pickle.dump(self._camSettings, f)
                 f.close()
 
                 # Save a backup as well
@@ -307,8 +307,8 @@ class CameraManager(object):
                     if not os.path.exists(self._backupDir):
                         os.mkdir(self._backupDir)
                     backupName = "camdb" + formatTime("%Y-%m-%d %H%M%S")
-                    f = open(os.path.join(self._backupDir, backupName), "w")
-                    cPickle.dump(self._camSettings, f)
+                    f = open(os.path.join(self._backupDir, backupName), "wb")
+                    pickle.dump(self._camSettings, f)
                     f.close()
                 except:
                     pass
@@ -344,9 +344,11 @@ class CameraManager(object):
         @param data The picked state to load from
         """
         # For a while extra was a string.  Ensure it is now a dict.
-        self._camSettings = cPickle.load(StringIO.StringIO(data))
+        if isinstance(data, str):
+            data = data.encode("latin-1")
+        self._camSettings = pickle.loads(data)
         dirty = False
-        for name in self._camSettings.keys():
+        for name in list(self._camSettings.keys()):
             # I'm not sure how we got into this case, but bad things happen
             # if you end up with a blank camera name, or any camera name
             # that evaluates to False.  Delete it.
@@ -369,9 +371,7 @@ class CameraManager(object):
 
         @return The current state.
         """
-        result = StringIO.StringIO()
-        cPickle.dump(self._camSettings, result)
-        return result.getvalue()
+        return pickle.dumps(self._camSettings)
 
 
     ###########################################################
@@ -380,7 +380,7 @@ class CameraManager(object):
 
         @return locations  A list of locations of configured cameras.
         """
-        return self._camSettings.keys()
+        return list(self._camSettings.keys())
 
 
     ###########################################################
@@ -395,8 +395,8 @@ class CameraManager(object):
                            both) of the lists will be empty.
         """
         if -1 == maxCameras:
-            maxCameras = sys.maxint
-        camLocs = self._camSettings.keys()
+            maxCameras = sys.maxsize
+        camLocs = list(self._camSettings.keys())
         frozen = []
         unfrozen = []
         for camLoc in camLocs:
@@ -426,7 +426,7 @@ class CameraManager(object):
 
         @param logger  The logger to use.
         """
-        camLocs = self._camSettings.keys()
+        camLocs = list(self._camSettings.keys())
         camLocs.sort()
         for cameraLocation in camLocs:
             cs = self._camSettings[cameraLocation]

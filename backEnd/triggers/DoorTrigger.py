@@ -38,8 +38,8 @@
 
 
 
-from BaseTrigger import BaseTrigger
-from RegionTrigger import RegionTrigger
+from .BaseTrigger import BaseTrigger
+from .RegionTrigger import RegionTrigger
 
 #import time
 

@@ -39,7 +39,7 @@
 
 # Python imports...
 import os
-import cPickle as pickle
+import pickle as pickle
 import sys
 import getpass
 
@@ -181,14 +181,14 @@ def _loadPrefsIfNeeded(wantForce=False):
         _prefs = {}
         userDataDir = getUserLocalDataDir()
         try:
-            user = ' ' + getpass.getuser().encode("utf-8")
-        except:
+            user = ' ' + getpass.getuser()
+        except Exception:
             user = None
         userNames = [""] if user is None else [user, ""]
         for userName in userNames:
             try:
                 path = os.path.join(userDataDir, _kPrefsFileFmt % userName)
-                f = open(path)
+                f = open(path, "rb")
                 _prefs = pickle.load(f)
                 break
             except (IOError, EOFError):
@@ -213,11 +213,11 @@ def _savePrefs():
         if not os.path.isdir(userDataDir):
             os.mkdir(userDataDir)
         try:
-            user = ' ' + getpass.getuser().encode("utf-8")
-        except:
+            user = ' ' + getpass.getuser()
+        except Exception:
             user = ""
         path = os.path.join(userDataDir, _kPrefsFileFmt % user)
-        f = open(path, "w")
+        f = open(path, "wb")
         pickle.dump(_prefs, f)
 
         return False
@@ -247,28 +247,28 @@ def main():
             _loadPrefsIfNeeded()
             prefs = _kDefaultPrefs.copy()
             prefs.update(_prefs)
-            print "\nAll prefs:"
-            print "\n".join("* %s: %s" % item for item in prefs.iteritems())
+            print("\nAll prefs:")
+            print("\n".join("* %s: %s" % item for item in prefs.items()))
         elif sys.argv[1] == '--help':
             # Print help
-            print "\n" + usage + "\n"
+            print("\n" + usage + "\n")
         elif len(sys.argv) == 2:
             (prefName, ) = sys.argv[1:]
-            print "\n* %s: %s" % (prefName, getFrontEndPref(prefName))
+            print("\n* %s: %s" % (prefName, getFrontEndPref(prefName)))
         else:
             # Get prefName and prefVal out of arugments...
             prefName, prefValStr = sys.argv[1:]
 
             # If the default value is not a string, assume we need an eval...
-            if isinstance(_kDefaultPrefs[prefName], basestring):
+            if isinstance(_kDefaultPrefs[prefName], str):
                 prefVal = prefValStr
             else:
                 prefVal = eval(prefValStr)
 
-            print "\nSetting %s to %s" % (prefName, str(prefVal))
+            print("\nSetting %s to %s" % (prefName, str(prefVal)))
             setFrontEndPref(prefName, prefVal)
     except Exception:
-        print "\n" + usage + "\n"
+        print("\n" + usage + "\n")
         raise
 
 

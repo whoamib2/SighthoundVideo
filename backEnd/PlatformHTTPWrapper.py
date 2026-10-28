@@ -36,63 +36,61 @@
 #*****************************************************************************
 
 import os
-import sys
-from BaseHTTPServer import BaseHTTPRequestHandler, HTTPServer
-import SocketServer
-import MessageIds
+from http.server import BaseHTTPRequestHandler, HTTPServer
+from . import MessageIds
 import traceback
-import json
 import time
 import threading
-from SIOWrapper.SIOWrapper import SIOWrapper
+
+from backEnd.native.detector import (
+    SIOObjectDetector,
+    encode_detection_response,
+    parse_rgb_body,
+)
 
 
 #from DebugLogManager import DebugLogManager
 
 from vitaToolbox.loggingUtils.LoggingUtils import getLogger
+from appCommon.resources import model_dir
 
 ################################################################################
 # TODO: duplicated into ObjectDetectorClient.py, too small for its own module ... resolve the redundancy
 def _getModelDir():
-    if hasattr(sys, 'frozen'):
-        path = os.path.dirname(sys.executable)
-        if sys.platform == 'darwin':
-            return os.path.join(path, "..", "Resources", "models" )
-        return os.path.join(path, "models" )
-    else:
-        devLibFolder = os.getenv("SV_DEVEL_LIB_FOLDER_CONAN")
-        if devLibFolder is not None and devLibFolder != "":
-            res = os.path.join(devLibFolder, "..", "models")
-            if os.path.isdir(res):
-                return res
-        # This likely won't work
-        return os.path.join("..", "models")
+    return model_dir()
 
 ################################################################################
-def HandlerFactory(logger, sio):
+def _as_body(text):
+    """HTTP bodies are bytes. Accept a str for the error text we already build."""
+    if isinstance(text, bytes):
+        return text
+    return str(text).encode("utf-8")
+
+
+def HandlerFactory(logger, detector):
     class PlatformHTTPWrapperHandler(BaseHTTPRequestHandler, object):
         #---------------------------------------------------------------------------
         def __init__(self, *args, **kwargs):
             self._logger = logger
-            self._sio = sio
-            self._sioInitialized = (self._sio.init() >= 0)
+            self._detector = detector
             super(PlatformHTTPWrapperHandler, self).__init__(*args, **kwargs)
 
         #---------------------------------------------------------------------------
         def _sendResponse(self, response, text, contentType):
+            body = _as_body(text)
             self.send_response(response)
-            self.send_header('Content-type', contentType)
+            self.send_header("Content-type", contentType)
+            self.send_header("Content-Length", str(len(body)))
             self.end_headers()
-            self.wfile.write(text)
-            self.wfile.close()
+            self.wfile.write(body)
 
         #---------------------------------------------------------------------------
-        def _sendJSONResponse(self, json):
-            self._sendResponse(200, json, 'application/json')
+        def _sendJSONResponse(self, payload):
+            self._sendResponse(200, payload, "application/json")
 
         #---------------------------------------------------------------------------
         def _sendErrorResponse(self, error):
-            self._sendResponse(500, error+"\n", 'text/plain')
+            self._sendResponse(500, error + "\n", "text/plain")
 
         #---------------------------------------------------------------------------
         def do_GET(self):
@@ -104,44 +102,40 @@ def HandlerFactory(logger, sio):
 
         #---------------------------------------------------------------------------
         def do_POST(self):
+            """Raw RGB in, JSON detections out.
+
+            Headers: Content-Length, X-Width, X-Height. The body is
+            ``width * height * 3`` bytes of RGB. The JSON objects may include
+            ``attributes`` (plate text, face identity, delivery carrier) in
+            addition to type, boundingBox and score.
+            """
             self._logger.debug("Processing POST - %d!" % threading.current_thread().ident)
-            if not self._sioInitialized:
-                self._sendErrorResponse("SIO pipeline failed to initialize")
-            kMaxPostLen = 25*1024*1024 # 25MB
+            kMaxPostLen = 25 * 1024 * 1024  # 25MB
             start = time.time()
             try:
-                contentLength = int(self.headers.getheader('content-length'))
-                w = int(self.headers.getheader('x-width'))
-                h = int(self.headers.getheader('x-height'))
-                if contentLength is None \
-                    or contentLength > kMaxPostLen \
-                    or contentLength <= 0:
+                contentLength = int(self.headers.get("Content-Length") or 0)
+                width = int(self.headers.get("X-Width") or 0)
+                height = int(self.headers.get("X-Height") or 0)
+                if contentLength <= 0 or contentLength > kMaxPostLen:
                     self._sendErrorResponse("Invalid content length: " + str(contentLength))
                     return
-
-                if w is None or w<=0 or h is None or h<=0:
-                    self._sendErrorResponse("Invalid dims: x=" + str(w) + " y="+str(h))
+                if width <= 0 or height <= 0:
+                    self._sendErrorResponse("Invalid dims: x=" + str(width) + " y=" + str(height))
                     return
 
                 image = self.rfile.read(contentLength)
-                idIn = self._sio.addInput(image, w, h)
-                if idIn < 0:
-                    self._sendErrorResponse("Failed to submit input for processing")
-                    return
-                self._logger.debug(str(idIn) + ": Processing image of size " + str(len(image)) + " dims=[" + str(w) + "," + str(h) + "]")
-
-                idOut, detections = self._sio.getOutput(True)
-                if idOut != idIn:
-                    # TODO: keep this until we do multi-threaded HTTP request processing
-                    self._sendErrorResponse("Something went terribly wrong")
-                    return
-
-                duration = int((time.time() - start)*1000)
-                output = json.dumps(detections)
-                self._logger.debug("Got output for " + str(idOut) + " (" + str(duration) + "ms) :" + output)
-            except:
+                frame = parse_rgb_body(image, width, height)
+                detections = self._detector.detect_rgb(frame, width, height)
+                output = encode_detection_response(detections)
+                duration = int((time.time() - start) * 1000)
+                self._logger.debug(
+                    "Detection done in %dms for %dx%d (%d bytes, %d objects)"
+                    % (duration, width, height, len(frame), len(detections))
+                )
+            except Exception:
                 self._logger.error("Error while processing POST request: " + traceback.format_exc())
                 self._sendErrorResponse("Failed to parse POST parameters")
+                return
 
             self._sendJSONResponse(output)
 
@@ -169,12 +163,10 @@ class PlatformHTTPWrapper(object):
         self._logger.grabStdStreams()
         self._msgQ = msgQ
 
-        enableGpu = True # until we decide to make configurable
-        self._sio = SIOWrapper(self._logger, _getModelDir(), enableGpu)
-        if self._sio.init() <= 0:
-            raise Exception("Failed to init SIO!")
+        enableGpu = True  # until we decide to make configurable
+        self._detector = SIOObjectDetector(self._logger, _getModelDir(), enable_gpu=enableGpu)
 
-        HandlerClass = HandlerFactory(self._logger, self._sio)
+        HandlerClass = HandlerFactory(self._logger, self._detector)
         HTTPServer.allow_reuse_address = True
         self._httpServer = HTTPServer(serverAddress, HandlerClass)
         port = self._httpServer.server_address[1]

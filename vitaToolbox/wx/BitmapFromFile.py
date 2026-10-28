@@ -44,6 +44,10 @@ from PIL import Image
 import wx
 
 # Local imports...
+from appCommon.resources import install_resource_hooks
+from appCommon.resources import resource_path
+
+install_resource_hooks()
 
 # Constants...
 
@@ -68,10 +72,14 @@ def bitmapFromFile(f, platformBmps=True):
                           bitmap files.  If they exist, they will be used.
                           See the main class docstring.
     """
-    if type(f) == str:
+    if isinstance(f, (bytes, bytearray)):
         f = f.decode('utf-8')
+    if isinstance(f, str):
+        # Platform-specific siblings are chosen after this, so the check has
+        # to see the bundled directory rather than the process working directory.
+        f = resource_path(f)
 
-    if platformBmps and isinstance(f, basestring):
+    if platformBmps and isinstance(f, str):
         platformExt = ""
 
         if wx.Platform == "__WXMAC__":

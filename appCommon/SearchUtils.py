@@ -137,7 +137,7 @@ def parseSearchResults(resultsList, shouldCombineClips):
 
         # What we want is a list of just the frame numbers:
         # [frame1, frame2, ..., frameN]
-        frameList, _ = zip(*resultList)
+        frameList, _ = list(zip(*resultList))
 
         # Get a "group ID" for each element.  This will magically assign an
         # ID that will be the same for elements that are consecutive.
@@ -145,7 +145,7 @@ def parseSearchResults(resultsList, shouldCombineClips):
         # ...subtract [0,  1,  2,  3,  4,  5,  6,  7,  8,  9]
         # ...you get  [0,  0,  0,  2,  3,  3,  3, 13, 13, 21]
 
-        zeroThruLength = range(len(frameList))
+        zeroThruLength = list(range(len(frameList)))
         groupIdArr = [u - v for (u, v) in zip(frameList, zeroThruLength)]
 
         # This will be the indicies of the end of sequences...
@@ -229,7 +229,7 @@ def parseSearchResultsLegacy(resultsList, shouldCombineClips):
         # ...you get  [0,  0,  0,  2,  3,  3,  3, 13, 13, 21]
 
         numpyArr = numpy.array(resultList)[:, 0]
-        groupIdArr = numpyArr - xrange(len(numpyArr))
+        groupIdArr = numpyArr - range(len(numpyArr))
 
         # This will be the indicies of the end of sequences...
         # ...probably overly clever, but really quick.  By subtracting the
@@ -277,7 +277,7 @@ def extendPendingRanges(pendingRanges, rangeDict, shouldCombineRanges):
                                             (lastFrame, lastTime))
     @param  shouldCombineRanges  If True, we'll combine adjacent ranges.
     """
-    for objId, rangeList in rangeDict.iteritems():
+    for objId, rangeList in rangeDict.items():
         assert rangeDict[objId], "Shouldn't add empty ranges"
 
         for ((firstFrame, firstTime), (lastFrame, lastTime)) in rangeList:
@@ -294,7 +294,7 @@ def extendPendingRanges(pendingRanges, rangeDict, shouldCombineRanges):
     # to the same object).  Merging is easy, since we already sorted by
     # objectId and startTime, and an object can only exist once at any given
     # time.  Work backwards so it's easy to delete...
-    for i in xrange(len(pendingRanges)-1, 0, -1):
+    for i in range(len(pendingRanges)-1, 0, -1):
         # Get previous (p) and this (t) range...
         pId, ((pFirstTime, pFirstFrame), (pLastTime, pLastFrame)), _ = \
             pendingRanges[i-1]
@@ -674,7 +674,7 @@ def _combineOverlappingClips(curResults, preservePlayOffset, searchConfig, clipM
                 if prevClipInfo.stopTime < prevClipInfo._realStopTime or \
                     clipInfo.startTime > clipInfo._realStartTime or \
                     prevClipInfo.stopTime >= clipInfo.startTime:
-                    print "Assertion inbound: prev=" + str(prevClipInfo) + " cur=" + str(clipInfo)
+                    print("Assertion inbound: prev=" + str(prevClipInfo) + " cur=" + str(clipInfo))
                     assert False
 
 
@@ -889,9 +889,9 @@ def _getMatchingRanges(query, startTime, endTime, midnightMs,
     else:
         results = dataMgr.getSearchResults(query, startTime, endTime, procSizesMsRange)
         rangeItems = []
-        for objId, msList in results.iteritems():
-            rangeList = zip(msList, msList)
-            rangeItems.extend(zip([objId] * len(rangeList), rangeList))
+        for objId, msList in results.items():
+            rangeList = list(zip(msList, msList))
+            rangeItems.extend(list(zip([objId] * len(rangeList), rangeList)))
 
     # At this point, rangeItems is an iterable of tuples, like this:
     #  [ (objId, ((firstMs, firstFrame), (lastMs, lastFrame))), camLoc, ..., ... ]

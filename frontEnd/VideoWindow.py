@@ -314,7 +314,7 @@ class VideoWindow(wx.Control):
         # this menu--we have to manually add them to our accelerator table.
         # ...also note that the accelerator table ignores whether these menu
         # items are enabled / disabled...
-        self._deletePointId = wx.NewId()
+        self._deletePointId = wx.NewIdRef()
         menuData = (
             ("&Undo\tCtrl+Z", "", wx.ID_UNDO, self.OnAccelerator),
             ("&Redo\tCtrl+Y", "", wx.ID_REDO, self.OnAccelerator),
@@ -700,8 +700,8 @@ class VideoWindow(wx.Control):
         """
         img = wx.Image(os.path.join('frontEnd', 'bmps', cursorFilePath))
         img.ConvertAlphaToMask()
-        img.SetOption(wx.IMAGE_OPTION_CUR_HOTSPOT_X, img.GetWidth()/2)
-        img.SetOption(wx.IMAGE_OPTION_CUR_HOTSPOT_Y, img.GetHeight()/2)
+        img.SetOption(wx.IMAGE_OPTION_CUR_HOTSPOT_X, img.GetWidth()//2)
+        img.SetOption(wx.IMAGE_OPTION_CUR_HOTSPOT_Y, img.GetHeight()//2)
         return wx.Cursor(img)
 
 
@@ -891,8 +891,8 @@ class VideoWindow(wx.Control):
         if self._overlayBitmap is not None:
             overlayWidth, overlayHeight = self._overlayBitmap.GetSize()
             gc.DrawBitmap(self._overlayBitmap,
-                          (imageWidth-overlayWidth)/2,
-                          (imageHeight-overlayHeight)/2,
+                          (imageWidth-overlayWidth)//2,
+                          (imageHeight-overlayHeight)//2,
                           overlayWidth, overlayHeight)
 
         finishFn()
@@ -1052,7 +1052,7 @@ class VideoWindow(wx.Control):
         for triggerRegion in self._triggerRegions:
             points = triggerRegion.getPoints(self._coordSpace)
             numPoints = len(points)
-            for i in xrange(numPoints):
+            for i in range(numPoints):
                 x1, y1 = points[i-1]
                 x2, y2 = points[i]
                 lineSeg = LineSegment(x1, y1, x2, y2)
@@ -1168,12 +1168,12 @@ class VideoWindow(wx.Control):
             image = wx.Image("frontEnd/bmps/Direction_Both.png")
 
         imageWidth, imageHeight = image.GetWidth(), image.GetHeight()
-        rotImage = image.Rotate(angle, (imageWidth/2, imageHeight/2))
+        rotImage = image.Rotate(angle, (imageWidth//2, imageHeight//2))
         rotBmp = rotImage.ConvertToBitmap()
         rotBmpWidth, rotBmpHeight = rotBmp.GetWidth(), rotBmp.GetHeight()
 
-        x = (x1 + x2 - rotBmpWidth)/2
-        y = (y1 + y2 - rotBmpHeight)/2
+        x = (x1 + x2 - rotBmpWidth)//2
+        y = (y1 + y2 - rotBmpHeight)//2
 
         # We need to adjust to keep the bitmap on the screen...
         # ...first, calc what we need to adjust x by if we adjust y and
@@ -1400,4 +1400,4 @@ if __name__ == '__main__':
     if len(sys.argv) > 1 and sys.argv[1] == "test":
         test_main()
     else:
-        print "Try calling with 'test' as the argument."
+        print("Try calling with 'test' as the argument.")

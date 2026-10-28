@@ -38,7 +38,7 @@
 
 
 
-from BaseResponse import BaseResponse
+from .BaseResponse import BaseResponse
 from backEnd import MessageIds
 
 

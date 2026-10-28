@@ -50,8 +50,9 @@ def registerForForcedQuitEvents(closeFunc=None):
                           must maintain a reference to this function or it
                           will go out of scope and no notification will occur.
     """
-    if sys.platform == 'darwin':
-        # This issue only applies to Vista (and maybe 7?)
+    if sys.platform != 'win32':
+        # Console control handlers are a Windows API. macOS and Linux have
+        # nothing to register here.
         return
 
     # Create a function that will be our callback handler.

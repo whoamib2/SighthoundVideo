@@ -39,7 +39,7 @@
 # Python imports...
 #import errno
 import base64
-import httplib
+import http.client
 import pprint
 import random
 import re
@@ -47,18 +47,18 @@ import select
 import socket
 import struct
 import sys
-import StringIO
+import io
 import time
 import traceback
-import urllib
-import urlparse
+import urllib.request, urllib.parse, urllib.error
+import urllib.parse
 import logging
 import copy
 # Common 3rd-party imports...
-import netifaces
+from vitaToolbox.sysUtils.interfaces import ipv4_addresses, multicast_ipv4_text
 
 # Toolbox imports...
-from vitaToolbox.strUtils.EnsureUnicode import ensureUtf8
+from vitaToolbox.strUtils.EnsureUnicode import ensureUnicode, ensureUtf8
 from vitaToolbox.networking.XmlUtils import vitaParseXML
 
 # Local imports...
@@ -69,12 +69,12 @@ from vitaToolbox.networking.XmlUtils import vitaParseXML
 #
 # Note: any program that imports Upnp.py will automatically get this
 # functionality...
-if 'upnp' not in urlparse.uses_netloc:
-    urlparse.uses_relative.append('upnp')
-    urlparse.uses_netloc.append('upnp')
-    urlparse.uses_params.append('upnp')
-    urlparse.uses_query.append('upnp')
-    urlparse.uses_fragment.append('upnp')
+if 'upnp' not in urllib.parse.uses_netloc:
+    urllib.parse.uses_relative.append('upnp')
+    urllib.parse.uses_netloc.append('upnp')
+    urllib.parse.uses_params.append('upnp')
+    urllib.parse.uses_query.append('upnp')
+    urllib.parse.uses_fragment.append('upnp')
 
 
 # Constants...
@@ -115,6 +115,37 @@ _kSearchRequest = (
     mx=_kMaxResponseDelay,
     searchTarget="%(searchTarget)s",   # Filled in later...
 )
+
+
+def _datagram(packet):
+    """UDP and TCP payloads are bytes. Python 3 sockets reject str."""
+    if isinstance(packet, (bytes, bytearray)):
+        return bytes(packet)
+    return str(packet).encode("utf-8")
+
+
+def _header_text(value):
+    """SSDP header values are text. Sockets and old parsers may hand back bytes."""
+    if isinstance(value, (bytes, bytearray)):
+        value = bytes(value).decode("utf-8", "replace")
+    return str(value).strip()
+
+
+def _header(httpMessage, name):
+    """Return one SSDP header as text, or None when it is absent.
+
+    Python 2's HTTPMessage raised KeyError for a missing header. Python 3's
+    email message returns None, which must not be compared to 'ssdp:alive'.
+    """
+    try:
+        if name not in httpMessage:
+            return None
+        value = httpMessage[name]
+    except (KeyError, TypeError):
+        return None
+    if value is None:
+        return None
+    return _header_text(value)
 
 # HTTP over UDP must fit within a single packet.  Spec says that requests
 # should really fit in 512 bytes, but I decided to be a little more
@@ -206,7 +237,7 @@ class ControlPointManager(object):
         try:
             self._passiveSock = self._createPassiveSocket()
         except socket.error:
-            print >>sys.stderr, "Couldn't open UPNP listening socket."
+            print("Couldn't open UPNP listening socket.", file=sys.stderr)
             self._passiveSock = None
         self._requestSocks = {}
 
@@ -339,7 +370,7 @@ class ControlPointManager(object):
         @param  requestSocks  A dictionary, keyed by IP address, of sockets.
         @param  newIpSet      A set of new IP addresses.
         """
-        oldIpSet = set(requestSocks.iterkeys())
+        oldIpSet = set(requestSocks.keys())
 
         removedIps = oldIpSet - newIpSet
         addedIps = newIpSet - oldIpSet
@@ -379,7 +410,7 @@ class ControlPointManager(object):
                 # not quite right (maybe the IP address already vanished?)
                 # Ignore it...  We'll retry later...
                 if __debug__:
-                    print "Failed to add request socket for %s" % ipAddr
+                    print("Failed to add request socket for %s" % ipAddr)
 
 
     ###########################################################
@@ -394,23 +425,17 @@ class ControlPointManager(object):
         """
         addrs = []
         try:
-            for ifName in netifaces.interfaces():
-                ifAddresses = netifaces.ifaddresses(ifName)
-                if netifaces.AF_INET in ifAddresses:
-                    for inetAddress in ifAddresses[netifaces.AF_INET]:
-                        addr = inetAddress.get('addr')
-                        if addr != '0.0.0.0':
-                            try:
-                                socket.inet_aton(addr) # valid IPv4, please
-                            except:
-                                continue
-                            addrs.append(inetAddress)
+            for row in ipv4_addresses():
+                ip = multicast_ipv4_text(row.get("addr"))
+                if ip is None:
+                    continue
+                addrs.append({"addr": ip, "netmask": row.get("netmask")})
         except:
             # due to IPHLPAPI.DLL incompatibilities we've seen this happening
             # in the wild, so protecting us against it cannot hurt ...
             if __debug__:
-                print ("Some issue (%s) while getting IPs (%s)" %
-                    (sys.exc_info()[0], sys.exc_info()[1]))
+                print(("Some issue (%s) while getting IPs (%s)" %
+                    (sys.exc_info()[0], sys.exc_info()[1])))
         return addrs
 
     ###########################################################
@@ -419,7 +444,7 @@ class ControlPointManager(object):
 
         Should be called periodically.
         """
-        oldIpSet = set(self._requestSocks.iterkeys())
+        oldIpSet = set(self._requestSocks.keys())
         newIpSet = set(addr['addr'] for addr in self._getMyIps())
         if oldIpSet != newIpSet:
             # Update sockets...
@@ -439,7 +464,7 @@ class ControlPointManager(object):
                 }
 
         nowTime = time.time()
-        for ipAddr, searchInfo in self._searchCountDict.items():
+        for ipAddr, searchInfo in list(self._searchCountDict.items()):
             if searchInfo['nextSearchTime'] <= nowTime:
                 try:
                     requestSock = self._requestSocks[ipAddr]
@@ -447,14 +472,14 @@ class ControlPointManager(object):
                     # Handle the case where a request socket wasn't created
                     # for some reason...  Don't expect this...
                     if __debug__:
-                        print "Missing request socket"
+                        print("Missing request socket")
                     del self._searchCountDict[ipAddr]
                     continue
 
                 #print "Requesting on %s" % (str(requestSock.getsockname()))
                 try:
                     requestSock.sendto(
-                        _kSearchRequest % {'searchTarget': kSearchTargetAll},
+                        _datagram(_kSearchRequest % {'searchTarget': kSearchTargetAll}),
                         (_kMulticastIp, _kMulticastPort)
                     )
 
@@ -490,9 +515,9 @@ class ControlPointManager(object):
         # Request verification of devices...
         if searchFor == kSearchTargetAll:
             # Request verification of all know devices...
-            for device in self._deviceDict.itervalues():
+            for device in self._deviceDict.values():
                 device.requestVerify()
-            for device in self._pendingDeviceDict.itervalues():
+            for device in self._pendingDeviceDict.values():
                 device.requestVerify()
         else:
             # Request verification of this device...
@@ -502,12 +527,12 @@ class ControlPointManager(object):
                 self._pendingDeviceDict[searchFor].requestVerify()
 
         # Actively search on all known interfaces...
-        for requestSock in self._requestSocks.itervalues():
+        for requestSock in self._requestSocks.values():
             #print "Active search: %s (%s)" % (str(requestSock.getsockname()),
             #                                  searchFor)
             try:
                 requestSock.sendto(
-                    _kSearchRequest % {'searchTarget': searchFor},
+                    _datagram(_kSearchRequest % {'searchTarget': searchFor}),
                     (_kMulticastIp, _kMulticastPort)
                 )
             except socket.error:
@@ -540,14 +565,14 @@ class ControlPointManager(object):
         # Handle when our interfaces changed...
         self._checkForIpChanges()
 
-        sockList = self._requestSocks.values()
+        sockList = list(self._requestSocks.values())
         if self._passiveSock:
             sockList.append(self._passiveSock)
 
 
         while True:
             # Run any needed queries; iterate over copy so we can delete...
-            for usn, device in self._pendingDeviceDict.items():
+            for usn, device in list(self._pendingDeviceDict.items()):
                 if device.pollForDescription():
                     if usn in self._deviceDict:
                         isBig = self._deviceDict[usn].updateFromNewer(device)
@@ -563,10 +588,10 @@ class ControlPointManager(object):
             try:
                 readySocks, _, errorSocks = select.select(sockList, [],
                                                           sockList, 0)
-            except select.error, e:
+            except select.error as e:
                 # Seen this: (10022, 'An invalid argument was supplied')
                 # ...at the same time I see: Couldn't open UPNP listening socket.
-                print >>sys.stderr, "Socket select error: %s" % str(e)
+                print("Socket select error: %s" % str(e), file=sys.stderr)
                 readySocks, errorSocks = ([], [])
 
             assert not errorSocks
@@ -614,13 +639,16 @@ class ControlPointManager(object):
 
             # Get out status line and bail right away if it's not
             # something we care about...
-            startLine, responseStr = responseStr.split('\r\n', 1)
+            if isinstance(responseStr, str):
+                responseStr = responseStr.encode("latin-1")
+            startLine, responseStr = responseStr.split(b'\r\n', 1)
+            startLine = startLine.decode("latin-1", "replace")
             if not self._isDeviceStatusMessage(startLine):
                 return
 
-            # Use httplib.HTTPMessage to parse the headers.  This
-            # returns a dict-like object.
-            httpMessage = httplib.HTTPMessage(StringIO.StringIO(responseStr), 0)
+            # http.client.parse_headers returns an email message, which still
+            # supports the dict-style header access this code uses.
+            httpMessage = http.client.parse_headers(io.BytesIO(responseStr))
 
             # Adjust for bugs, and look for messages to drop right away...
             shouldDrop = self._adjustHttpMessageForBugs(httpMessage, fromIpAddr)
@@ -689,12 +717,13 @@ class ControlPointManager(object):
         @return goneUsn      The USN that's gone; or None if nothing's gone.
         """
         try:
-            if httpMessage['nts'].lower() == 'ssdp:byebye':
+            nts = _header(httpMessage, 'nts')
+            if nts is not None and nts.lower() == 'ssdp:byebye':
                 # Try to take out of new devices (if there).  If it's
                 # not there, try get from deviceDict.  If it's not
                 # there, we'll just fail, but isGone will be set.  Note:
                 # we'll remove from deviceDict at end of func..
-                return httpMessage['usn']
+                return _header(httpMessage, 'usn')
         except Exception:
             pass
 
@@ -803,28 +832,27 @@ class ControlPointManager(object):
 
 
     ###########################################################
-    @staticmethod
-    def _getStatusType(httpMessage):
+    def _getStatusType(self, httpMessage):
         """Get the status type (search type or notification type) from message.
 
         @param  httpMessage  The httplib.HTTPMessage object.
         @return statusType   The status type, like "uuid:....".  If this
                              is not a valid UPNP message, we'll return ""
         """
-        try:
-            # Try looking at notification type first...
-            statusType = httpMessage['nt']
-            assert httpMessage['nts'] == 'ssdp:alive', \
-                   "Unexpected notification sub type"
-        except KeyError:
-            try:
-                # Next, try the search target...
-                statusType = httpMessage['st']
-            except KeyError:
-                # Upon failure, just do the empty string...
-                statusType = ""
+        # A NOTIFY carries NTS. Search replies only carry ST. Missing NTS is
+        # not an error. Anything other than ssdp:alive (ssdp:update, and so
+        # on) is ignored.
+        nts = _header(httpMessage, 'nts')
+        if nts is not None:
+            nts = nts.lower()
+            if nts != 'ssdp:alive':
+                self._logger.debug(
+                    "Ignoring UPnP notification sub type %s" % nts
+                )
+                return ""
+            return _header(httpMessage, 'nt') or ""
 
-        return statusType
+        return _header(httpMessage, 'st') or ""
 
 
     ###########################################################
@@ -838,7 +866,7 @@ class ControlPointManager(object):
         # Make toKill list first, then go through a second pass and delete.
         # That way, we don't delete from a dict we're iterating over...
         toKill = {}
-        for usn, upnpDevice in self._deviceDict.iteritems():
+        for usn, upnpDevice in self._deviceDict.items():
             if upnpDevice.isExpired():
                 toKill[usn] = upnpDevice
             elif upnpDevice.wantAboutToExpireSearch():
@@ -1165,11 +1193,11 @@ class UpnpDevice(object):
         if 'presentationURL' in self._simpleAttributes:
             url, guess = (self._simpleAttributes['presentationURL'], False)
             if self._urlBase is not None:
-                url = urlparse.urljoin(self._urlBase, url)
+                url = urllib.parse.urljoin(self._urlBase, url)
         else:
             url, guess = ("http://%s/" % (self._ssdpIp), True)
 
-        splitUrl = urlparse.urlsplit(url)
+        splitUrl = urllib.parse.urlsplit(url)
         assert splitUrl.scheme == 'http', "Only tested for HTTP"
 
         # If there's no path, we'll add a "/" at the end.  That makes things
@@ -1203,16 +1231,16 @@ class UpnpDevice(object):
                 assert False, "Didn't expect presentation URL without a host"
 
             # Put everything back together...
-            url = urlparse.urlunsplit((
+            url = urllib.parse.urlunsplit((
                 splitUrl.scheme, "%s:%s@%s" % (
-                    urllib.quote(username, ""), urllib.quote(password, ""),
+                    urllib.parse.quote(username, ""), urllib.parse.quote(password, ""),
                     netloc
                 ),
                 pathPart, splitUrl.query, splitUrl.fragment
             ))
         else:
             # Put everything back together...
-            url = urlparse.urlunsplit((
+            url = urllib.parse.urlunsplit((
                 splitUrl.scheme, splitUrl.netloc,
                 pathPart, splitUrl.query, splitUrl.fragment
             ))
@@ -1488,8 +1516,8 @@ class UpnpDevice(object):
         # True once we've sent the HTTP request...
         self._sentRequest = False
 
-        # We always read into a buffer.
-        self._buffer = ""
+        # We always read into a buffer. recv() returns bytes.
+        self._buffer = b""
 
         # Increase our number of failure.  Should be init to -1 in __init__
         # so this starts at 0.
@@ -1566,7 +1594,9 @@ class UpnpDevice(object):
             try:
                 md = vitaParseXML(data)
             except:
-                self._logger.error("Error parsing XML from " + str(self._ssdpIp) + ": " + ensureUtf8(data))
+                self._logger.error(
+                    "Error parsing XML from %s: %s" % (self._ssdpIp, ensureUnicode(data))
+                )
                 raise
             #print md.toprettyxml()
 
@@ -1652,13 +1682,13 @@ class UpnpDevice(object):
 
             # If we haven't connected, connect and then return...
             if self._sock is None:
-                splitLoc = urlparse.urlsplit(location)
+                splitLoc = urllib.parse.urlsplit(location)
                 if splitLoc.hostname is None:
-                    splitLoc = urlparse.urlsplit('//'+splitLoc.path.lstrip('/'))
+                    splitLoc = urllib.parse.urlsplit('//'+splitLoc.path.lstrip('/'))
                     if splitLoc.hostname is None:
                         return None
                 if splitLoc.port is None:
-                    self._peerAddr = (splitLoc.hostname, httplib.HTTP_PORT)
+                    self._peerAddr = (splitLoc.hostname, http.client.HTTP_PORT)
                 else:
                     self._peerAddr = (splitLoc.hostname, splitLoc.port)
 
@@ -1688,13 +1718,13 @@ class UpnpDevice(object):
                 # We're connected; send the request.  Use sendall, which should
                 # be safe even w/ blocking sockets (I hope), since our request
                 # is so tiny.
-                splitLoc = urlparse.urlsplit(location)
+                splitLoc = urllib.parse.urlsplit(location)
                 descPath = splitLoc.path
                 if splitLoc.query: descPath += "?" + splitLoc.query
                 if splitLoc.fragment: descPath += "#" + splitLoc.fragment
                 try:
-                    self._sock.sendall(_kDescriptionRequest %
-                                   {'path': descPath,'netloc': splitLoc.netloc})
+                    self._sock.sendall(_datagram(_kDescriptionRequest %
+                                   {'path': descPath,'netloc': splitLoc.netloc}))
                     self._sentRequest = True
                 except socket.error:
                     # Happens while Axis 1031 is coming up...
@@ -1725,7 +1755,7 @@ class UpnpDevice(object):
             # Make a lame-o fake socket that represents all the data that we
             # got from the socket and feed it into
             fakeSock = _StringSock(self._buffer)
-            response = httplib.HTTPResponse(fakeSock, method='GET')
+            response = http.client.HTTPResponse(fakeSock, method='GET')
             response.begin()
 
             # Close the socket to be a good citizen...
@@ -1741,7 +1771,7 @@ class UpnpDevice(object):
         except Exception:
             if __debug__:
                 traceback.print_exc()
-                print "%s" % str(self._buffer)
+                print("%s" % str(self._buffer))
 
             self._resetHttpState()
             return None
@@ -1783,13 +1813,13 @@ def extractUsnFromUpnpUrl(url):
         if not url:
             raise ValueError("Not a valid UPNP URL: %s" % url)
 
-        url = ensureUtf8(url)
-        splitResult = urlparse.urlsplit(url)
+        url = ensureUnicode(url)
+        splitResult = urllib.parse.urlsplit(url)
         if splitResult.scheme == 'upnp':
             # Old-style; note that we can't use 'hostname', since that
             # does a lower()
-            usn = urllib.unquote(splitResult.netloc.split('@', 1)[-1])
-            return usn.decode('utf-8')
+            usn = urllib.parse.unquote(splitResult.netloc.split('@', 1)[-1])
+            return ensureUnicode(usn)
 
         # Get the hostname; if it's blank or None, that's not a valid UPNP URL.
         hostname = splitResult.hostname
@@ -1808,7 +1838,7 @@ def extractUsnFromUpnpUrl(url):
             # every 16 characters, to make it look pretty and keep any part
             # from being >63 characters...
             encodedUsn = encodedUsn.replace('9', '=').replace('.', '')
-            usn = base64.b32decode(encodedUsn, True)
+            usn = base64.b32decode(encodedUsn.encode("ascii"), True)
 
             #print "USN: %s" % usn.decode('utf-8')
             return usn.decode('utf-8')
@@ -1847,13 +1877,13 @@ def constructUpnpUrl(usn, username=None, password=None, pathPart=None,
                       Should be an integer if non-None.
     @return url       The UPNP URL.  Will be UTF-8.
     """
-    url = ensureUtf8(scheme)
+    url = ensureUnicode(scheme)
 
     if username or password:
         if username:
-            url += urllib.quote(ensureUtf8(username), "")
+            url += urllib.parse.quote(ensureUnicode(username), "")
         if password:
-            url += ":%s" % urllib.quote(ensureUtf8(password), "")
+            url += ":%s" % urllib.parse.quote(ensureUnicode(password), "")
         url += "@"
 
     # Encode into our terribly convoluted way of encoding a USN into
@@ -1863,7 +1893,7 @@ def constructUpnpUrl(usn, username=None, password=None, pathPart=None,
     # replace it with 9 (which should be unused).  We also put a "."
     # every 16 characters, to make it look pretty and keep any part
     # from being >63 characters...
-    encodedUsn = base64.b32encode(ensureUtf8(usn))
+    encodedUsn = base64.b32encode(ensureUtf8(usn)).decode("ascii")
     encodedUsn = encodedUsn.lower()
     encodedUsn = encodedUsn.replace('=', '9')
     encodedUsn = re.sub(r'(.{16})', r'\1.', encodedUsn).rstrip('.')
@@ -1874,8 +1904,9 @@ def constructUpnpUrl(usn, username=None, password=None, pathPart=None,
         url += ":%d" % port
 
     if pathPart:
+        pathPart = ensureUnicode(pathPart)
         assert pathPart.startswith('/')
-        url += ensureUtf8(pathPart)
+        url += pathPart
 
     #print "URL: %s" % url
     return url
@@ -1918,13 +1949,13 @@ def realizeUpnpUrl(deviceDict, url):
         # getPresentationUrl function, since we need to do our own parsing
         # anyway...
         presUrl, _ = device.getPresentationUrl()
-        presUrl = ensureUtf8(presUrl)
-        presSplitResult = urlparse.urlsplit(presUrl)
+        presUrl = ensureUnicode(presUrl)
+        presSplitResult = urllib.parse.urlsplit(presUrl)
 
         # Split the UPNP URL.  This requires our patched urlparse to deal with
         # old-style upnp:// URLs (we patched up in the imports section)...
-        url = ensureUtf8(url)
-        upnpSplitResult = urlparse.urlsplit(url)
+        url = ensureUnicode(url)
+        upnpSplitResult = urllib.parse.urlsplit(url)
 
         if upnpSplitResult.scheme == 'upnp':
             # Old-style always used scheme from presentation URL...
@@ -2001,15 +2032,20 @@ class _StringSock(object):
 
     ###########################################################
     """NO_OBS makefile"""
-    def makefile(self, mode, bufsize):
+    def makefile(self, mode="rb", bufsize=-1):
         """Make a file out of our string.
+
+        Python 3's http.client calls makefile('rb') with no buffer size.
 
         @param  mode     Ignored.
         @param  bufsize  Ignored.
         """
         _ = mode
         _ = bufsize
-        return StringIO.StringIO(self._allData)
+        data = self._allData
+        if isinstance(data, str):
+            data = data.encode("latin-1")
+        return io.BytesIO(data)
 
 
 
@@ -2019,18 +2055,18 @@ def main():
     while True:
         changedUsns, goneUsns = cpm.pollForChanges()
         for usn in changedUsns:
-            print time.asctime()
-            print "%s:\n%s\n%s\n%s\n%s\n\n---\n" % (
+            print(time.asctime())
+            print("%s:\n%s\n%s\n%s\n%s\n\n---\n" % (
                 usn,
                 cpm.getDevice(usn).getFriendlyName(),
                 cpm.getDevice(usn).getPresentationUrl(),
                 cpm.getDevice(usn).getModelName(),
                 str(cpm.getDevice(usn))
-            )
+            ))
 
         for usn in goneUsns:
-            print time.asctime()
-            print "GONE: %s:\n\n---\n" % (usn)
+            print(time.asctime())
+            print("GONE: %s:\n\n---\n" % (usn))
         time.sleep(.1)
 
 

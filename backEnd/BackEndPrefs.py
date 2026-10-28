@@ -41,7 +41,7 @@
 Contains the BackEndPrefs class.
 """
 
-import cPickle
+import pickle
 import wx
 
 from vitaToolbox.networking.SimpleEmail import kDefaultEncryption
@@ -89,9 +89,9 @@ _kDefaultPrefs = {
         'host':         "",
         'port':         21,
         'isPassive':    True,
-        'directory':    u"",
-        'user':         u"",
-        'password':     u"",
+        'directory':    "",
+        'user':         "",
+        'password':     "",
     },
 
     'notificationSettings': {
@@ -169,8 +169,8 @@ class BackEndPrefs(object):
         self._prefs = None
 
         try:
-            f = open(self._prefsPath, "r")
-            self._prefs = cPickle.load(f)
+            f = open(self._prefsPath, "rb")
+            self._prefs = pickle.load(f)
             f.close()
         except Exception:
             pass
@@ -207,8 +207,8 @@ class BackEndPrefs(object):
             return
 
         try:
-            f = open(self._prefsPath, "w")
-            cPickle.dump(self._prefs, f)
+            f = open(self._prefsPath, "wb")
+            pickle.dump(self._prefs, f)
             f.close()
         except Exception:
             return

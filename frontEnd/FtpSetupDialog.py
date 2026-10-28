@@ -39,7 +39,7 @@
 # Python imports...
 import ftplib
 import socket
-import StringIO
+import io
 import sys
 import time
 
@@ -265,7 +265,7 @@ class FtpSetupDialog(wx.Dialog):
             field = self._hostField
             ftpConfig['host'] = \
                 field.GetValue().encode('ascii', 'strict').strip()
-        except UnicodeEncodeError, e:
+        except UnicodeEncodeError as e:
             assert desc is not None
             field.SetFocus()
             field.SetSelection(-1, -1)
@@ -406,7 +406,7 @@ class FtpSetupDialog(wx.Dialog):
             wantContinue, _ = progressDlg.Update(stage, msg.capitalize())
             if not wantContinue:
                 return
-            fileToSend = StringIO.StringIO(_kTestFtpFileContents % {
+            fileToSend = io.StringIO(_kTestFtpFileContents % {
                                              'timeNow': time.asctime(),
                                            })
             ftpObj.storlines('STOR %s' % _kTestFtpFileName, fileToSend)
@@ -420,7 +420,7 @@ class FtpSetupDialog(wx.Dialog):
                           _kUnknownHostErrorTitleStr,
                           wx.OK | wx.ICON_ERROR, self)
             return
-        except ftplib.error_perm, e:
+        except ftplib.error_perm as e:
             progressDlg.Destroy()
             progressDlg = None
             if not loggedIn:
@@ -431,7 +431,7 @@ class FtpSetupDialog(wx.Dialog):
                               _kTestErrorTitleStr,
                               wx.OK | wx.ICON_ERROR, self)
             return
-        except Exception, e:
+        except Exception as e:
             progressDlg.Destroy()
             progressDlg = None
             wx.MessageBox(_kTestErrorStr % (msg.rstrip('.'), str(e)),
@@ -458,7 +458,7 @@ def test_main():
        Contains various self-test code.
     """
     # Ugly test code...
-    from BackEndClient import BackEndClient
+    from .BackEndClient import BackEndClient
 
     app = wx.App(False)
     app.SetAppName(kAppName)
@@ -482,4 +482,4 @@ if __name__ == '__main__':
     if len(sys.argv) > 1 and sys.argv[1] == "test":
         test_main()
     else:
-        print "Try calling with 'test' as the argument."
+        print("Try calling with 'test' as the argument.")

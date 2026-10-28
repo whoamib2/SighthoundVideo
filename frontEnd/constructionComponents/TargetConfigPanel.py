@@ -42,10 +42,11 @@ import sys
 
 # Common 3rd-party imports...
 from PIL import Image, ImageDraw
+from vitaToolbox.image.PilCompat import text_size
 import wx
 
 # Local imports...
-from ConfigPanel import ConfigPanel
+from .ConfigPanel import ConfigPanel
 from appCommon.CommonStrings import kTargetSettingToLabel, kTargetLabelToSetting, kTargetLabels
 
 # Constants...
@@ -213,12 +214,12 @@ class TargetConfigPanel(ConfigPanel):
                            _kOverlayImageWidth - _kOverlayLineWidth,
                            height - _kOverlayLineWidth),
                           fill=_kOverlayBackgroundColor)
-        for i in xrange(_kOverlayLineWidth):
+        for i in range(_kOverlayLineWidth):
             imgDraw.rectangle((i, i, _kOverlayImageWidth-i-1, height-i-1),
                               outline=_kOverlayLineColor)
 
         label = str(height)
-        labelWidth, labelHeight = imgDraw.textsize(label)
+        labelWidth, labelHeight = text_size(imgDraw, label)
         imgDraw.text(((_kOverlayImageWidth-labelWidth)/2,
                       (height-labelHeight)/2), label, fill="black")
 
@@ -274,7 +275,7 @@ def test_main():
     """OB_REDACT
        Contains various self-test code.
     """
-    print "NO TESTS"
+    print("NO TESTS")
 
 
 ##############################################################################
@@ -282,4 +283,4 @@ if __name__ == '__main__':
     if len(sys.argv) > 1 and sys.argv[1] == "test":
         test_main()
     else:
-        print "Try calling with 'test' as the argument."
+        print("Try calling with 'test' as the argument.")

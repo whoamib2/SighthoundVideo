@@ -39,7 +39,7 @@
 
 # Python imports...
 
-from FrontEndPrefs import getFrontEndPref, setFrontEndPref
+from .FrontEndPrefs import getFrontEndPref, setFrontEndPref
 
 from vitaToolbox.mvc.AbstractModel import AbstractModel
 

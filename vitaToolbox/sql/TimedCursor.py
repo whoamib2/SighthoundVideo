@@ -264,7 +264,7 @@ class TimedCursor(sql.Cursor):
 
 
     ###########################################################
-    def next(self):
+    def __next__(self):
         """Wrapper for next.
 
         We treat this just like fetchone(), but with a slightly different stop
@@ -275,8 +275,11 @@ class TimedCursor(sql.Cursor):
         self._fetchCount += 1
 
         try:
-            # Call the original...
-            result = super(TimedCursor, self).next()
+            # sqlite3.Cursor is iterable, but it is not itself an iterator:
+            # it has no __next__. fetchone() is the same step the iterator takes.
+            result = self.fetchone()
+            if result is None:
+                raise StopIteration
         except StopIteration:
             # If fetchone is returning None, then we must be done fetching.  See
             # how long since execute finished...

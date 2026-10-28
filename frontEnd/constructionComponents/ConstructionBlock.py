@@ -118,7 +118,7 @@ class ConstructionBlock(wx.Control):
         # Set our default font to be 2 less than the default font for a button,
         # but not less than 10 point...
         font = self.GetFont()
-        font.SetPointSize(max(font.GetPointSize()-2, 10))
+        font.SetPointSize(int(max(font.GetPointSize() - 2, 10)))
         self.SetFont(font)
 
         # We start out not being selected...
@@ -335,7 +335,7 @@ def drawConstructionBlock(dc, size, bitmap, label, font, txtColor,
     # Draw the bitmap...
     y = _kMarginWidth
     if bitmap is not None:
-        dc.DrawBitmap(bitmap, (fullWidth - bitmap.GetWidth()) / 2, y, True)
+        dc.DrawBitmap(bitmap, (fullWidth - bitmap.GetWidth()) // 2, y, True)
         y += bitmap.GetHeight()
 
     # Add the text, centering and trimming each line...
@@ -347,7 +347,7 @@ def drawConstructionBlock(dc, size, bitmap, label, font, txtColor,
 
     _, allTextHeight = dc.GetMultiLineTextExtent(label)
     spaceLeft = (fullHeight - _kMarginWidth) - y
-    y += (spaceLeft - allTextHeight) / 2
+    y += (spaceLeft - allTextHeight) // 2
 
     availTextWidth = fullWidth - (2 * _kMarginWidth)
     dotdotWidth, _ = dc.GetTextExtent("...")
@@ -362,7 +362,7 @@ def drawConstructionBlock(dc, size, bitmap, label, font, txtColor,
             line = line[:i] + "..."
             lineWidth, lineHeight = dc.GetTextExtent(line)
 
-        dc.DrawText(line, (fullWidth - lineWidth) / 2, y)
+        dc.DrawText(line, (fullWidth - lineWidth) // 2, y)
         y += lineHeight
 
     # Draw the border...
@@ -371,11 +371,11 @@ def drawConstructionBlock(dc, size, bitmap, label, font, txtColor,
     if wx.Platform == "__WXMSW__":
         # Windows seems to have an off-by-one error on the width when you've
         # got a pen width > 1.  It makes the rectangle one pixel too small.
-        dc.DrawRectangle(borderWidth/2, borderWidth/2,
+        dc.DrawRectangle(borderWidth//2, borderWidth//2,
                          fullWidth - borderWidth+1,
                          fullHeight - borderWidth+1)
     else:
-        dc.DrawRectangle(borderWidth/2, borderWidth/2,
+        dc.DrawRectangle(borderWidth//2, borderWidth//2,
                          fullWidth - borderWidth,
                          fullHeight - borderWidth)
 
@@ -468,4 +468,4 @@ if __name__ == '__main__':
     if len(sys.argv) > 1 and sys.argv[1] == "test":
         test_main()
     else:
-        print "Try calling with 'test' as the argument."
+        print("Try calling with 'test' as the argument.")

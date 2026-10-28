@@ -47,22 +47,19 @@ import traceback
 from PIL import Image
 from collections import deque, defaultdict
 
-from ObjectDetectorClient import ObjectDetectorClientLocal, ObjectDetectorClientInProcess
+from .ObjectDetectorClient import ObjectDetectorClientLocal, ObjectDetectorClientInProcess
 
 # Common 3rd-party imports...
 
 # Local imports...
-import MessageIds
+from . import MessageIds
 from appCommon.CommonStrings import kThumbsSubfolder
 
-from svsentry.Sentry import ObjectCollector, loadSentry
+from backEnd.native.tracking import object_collector_base
 
 # Globals...
 from vitaToolbox.image.ImageConversion import convertProcFrameToPIL
-from vitaToolbox.ctypesUtils.LoadLibrary import LoadLibrary
-from vitaToolbox.strUtils.EnsureUnicode import ensureUtf8
-
-loadSentry(LoadLibrary, None)
+from vitaToolbox.strUtils.EnsureUnicode import ensureUnicode
 
 _kFrameSaveInterval=1000 # distance in ms between frames we save
 _kStatsReportInterval=30
@@ -124,7 +121,7 @@ class CloudStats(object):
             self._lastLogTime = time.time()
 
 ##############################################################################
-class QueuedDataManagerCloud(ObjectCollector):
+class QueuedDataManagerCloud(object_collector_base()):
     """An interface to DataManager functions to be processed remotely.
 
        Responsible for interpolating the results for frames not submitted to
@@ -145,6 +142,9 @@ class QueuedDataManagerCloud(ObjectCollector):
         """
         # Call the superclass constructor.
         super(QueuedDataManagerCloud, self).__init__()
+        # Set before the detector client is constructed. If that constructor
+        # raises, __del__ still runs and must not touch a missing attribute.
+        self._httpClient = None
 
         # This is publicly accessible in case the camera location changes.
         self.cameraLocation = cameraLocation
@@ -192,33 +192,55 @@ class QueuedDataManagerCloud(ObjectCollector):
     ###########################################################
     def __del__(self):
         """Destructor for QueuedDataManager."""
-        self.terminate()
+        try:
+            self.terminate()
+        except Exception:
+            pass
 
         try:
             # Inform the back end that our pipe is no longer in use.
-            self._queue.put([MessageIds.msgIdPipeFinished, self._id])
+            # Init may have failed before these attributes existed.
+            queue = getattr(self, "_queue", None)
+            if queue is not None:
+                queue.put([MessageIds.msgIdPipeFinished, getattr(self, "_id", None)])
         finally:
-            # Our base class, ObjectCollector, implements `__del__` also. Make
-            # sure we call it without fail...
-            super(QueuedDataManagerCloud, self).__del__()
+            # The closed ObjectCollector base implements __del__. The open
+            # tracker uses a plain object, which does not.
+            parent_del = getattr(super(QueuedDataManagerCloud, self), "__del__", None)
+            if parent_del is not None:
+                parent_del()
 
     ###########################################################
     def terminate(self):
-        if self._httpClient is not None:
-            self._logger.debug("Destroying HTTP client")
-            if self._httpClient.isAlive():
-                while self._outstandingDetectionRequests > 0:
-                    self._logger.debug("Destroying HTTP client - waiting for " + str(self._outstandingDetectionRequests) + " pending results")
-                    self._processDetections()
-                    if self._outstandingDetectionRequests > 0:
-                        time.sleep(0.1)
+        # Init can fail before _httpClient exists, or leave it None.
+        client = getattr(self, "_httpClient", None)
+        if client is None:
+            return
+        self._logger.debug("Destroying HTTP client")
+        if hasattr(client, "is_alive"):
+            alive = client.is_alive()
+        else:
+            alive = client.isAlive()
+        if alive:
+            deadline = time.time() + 2.0
+            while self._outstandingDetectionRequests > 0 and time.time() < deadline:
+                self._logger.debug("Destroying HTTP client - waiting for " + str(self._outstandingDetectionRequests) + " pending results")
+                self._processDetections()
+                if self._outstandingDetectionRequests > 0:
+                    time.sleep(0.1)
+            if self._outstandingDetectionRequests > 0:
+                self._logger.warning(
+                    "Stopping analytics with %d detection(s) still pending"
+                    % self._outstandingDetectionRequests
+                )
+                self._outstandingDetectionRequests = 0
 
-                self._logger.debug("Destroying HTTP client - terminating")
-                self._httpClient.terminate()
-                self._logger.debug("Destroying HTTP client - waiting ...")
-                self._httpClient.join()
-                self._logger.debug("Destroying HTTP client - done")
-            self._httpClient = None
+            self._logger.debug("Destroying HTTP client - terminating")
+            client.terminate()
+            self._logger.debug("Destroying HTTP client - waiting ...")
+            client.join(2.0)
+            self._logger.debug("Destroying HTTP client - done")
+        self._httpClient = None
 
     ###########################################################
     def setDebugFolder(self, folder):
@@ -266,18 +288,25 @@ class QueuedDataManagerCloud(ObjectCollector):
             # This is the first time we receive anything
             self._currentFrameTime = time
             self._currentFrameId = frameId
-            return
+            return True
 
-        # Current implementation of Sentry serializes frames, until
-        # all the objects had been labeled.
-        # This may change in the future: when/if it will, most of the code here
-        # and interpolation in particular will have to change
-        assert time >= self._currentFrameTime
+        # A backwards media timestamp used to assert and kill the capture
+        # process. Keep the camera up and drop that one frame.
+        if time < self._currentFrameTime:
+            self._logger.warning(
+                "Ignoring frame timestamp %s before %s" % (time, self._currentFrameTime)
+            )
+            return False
 
         if self._currentFrameTime == time:
             # Time hasn't changed yet
-            assert frameId == self._currentFrameId
-            return
+            if frameId != self._currentFrameId:
+                self._logger.warning(
+                    "Ignoring frame id %s at timestamp %s (current id %s)"
+                    % (frameId, time, self._currentFrameId)
+                )
+                return False
+            return True
 
         # Time had changed
         self._previousFrameTime = self._currentFrameTime
@@ -292,6 +321,7 @@ class QueuedDataManagerCloud(ObjectCollector):
             self._lostFrames.popleft()
             counter += 1
         self._totalInterpolated += counter
+        return True
 
     ###########################################################
     def reportFrame(self, ms, frameObj=None):
@@ -468,8 +498,12 @@ class QueuedDataManagerCloud(ObjectCollector):
             timestamp, detections = result
             if self._debugMode:
                 self._logger.debug("Detection response: %d - %s" % (timestamp, str(detections)))
-            for obj, type, score, overlap in detections:
-                obj.reportCloudDetection(timestamp, type, score, overlap, self._logger)
+            for detection in detections:
+                obj, det_type, score, overlap = detection[:4]
+                attributes = getattr(detection, "attributes", None)
+                obj.reportCloudDetection(
+                    timestamp, det_type, score, overlap, self._logger, attributes
+                )
 
             # And then let all the rest know the detection had occurred
             frames = self._trackedObjects.get(timestamp, None)
@@ -502,7 +536,7 @@ class QueuedDataManagerCloud(ObjectCollector):
             del self._trackedObjects[k]
 
         # Free all the frames that aren't needed anymore
-        for timestamp in self._frames.keys():
+        for timestamp in list(self._frames.keys()):
             if timestamp <= self._lastSentryFrameTimeMs:
                 del self._frames[timestamp]
 
@@ -568,13 +602,13 @@ class QueuedDataManagerCloud(ObjectCollector):
                 size = (self._thumbRes*kVeryLargeFactor, self._thumbRes)
             else:
                 size = (self._thumbRes, self._thumbRes*kVeryLargeFactor)
-            pilFrame.thumbnail(size, Image.ANTIALIAS)
+            pilFrame.thumbnail(size, Image.Resampling.LANCZOS)
         try:
             if not os.path.isdir(dirname):
                 os.makedirs(dirname)
             pilFrame.save(saveTo, "JPEG")
         except:
-            self._logger.warning("Failed to save thumbnail to " + ensureUtf8(saveTo))
+            self._logger.warning("Failed to save thumbnail to " + ensureUnicode(saveTo))
 
         # Even if we've failed to create a thumb, there's no reason to retry immediately
         self._lastFrameSavedTime = ms
@@ -666,7 +700,8 @@ class QueuedDataManagerCloud(ObjectCollector):
         """
         self._checkForRealDbIds()
         # Check if this is a new frame coming from Sentry
-        self._checkTime(time, frameId)
+        if not self._checkTime(time, frameId):
+            return
 
         # Sentry uses OpenCV rectangle convention, where 2nd point is exclusive
         # We expect both points being inclusive. Validate data before correction.
@@ -795,7 +830,7 @@ class _QueuedObjId(object):
         if cls._idLastPurgeTime + cls._idPurgeInterval > ms:
             return
         # delete info about objects we haven't seen in awhile
-        for idNum in cls._idToQueuedObj.keys():
+        for idNum in list(cls._idToQueuedObj.keys()):
             if cls._idToQueuedObj[idNum].lastSeenBySentry + cls._idPurgeTimeout < ms:
                 del cls._idToQueuedObj[idNum]
         cls._idLastPurgeTime = ms
@@ -856,8 +891,12 @@ class _QueuedObjId(object):
         return self.detectorDecision
 
     ###########################################################
-    def reportCloudDetection(self, ms, type, score, overlap, logger):
-        """ Notify the object whenever detection result is received for a particular frame
+    def reportCloudDetection(self, ms, type, score, overlap, logger, attributes=None):
+        """ Notify the object whenever detection result is received for a particular frame.
+
+        ``attributes`` holds optional recognizer fields (plate text, face
+        identity, delivery carrier). They are stored for a later response
+        path and do not change the type/score decision.
         """
         if self.detectorDecision is not None:
             # do not update the object if final determination had been made
@@ -865,6 +904,10 @@ class _QueuedObjId(object):
 
         self.lastDetectionEventTime = ms
         self.externalDetections[ms].append((type, score, overlap))
+        if attributes:
+            if not hasattr(self, "detectionAttributes"):
+                self.detectionAttributes = {}
+            self.detectionAttributes.update(attributes)
 
     ###########################################################
     def notifyDetectionRequested(self, ms):
@@ -925,12 +968,12 @@ class _QueuedObjId(object):
         kHighConfidenceOverlap = 0.8
 
         sumFrames, sumScore, sumOverlap = self._getScoresForObservedTypes()
-        frameCount = len(self.externalDetections.keys())
+        frameCount = len(list(self.externalDetections.keys()))
 
         highConfidenceTypes = []
         bestSuperscore = 0
         bestSuperscoreType = None
-        allTypes = sumFrames.keys()
+        allTypes = list(sumFrames.keys())
 
         # See which object types we've seen so far, and if any of those stand out
         for type in allTypes:

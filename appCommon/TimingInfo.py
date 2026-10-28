@@ -37,7 +37,7 @@
 
 
 from collections import defaultdict
-import ConfigParser
+import configparser
 import os
 import time
 
@@ -83,7 +83,7 @@ class TimingInfo( object ):
     ###########################################################
     def _checkConfigForEnabled( self ):
         pathTimingConfigFile    = os.path.join( '.', TimingInfo.kConfigFilenameTimingInfo )
-        parser = ConfigParser.RawConfigParser( TimingInfo.kConfigDefaultsEnabled )
+        parser = configparser.RawConfigParser( TimingInfo.kConfigDefaultsEnabled )
         parser.read( pathTimingConfigFile )
         if not parser.has_section( TimingInfo.kSectionEnabled ):
             parser.add_section( TimingInfo.kSectionEnabled )
@@ -98,11 +98,16 @@ class TimingInfo( object ):
     def associateKeys( self, dictIn ):
         msg = ''
         for key in dictIn:
-            # maybe non-ascii chars
-            valueAsUnicode  = unicode( dictIn[ key ])
-            valueAsAscii    = valueAsUnicode.encode( 'ascii', errors='replace' )
+            # Keep ASCII text. encode() returns bytes, which cannot be joined
+            # onto the log string.
+            value = dictIn[key]
+            if isinstance(value, (bytes, bytearray)):
+                value = bytes(value).decode('utf-8', 'replace')
+            else:
+                value = str(value)
+            valueAsAscii = value.encode('ascii', errors='replace').decode('ascii')
 
-            msg += str( key ) + '=\"' + valueAsAscii + '\"  '
+            msg += str(key) + '=\"' + valueAsAscii + '\"  '
             if TimingInfo.kKeySource == key:
                 self.sourceName = valueAsAscii
                 self._checkConfigForEnabled()
@@ -170,9 +175,9 @@ class TimingInfo( object ):
         if not self.bEnabled:
             return
 
-        for key, itemSum in self.timingSums.items():
+        for key, itemSum in list(self.timingSums.items()):
             self._prvLog( 'key=\"%s\"  itemSum=%.4f  runningInputCount=%i' % ( key, itemSum, self.inputCount ))
-        for key, valueMax in self.trackMaxes.items():
+        for key, valueMax in list(self.trackMaxes.items()):
             if '_dummy' != key:
                 self._prvLog( key + '=' + str( valueMax ))
 
@@ -185,4 +190,4 @@ class TimingInfo( object ):
 
     ###########################################################
     def _prvLog( self, msg ):
-        print( self.logPrefix + msg )
+        print(( self.logPrefix + msg ))

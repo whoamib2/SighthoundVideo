@@ -319,7 +319,7 @@ class ExportRunner(threading.Thread):
     ###########################################################
     def run(self):
         try:
-            from videoLib2.python.ClipUtils import remuxClip  # Lazy--loaded on first need
+            from backEnd.native.capture import remuxClip  # Lazy--loaded on first need
             self._owner._result = remuxClip(self._owner._fileList,
                                 self._owner._savePath,
                                 self._owner._startTime,

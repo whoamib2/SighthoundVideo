@@ -36,10 +36,11 @@
 #
 #*****************************************************************************
 
-import sys, os, socket, time, subprocess, shutil, hashlib, base64, httplib, re
-import traceback, random, pickle, webstuff, MessageIds, uuid
+import sys, os, socket, time, subprocess, shutil, hashlib, base64, http.client, re
+import traceback, random, pickle, uuid
+from . import webstuff, MessageIds
 import ctypes
-import urllib
+import urllib.request, urllib.parse, urllib.error
 
 from subprocess import Popen, PIPE
 
@@ -68,7 +69,7 @@ from appCommon.CommonStrings import kXNATExeName
 from appCommon.CommonStrings import kNginxMarkerArg
 from appCommon.CommonStrings import kXNATMarkerArg
 from logging import LoggerAdapter
-from DebugLogManager import DebugLogManager
+from .DebugLogManager import DebugLogManager
 
 
 """
@@ -92,7 +93,7 @@ https://vitamind.kilnhg.com/Code/Vitamin-D-Video/scratch/nginxBuild.git.
 
 After a build attempt all of the Windows specific code can be found in
 
-msvc\nginx_win32_sighthound_build\buildenv\build\nginx\src\os\win32
+msvc\\nginx_win32_sighthound_build\\buildenv\\build\\nginx\\src\\os\\win32
 
 The Windows support is (or at least appears) messy at some points. For example
 files are always opened as Unicode (ngx_open_file), with the cstr expected to
@@ -127,7 +128,7 @@ by setting the environment variable SIGHTHOUND_WEBDIR the 'web' folder, usually
 located in the Sighthound user directory, can be placed in a spot so no
 non-ASCII characters will be in the path at all. This seems to work well, thus
 the final approach could be that Sighthound Video creates the web folder
-automatically e.g. in C:\sighthoundvideo_web and then removes it at shutdown.
+automatically e.g. in C:\\sighthoundvideo_web and then removes it at shutdown.
 We haven't decided yet if we want that patchwork or not. Having a more Windows
 empathetical/working nginx would be the actual way to go of course.
 
@@ -146,7 +147,7 @@ is a must, at least under Windows.
 ###############################################################################
 
 # realm, used in the basic auth mechanism
-REALM = "Sighthound"
+REALM = "VigilCam"
 
 ###############################################################################
 
@@ -285,7 +286,7 @@ http {
         gzip_types text/css text/plain text/xml application/xml application/javascript application/x-javascript text/javascript application/json text/x-json image/x-icon;
         gzip_vary on;
         gzip_comp_level 9;
-        gzip_disable "MSIE [1-6]\.";
+        gzip_disable "MSIE [1-6]\\.";
         location /xmlrpc/ {
             proxy_pass $xmlrpc_url;
             proxy_set_header X-Real-IP $$remote_addr;
@@ -309,7 +310,7 @@ http {
             if_modified_since off;
             alias "$file_ping";
         }
-        location ~ ^/camera/(.*?)/(.*\.jpg)$$ {
+        location ~ ^/camera/(.*?)/(.*\\.jpg)$$ {
             proxy_pass http://127.0.0.1:$$1/$$2$$is_args$$args;
             proxy_set_header X-Real-IP $$remote_addr;
         }$cameraStreams
@@ -468,14 +469,14 @@ def _createKeyPairAndCertificate(basePath, contact, name, logger):
         cmd = [webstuff.openssl_exe()]
         cmd.extend(args)
         env2 = os.environ.copy()
-        env2[_kOpenSSLConfEnvVar] = ensureUtf8(conf)
+        env2[_kOpenSSLConfEnvVar] = ensureUnicode(conf)
         if _kIsWin:
             env3 = {}
-            for k, v in env2.iteritems():
+            for k, v in env2.items():
                 try:
                     env3[str(k)] = str(v)  # must _not_ be Unicode apparently
                 except:
-                    logger.error("Failed to copy env key=" + k.encode('utf-8') + " value=" + v.encode('utf-8'))
+                    logger.error("Failed to copy env key=%s value=%s" % (k, v))
             sinf = subprocess.STARTUPINFO()
             sinf.dwFlags |= subprocess.STARTF_USESHOWWINDOW
             proc = subprocess.Popen(cmd,
@@ -485,7 +486,7 @@ def _createKeyPairAndCertificate(basePath, contact, name, logger):
             proc = subprocess.Popen(cmd,
                 stdout=subprocess.PIPE, stderr=subprocess.STDOUT, env=env2)
         for ln in proc.stdout:
-            logger.info(">>> " + ln.rstrip())
+            logger.info(">>> " + _process_output_text(ln))
         return proc.wait()
 
     cwdBackup = os.getcwd()
@@ -549,6 +550,13 @@ def _createKeyPairAndCertificate(basePath, contact, name, logger):
 
 
 ###############################################################################
+def _process_output_text(line):
+    """Subprocess pipes are bytes unless text mode was requested."""
+    if isinstance(line, (bytes, bytearray)):
+        line = bytes(line).decode("utf-8", errors="replace")
+    return line.rstrip()
+
+
 def runNginx(*args):
     """ To be run in a forked process, calling the nginx entry point loaded via
     a shared library. This move was necessary to make nginx appear still as the
@@ -560,10 +568,15 @@ def runNginx(*args):
                  available to it via the common argc,argv parameters.
     """
     cdll = ctypes.CDLL(webstuff.shared_library())
-    argv = (ctypes.c_char_p * (len(args) + 1))()
-    argv[:-1] = args
+    encoded = []
+    for arg in args:
+        if isinstance(arg, str):
+            arg = arg.encode("utf-8")
+        encoded.append(arg)
+    argv = (ctypes.c_char_p * (len(encoded) + 1))()
+    argv[:-1] = encoded
     argv[-1] = None
-    argc = len(argv) - 1
+    argc = len(encoded)
     nginxExitcode = cdll.main(argc, argv)
     sys.exit(nginxExitcode)
 
@@ -699,7 +712,7 @@ class WebServer(object):
         s[kStatusKeyCertificateId] = self._certificateId
         s[kStatusKeyNumber] = self._lastStatus.get(
             kStatusKeyNumber, random.randint(0, 500000))
-        if 0 == cmp(self._lastStatus, s):
+        if self._lastStatus == s:
             return
         tmpfl = os.path.join(self._mainDir,
             "%s.%04x" % (kStatusFile, random.randint(0, 0xffff)))
@@ -878,7 +891,7 @@ class WebServer(object):
     ###########################################################
     def _resetMainDir(self):
         """ Cleans out the whole web server main directory, remove all old
-        work directories, status file(s) etc. Minus the OpenSSL stuff.
+        work directories, status open(s) etc. Minus the OpenSSL stuff.
         """
         if not os.path.exists(self._mainDir):
             try:
@@ -979,10 +992,9 @@ class WebServer(object):
         if useSharedLib:
             # we need to pass the filenames in a OS dependent encoding, because
             # otherwise Popen is going to fail ...
-            fsenc = sys.getfilesystemencoding()
             cmd = [exe,
-                '-c', ensureUnicode(self._configFile).encode(fsenc),
-                '-p', ensureUnicode(self._workDir   ).encode(fsenc)]
+                '-c', ensureUnicode(self._configFile),
+                '-p', ensureUnicode(self._workDir)]
         else:
             cmd = [exe, '-c', _kConfigName, '-p', "."]
             os.chdir(self._workDir)
@@ -1034,7 +1046,7 @@ class WebServer(object):
                     #       due to the application firewall giving us grief ...
                 if waitForExit:
                     for ln in proc.stdout:
-                        self._logger.info(">>> " + ln.rstrip())
+                        self._logger.info(">>> " + _process_output_text(ln))
                     exitcode = proc.wait()
                     self._logger.info("exitcode is %d" % exitcode)
                 else:
@@ -1086,7 +1098,7 @@ class WebServer(object):
         try:
             h = open(cfgFile)
             cfg = h.read()
-            self._logger.info("config file content: %s" % ensureUtf8(cfg))
+            self._logger.info("config file content: %s" % ensureUnicode(cfg))
         except:
             self._logger.error("error reading config file %s (%s)" %
                                (cfgFile, sys.exc_info()[1]))
@@ -1422,13 +1434,16 @@ def make_auth(user, passw, realm=None):
     # user names can contain a ':', which then has to to be escaped into a '::'
     esc = lambda x: x.replace(':', '::')
     if realm is not None:
-        ldg = lambda x: hashlib.md5(':'.join(x)).hexdigest()
+        ldg = lambda parts: hashlib.md5(
+            ":".join(parts).encode("utf-8")).hexdigest()
         return "%s:%s:%s" % (esc(user), esc(realm), ldg((user, realm, passw)))
     else:
         md = hashlib.sha1()
         # TODO: non-ASCII passwords trouble, but there's no official rule either
-        md.update(passw)
-        return "%s:{SHA}%s" % (esc(user), base64.b64encode(md.digest()))
+        raw = passw.encode("utf-8") if isinstance(passw, str) else passw
+        md.update(raw)
+        digest = base64.b64encode(md.digest()).decode("ascii")
+        return "%s:{SHA}%s" % (esc(user), digest)
 
 
 ###############################################################################
@@ -1934,7 +1949,7 @@ class PortOpener:
         timeout = self._timeout + _kPortOpenerCheckExtraSecs
         hc = HttpClient(timeout, self._logger)
         status, doc, _ = hc.get(url)
-        if httplib.OK == status:
+        if http.client.OK == status:
             return doc
         if status:
             self._logger.error("check URL status %d" % status)

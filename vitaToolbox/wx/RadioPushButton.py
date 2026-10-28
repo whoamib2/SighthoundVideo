@@ -257,7 +257,7 @@ class RadioPushButton(wx.Control):
 
         dc.DrawRoundedRectangle(0, 0, width, height, self._cornerRadius)
         dc.DrawText(self._label,
-                    (width - textWidth) / 2, (height - textHeight) / 2)
+                    (width - textWidth) // 2, (height - textHeight) // 2)
 
 
     ###########################################################
@@ -485,7 +485,7 @@ def test_main():
     bList[2].Disable()
 
     def OnButtonClick(event):
-        print "Click", event
+        print("Click", event)
 
     sizer = wx.BoxSizer(wx.HORIZONTAL)
     sizer.AddSpacer(64)
@@ -512,4 +512,4 @@ if __name__ == '__main__':
     if len(sys.argv) > 1 and sys.argv[1] == "test":
         test_main()
     else:
-        print "Try calling with 'test' as the argument."
+        print("Try calling with 'test' as the argument.")

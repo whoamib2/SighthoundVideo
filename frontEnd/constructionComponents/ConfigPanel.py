@@ -102,7 +102,7 @@ def test_main():
     """OB_REDACT
        Contains various self-test code.
     """
-    print "NO TESTS"
+    print("NO TESTS")
 
 
 ##############################################################################
@@ -110,4 +110,4 @@ if __name__ == '__main__':
     if len(sys.argv) > 1 and sys.argv[1] == "test":
         test_main()
     else:
-        print "Try calling with 'test' as the argument."
+        print("Try calling with 'test' as the argument.")

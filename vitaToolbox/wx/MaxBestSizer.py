@@ -148,7 +148,7 @@ class MaxBestSizer(wx.Sizer):
             if flag & wx.ALIGN_BOTTOM:
                 y += extraHeight
             elif flag & wx.ALIGN_CENTER_VERTICAL:
-                y += extraHeight / 2
+                y += extraHeight // 2
 
             height = maxHeight
 
@@ -158,7 +158,7 @@ class MaxBestSizer(wx.Sizer):
             if flag & wx.ALIGN_RIGHT:
                 x += extraWidth
             elif flag & wx.ALIGN_CENTER_HORIZONTAL:
-                x += extraWidth / 2
+                x += extraWidth // 2
 
             width = maxWidth
 
@@ -260,4 +260,4 @@ if __name__ == '__main__':
     if len(sys.argv) > 1 and sys.argv[1] == "test":
         test_main()
     else:
-        print "Try calling with 'test' as the argument."
+        print("Try calling with 'test' as the argument.")

@@ -1,0 +1,62 @@
+[project]
+name = "vigilcam"
+version = "7.0.16"
+description = "VigilCam desktop VMS, based on the Sighthound Video GPL-3.0 release"
+readme = "README.md"
+# 3.11+ stays supported. The Windows build prefers 3.14 and refuses 3.15:
+# onnxruntime-directml 1.24.4 has no win_amd64 cp315 wheel.
+requires-python = ">=3.11"
+license = "GPL-3.0-only"
+license-files = ["COPYING"]
+dependencies = [
+    "Pillow>=10",
+    "requests>=2.31",
+    "wxPython>=4.2",
+    "psutil>=6",
+    "numpy>=1.26",
+    # Video windows import OpenGL at startup. The package is pure Python.
+    "PyOpenGL>=3.1.7",
+    # Requests reads certifi by name when the app is frozen.
+    "certifi",
+]
+
+[project.optional-dependencies]
+package = ["pyinstaller>=6"]
+# USB cameras. DirectShow on Windows. RTSP and files use PyAV and do not need this.
+vision = ["opencv-python-headless>=4.8"]
+dev = ["pytest>=8", "ruff>=0.6"]
+
+[build-system]
+requires = ["setuptools>=77"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["appCommon*", "backEnd*", "frontEnd*", "launch*", "vitaToolbox*", "xnat*"]
+namespaces = false
+
+[tool.pytest.ini_options]
+pythonpath = ["."]
+testpaths = ["tests"]
+# Default norecursedirs is replaced, not extended. Keep hidden directories out,
+# and also skip a virtualenv named venv (no leading dot).
+norecursedirs = [
+    ".git",
+    ".venv",
+    "venv",
+    "build",
+    "dist",
+    ".*",
+    "*.egg",
+    "*.egg-info",
+    "__pycache__",
+]
+
+[tool.ruff]
+target-version = "py311"
+extend-exclude = ["build", "dist"]
+
+[tool.ruff.lint]
+# The tree is still legacy style. This selection catches syntax that will
+# not import (undefined names, invalid syntax) without rewriting every file.
+select = ["E9", "F821", "F822", "F823"]

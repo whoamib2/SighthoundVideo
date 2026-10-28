@@ -43,19 +43,19 @@ Contains the NetworkMessageServer class.
 """
 
 # Python imports...
-import cPickle
+import pickle
 import datetime
 import logging
 import shutil
 import operator
 import os
 import time
-from SocketServer import TCPServer, BaseRequestHandler
-import urllib
-import xmlrpclib
-import sys, threading, random, string, cgi, uuid, traceback
+from socketserver import TCPServer, BaseRequestHandler
+import urllib.request, urllib.parse, urllib.error
+import xmlrpc.client
+import sys, threading, random, string, uuid, traceback
 
-from SimpleXMLRPCServer import SimpleXMLRPCRequestHandler
+from xmlrpc.server import SimpleXMLRPCRequestHandler
 
 # Common 3rd-party imports...
 
@@ -102,17 +102,17 @@ from appCommon.SearchUtils import SearchConfig
 from appCommon.XmlRpcClientIdWrappers import XMLRPCServerWithClientId
 from appCommon.XmlRpcClientIdWrappers import CrossDomainXMLRPCRequestHandler
 
-from BackEndPrefs import BackEndPrefs, kClipQualityProfile, kClipResolution, kClipResolutionDefault, kClipMergeThreshold, kHardwareAccelerationDevice
-from CameraManager import CameraManager
-from ClipManager import ClipManager
-from DataManager import DataManager
-import MessageIds
-from RealTimeRule import RealTimeRule
-from ResponseDbManager import ResponseDbManager
-from SavedQueryDataModel import convertOld2NewSavedQueryDataModel
-from DebugLogManager import DebugLogManager
-from triggers.TargetTrigger import getQueryForDefaultRule
-from WebServer import make_auth, user_from_auth, REALM
+from .BackEndPrefs import BackEndPrefs, kClipQualityProfile, kClipResolution, kClipResolutionDefault, kClipMergeThreshold, kHardwareAccelerationDevice
+from .CameraManager import CameraManager
+from .ClipManager import ClipManager
+from .DataManager import DataManager
+from . import MessageIds
+from .RealTimeRule import RealTimeRule
+from .ResponseDbManager import ResponseDbManager
+from .SavedQueryDataModel import convertOld2NewSavedQueryDataModel
+from .DebugLogManager import DebugLogManager
+from .triggers.TargetTrigger import getQueryForDefaultRule
+from .WebServer import make_auth, user_from_auth, REALM
 from vitaToolbox.threading.ThreadPoolMixIn import ThreadPoolMixIn
 from vitaToolbox.threading.PriorityLock import PriorityLock
 
@@ -387,7 +387,7 @@ class NetworkMessageServer(object):
 
         self._debugLogManager = DebugLogManager("NMS", localDataDir)
 
-        assert type(localDataDir) == unicode
+        assert type(localDataDir) == str
 
         self._foundServiceMarkerArg = kReservedMarkerSvcArg in sys.argv
         self._logger.info("service-launched: %s" % self._foundServiceMarkerArg)
@@ -432,7 +432,7 @@ class NetworkMessageServer(object):
         # A pickled dictionary of UPNP devices discovered.
         #   Key: usn
         #   Value: a UpnpDevice (see vitaToolbox.networking.Upnp.py)
-        self._pickledUpnpDeviceDict = cPickle.dumps({})
+        self._pickledUpnpDeviceDict = pickle.dumps({})
 
         # The revision number of the dictionary; updates ever time it's changed.
         self._upnpDictRevNum = 0
@@ -440,7 +440,7 @@ class NetworkMessageServer(object):
         # A pickled dictionary of ONVIF devices discovered.
         #   Key: uuid
         #   Value: an OnvifDevice (see vitaToolbox.networking.Onvif.py)
-        self._pickledOnvifDeviceDict = cPickle.dumps({})
+        self._pickledOnvifDeviceDict = pickle.dumps({})
 
         # The revision number of the dictionary; updates ever time it's changed.
         self._onvifDictRevNum = 0
@@ -451,7 +451,7 @@ class NetworkMessageServer(object):
         # initialized dictionary containing the keys, "pcapEnabled" and
         # "pcapStatus", both set to None. During the life of the pcap process,
         # the values will change to reflect its progress or errors.
-        self._pickledPacketCaptureInfo = cPickle.dumps({})
+        self._pickledPacketCaptureInfo = pickle.dumps({})
 
         # A cache of USB webcams...
         self._localCameraNames = []
@@ -541,8 +541,8 @@ class NetworkMessageServer(object):
                 try:
                     portFilePath = os.path.join(self._localDataDir,
                                                 kPortFileName)
-                    portFile = open(portFilePath, 'w')
-                    cPickle.dump(port, portFile)
+                    portFile = open(portFilePath, 'wb')
+                    pickle.dump(port, portFile)
                     portFile.close()
                 except:
                     self._logger.critical("cannot write port file %s (%s)" % \
@@ -899,14 +899,14 @@ class NetworkMessageServer(object):
             try:
                 pickledRule = self._getRule(ruleName)
                 pickledQuery = self._getQuery(queryName)
-                query = cPickle.loads(pickledQuery)
+                query = pickle.loads(pickledQuery)
                 if query.getVideoSource().getLocationName() != camLocation:
                     # Update as needed to reflect the new camera name caps.
                     query.getVideoSource().setLocationName(camLocation)
                     queryFilename = os.path.join(self._ruleDir,
                                                   queryName+kQueryExt)
                     if not writeObjectToFile(queryFilename, query, self._logger):
-                        self._logger.error("Failed to write query to " + ensureUtf8(queryFilename))
+                        self._logger.error("Failed to write query to " + ensureUnicode(queryFilename))
 
                 self._queue.put([MessageIds.msgIdRuleAdded, ruleName,
                                  pickledRule, pickledQuery])
@@ -963,10 +963,10 @@ class NetworkMessageServer(object):
         for name, _, _, enabled, _ in \
                                    self._getRuleInfoForLocation(origLocation):
             try:
-                query = cPickle.loads(self._getQuery(name))
+                query = pickle.loads(self._getQuery(name))
                 query.getVideoSource().setLocationName(camLocation)
-                rule = cPickle.loads(self._getRule(name))
-                self._addRule(cPickle.dumps(query), enabled, name, False)
+                rule = pickle.loads(self._getRule(name))
+                self._addRule(pickle.dumps(query), enabled, name, False)
                 self._setRuleSchedule(query.getName(), rule.getSchedule())
             except Exception:
                 self._logger.warning("Edit camera exception", exc_info=True)
@@ -1053,8 +1053,8 @@ class NetworkMessageServer(object):
         if self._areRulesLocked():
             return
         try:
-            rule = cPickle.loads(self._getRule(origName))
-            query = cPickle.loads(pickledQuery)
+            rule = pickle.loads(self._getRule(origName))
+            query = pickle.loads(pickledQuery)
             if not postMessage:
                 self._logger.info(
                     "Deleting rule %s without notifying the backend" % origName
@@ -1073,7 +1073,7 @@ class NetworkMessageServer(object):
         @return pickledQueryBin  xmlrpclib.Binary-wrapped
                                  pickled SavedQueryDataModel or None
         """
-        return xmlrpclib.Binary(self._getQuery(queryName))
+        return xmlrpc.client.Binary(self._getQuery(queryName))
 
 
     ###########################################################
@@ -1095,13 +1095,13 @@ class NetworkMessageServer(object):
             return None
 
         # Read the query from disk
-        queryFile = file(filePath, 'r')
+        queryFile = open(filePath, 'rb')
         pickledQuery = queryFile.read()
         queryFile.close()
 
         # Unpickle so we can upgrade and/or verify it.
         try:
-            queryModel = cPickle.loads(pickledQuery)
+            queryModel = pickle.loads(pickledQuery)
         except Exception:
             self._logger.error(
                 "The query " + str(queryName) + " could not be unpickled for validation",
@@ -1121,7 +1121,7 @@ class NetworkMessageServer(object):
             )
 
         try:
-            pickledQuery = cPickle.dumps(queryModel)
+            pickledQuery = pickle.dumps(queryModel)
         except Exception:
             self._logger.error(
                 "The query data model could not be pickled",
@@ -1157,7 +1157,7 @@ class NetworkMessageServer(object):
                         rules.append(name)
                         break
 
-            except Exception, e:
+            except Exception as e:
                 self._logger.error("Error inspecting query - " + str(e))
 
         rules = list(set(rules))
@@ -1212,7 +1212,7 @@ class NetworkMessageServer(object):
             os.mkdir(self._ruleDir)
 
         try:
-            query = cPickle.loads(pickledQuery)
+            query = pickle.loads(pickledQuery)
         except Exception:
             self._logger.error("The query could not be unpickled")
             return False
@@ -1238,7 +1238,7 @@ class NetworkMessageServer(object):
                 self._safeRename(origRuleFilename,  origRuleFilename+kBackupExt)
                 self._safeRename(origQueryFilename, origQueryFilename+kBackupExt)
             except:
-                self._logger.error("Failed to back up rule and query files for '" + ensureUtf8(origName) +
+                self._logger.error("Failed to back up rule and query files for '" + ensureUnicode(origName) +
                                     ": " + traceback.format_exc())
                 try:
                     os.remove(origRuleFilename+kBackupExt)
@@ -1250,15 +1250,15 @@ class NetworkMessageServer(object):
         # Create a rule
         rule = RealTimeRule(name, camLoc)
         rule.setEnabled(enabled)
-        pickledRule = cPickle.dumps(rule)
-        pickledQuery = cPickle.dumps(query)
+        pickledRule = pickle.dumps(rule)
+        pickledQuery = pickle.dumps(query)
 
         # Write the rule and query to disk
         success = False
         if not writeStringToFile(ruleFilename, pickledRule, self._logger):
-            self._logger.error("Failed to write rule '" + ensureUtf8(name) + "' to " + ensureUtf8(ruleFilename))
+            self._logger.error("Failed to write rule '" + ensureUnicode(name) + "' to " + ensureUnicode(ruleFilename))
         elif not writeStringToFile(queryFilename, pickledQuery, self._logger):
-            self._logger.error("Failed to write query '" + ensureUtf8(name) + "' to " + ensureUtf8(queryFilename))
+            self._logger.error("Failed to write query '" + ensureUnicode(name) + "' to " + ensureUnicode(queryFilename))
         else:
             success = True
 
@@ -1283,7 +1283,7 @@ class NetworkMessageServer(object):
                     self._safeRename(origRuleFilename+kBackupExt,  origRuleFilename)
                     self._safeRename(origQueryFilename+kBackupExt, origQueryFilename)
                 except:
-                    self._logger.error("Failed to restore rule and query files for '" + ensureUtf8(origName) +
+                    self._logger.error("Failed to restore rule and query files for '" + ensureUnicode(origName) +
                                         ": " + ": " + traceback.format_exc() )
 
         return success
@@ -1342,7 +1342,7 @@ class NetworkMessageServer(object):
         @return pickledRuleBin  A pickled RuleDataModel or None,
                                 xmlrpclib.Binary() encoded.
         """
-        return xmlrpclib.Binary(self._getRule(ruleName))
+        return xmlrpc.client.Binary(self._getRule(ruleName))
 
 
     ###########################################################
@@ -1360,7 +1360,7 @@ class NetworkMessageServer(object):
             return None
 
         # Write the rule to disk
-        ruleFile = file(filePath, 'r')
+        ruleFile = open(filePath, 'rb')
         pickledRule = ruleFile.read()
         ruleFile.close()
 
@@ -1382,13 +1382,13 @@ class NetworkMessageServer(object):
             self._logger.error("Rule %s doesn't exist" % filePath)
             return
 
-        ruleFile = file(filePath, 'r')
-        rule = cPickle.load(ruleFile)
+        ruleFile = open(filePath, 'rb')
+        rule = pickle.load(ruleFile)
         ruleFile.close()
 
-        ruleFile = file(filePath, 'w')
+        ruleFile = open(filePath, 'wb')
         rule.setSchedule(schedule)
-        cPickle.dump(rule, ruleFile)
+        pickle.dump(rule, ruleFile)
         ruleFile.close()
 
         self._queue.put([MessageIds.msgIdRuleScheduleUpdated, ruleName,
@@ -1410,13 +1410,13 @@ class NetworkMessageServer(object):
             self._logger.error("Rule %s doesn't exist" % filePath)
             return
 
-        ruleFile = file(filePath, 'r')
-        rule = cPickle.load(ruleFile)
+        ruleFile = open(filePath, 'rb')
+        rule = pickle.load(ruleFile)
         ruleFile.close()
 
-        ruleFile = file(filePath, 'w')
+        ruleFile = open(filePath, 'wb')
         rule.setEnabled(enable)
-        cPickle.dump(rule, ruleFile)
+        pickle.dump(rule, ruleFile)
         ruleFile.close()
 
         self._queue.put([MessageIds.msgIdRuleEnabled, ruleName, enable])
@@ -1435,7 +1435,7 @@ class NetworkMessageServer(object):
 
         for name in self._getRuleNames():
             try:
-                rule = cPickle.loads(self._getRule(name))
+                rule = pickle.loads(self._getRule(name))
             except Exception:
                 self._logger.error("Rule %s could not be loaded" % name)
                 continue
@@ -1465,7 +1465,7 @@ class NetworkMessageServer(object):
                           responseNames) for the given rule or None.
         """
         try:
-            rule = cPickle.loads(self._getRule(ruleName))
+            rule = pickle.loads(self._getRule(ruleName))
         except Exception:
             self._logger.error("Rule %s could not be loaded" % ruleName)
             return None
@@ -1738,8 +1738,8 @@ class NetworkMessageServer(object):
         result = (queueLength, startTime, stopTime, processAt, sentAt, ruleName)
 
         # Pickle, since XMLRPC doesn't handle long ints...
-        pickledResult = cPickle.dumps(result, cPickle.HIGHEST_PROTOCOL)
-        return xmlrpclib.Binary(pickledResult)
+        pickledResult = pickle.dumps(result, pickle.HIGHEST_PROTOCOL)
+        return xmlrpc.client.Binary(pickledResult)
 
 
     ###########################################################
@@ -2010,7 +2010,7 @@ class NetworkMessageServer(object):
         @return pickedUpnpDeviceDict  A pickled dict of UpnpDevice objects.
                                       Keyed by usn.
         """
-        return xmlrpclib.Binary(self._pickledUpnpDeviceDict)
+        return xmlrpc.client.Binary(self._pickledUpnpDeviceDict)
 
 
     ###########################################################
@@ -2055,7 +2055,7 @@ class NetworkMessageServer(object):
         @return pickedOnvifDeviceDict  A pickled dict of OnvifDevice objects.
                                       Keyed by uuid.
         """
-        return xmlrpclib.Binary(self._pickledOnvifDeviceDict)
+        return xmlrpc.client.Binary(self._pickledOnvifDeviceDict)
 
 
     ###########################################################
@@ -2233,7 +2233,7 @@ class NetworkMessageServer(object):
                 )
             ]
             names = activeCams+frozenCams+inactiveCams
-            names.sort(cmp=lambda x,y: cmp(x.lower(), y.lower()))
+            names.sort(key=lambda x: x.lower())
 
             # If we only have one camera location hide "Any camera".
             if len(names) != 1:
@@ -2330,7 +2330,7 @@ class NetworkMessageServer(object):
 
             # Get inactive cameras out, ignoring imported ones...
             for camName in clipCams:
-                if not camName.endswith(kImportSuffix) and camName not in camerasDict.keys():
+                if not camName.endswith(kImportSuffix) and camName not in list(camerasDict.keys()):
                     allClipCamRules = self._getRuleInfoForLocation(camName)
                     clipCamRules = []
                     if len(allClipCamRules):
@@ -2343,7 +2343,7 @@ class NetworkMessageServer(object):
                         'rules': clipCamRules
                     }
 
-            return True, camerasDict.values();
+            return True, list(camerasDict.values());
         except Exception:
             self._logger.error("Remote exception", exc_info=True)
             return False, _kRemoteExceptionError
@@ -2736,7 +2736,7 @@ class NetworkMessageServer(object):
         """
         try:
             names = self._camMgr.getCameraLocations()
-            names.sort(cmp=lambda x,y: cmp(x.lower(), y.lower()))
+            names.sort(key=lambda x: x.lower())
             settings = []
             for name in names:
                 # This is legacy - we don't want to be sending these outside the network.
@@ -2788,7 +2788,7 @@ class NetworkMessageServer(object):
                 if ms in clipInfo.startList:
                     return True, self._getClipInfoFromMatchingObject(clipInfo)
 
-        except Exception, _:
+        except Exception as _:
             self._logger.error("Remote exception", exc_info=True)
             return False, _kRemoteExceptionError
 
@@ -2975,7 +2975,7 @@ class NetworkMessageServer(object):
             # Construct a URI for the clip.
             clipUri = "/%s/%s" % (kRemoteFolder, filename)
 
-        except Exception, e:
+        except Exception as e:
             self._logger.error("Remote exception", exc_info=True)
             return False, _kRemoteExceptionError + ": " + str(e)
 
@@ -3043,7 +3043,7 @@ class NetworkMessageServer(object):
         cameraWsgiPort = self._cameraWsgiPort.get(cameraName, None)
         queryString = ""
         if options is not None:
-            queryString = urllib.urlencode(queryString)
+            queryString = urllib.parse.urlencode(queryString)
             if 0 < len(queryString):
                 queryString = "?" + queryString
         if cameraStatus == kCameraConnecting and cameraWsgiPort is not None:
@@ -3103,7 +3103,7 @@ class NetworkMessageServer(object):
             self._logger.info( "NMS.callNotificationGateway: calling notification gateway params=%s" % ( str( params )))
             hc      = HttpClient(kGatewayTimeoutSecs, self._logger)
             url     = "https://%s%s" % (kGatewayHost, kGatewayPath)
-            payload = urllib.urlencode(params)
+            payload = urllib.parse.urlencode(params)
             status, body, _ = hc.post(url, payload, headers)
             status = 500 if status is None else status
             self._logger.info("response %d: %s" % (status, body))
@@ -3162,7 +3162,9 @@ class NetworkMessageServer(object):
             if not success:
                 return False, data
 
-            data = cgi.parse_qs(data)
+            if isinstance(data, bytes):
+                data = data.decode("utf-8", "replace")
+            data = urllib.parse.parse_qs(data)
             guids = data.get('guid', None);
             if guids is None or 1 != len(guids):
                 return False, "gateway did not return (a single) GUID!?"
@@ -3574,7 +3576,7 @@ class NetworkMessageServer(object):
         self._logger.info("license changed from '%s' (%s) to '%s' (%s) ..." %
                           (oldEdition, oldCameras, newEdition, newCameras))
         maxCameras = int(newCameras)
-        maxCameras = sys.maxint if maxCameras < 1 else maxCameras
+        maxCameras = sys.maxsize if maxCameras < 1 else maxCameras
         self._logger.info("maximum number of cameras is %d" % maxCameras)
 
         self._camMgr.freezeCameras(maxCameras)

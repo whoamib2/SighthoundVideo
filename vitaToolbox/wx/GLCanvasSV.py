@@ -72,15 +72,30 @@ from vitaToolbox.wx.BindChildren import bindChildren
 
 
 
+def _gl_text(value):
+    """OpenGL string query as text.
+
+    PyOpenGL 3 returns ``bytes`` from ``glGetString``. ``None`` means the
+    context has no such string (or the context is not current).
+    """
+    if value is None:
+        return "(none)"
+    if isinstance(value, str):
+        text = value
+    elif isinstance(value, (bytes, bytearray, memoryview)):
+        text = bytes(value).split(b"\x00", 1)[0].decode("utf-8", errors="replace")
+    else:
+        text = str(value)
+    text = text.strip()
+    return text or "(none)"
+
+
 def getGLAttribute(attr):
     try:
-        res = gl.glGetString( attr )
-        if res is None:
-            res = '(none)'
-    except:
-        res = '(none)'
+        return _gl_text(gl.glGetString(attr))
+    except Exception:
         getLogger(kFrontEndLogName).exception("Failed to retrieve " + str(attr))
-    return res
+        return "(none)"
 
 
 _kDefaultInitSize = (640, 480)
@@ -150,9 +165,9 @@ class GLCanvasSV( GLCanvas ):
 
         self._logger.info('location=' + self._location + '  glVendor=\"' + self._glVendor + '\"  glOpenGLVersion=\"' + self._glOpenGLVersion +\
               '\"  glShadingLangVersion=\"' + self._glShadingLangVersion + '\"  glRenderer=\"' + self._glRenderer + '\"')
-        version = self._glOpenGLVersion.split(".") if self._glOpenGLVersion is not None else None
-        if version is None or len(version) < 1 or int(version[0]) < 2:
-            raise GLExceptionSV("Incorrect GL version " + self._glOpenGLVersion + "!", self._glOpenGLVersion)
+        version = self._glOpenGLVersion.split(".") if self._glOpenGLVersion not in (None, "", "(none)") else None
+        if version is not None and (len(version) < 1 or not version[0].isdigit() or int(version[0]) < 2):
+            raise GLExceptionSV("Incorrect GL version " + str(self._glOpenGLVersion) + "!", self._glOpenGLVersion)
         # Extensions can be really long, like ...:
         #   GL_ARB_color_buffer_float GL_ARB_depth_buffer_float GL_ARB_depth_clamp GL_ARB_depth_texture GL_ARB_draw_buffers GL_ARB_draw_elements_base_vertex
         #       GL_ARB_draw_instanced GL_ARB_fragment_program GL_ARB_fragment_program_shadow GL_ARB_fragment_shader GL_ARB_framebuffer_object
@@ -209,6 +224,9 @@ class GLCanvasSV( GLCanvas ):
         if not self.IsShown():
             return
 
+        if not self.bDidInitTexture:
+            self.InitTexture()
+
         # These functions can throw exceptions.  Let us catch them and print
         # them out in the logs, but don't let them leave this function so the
         # app can run undisturbed...
@@ -263,7 +281,10 @@ class GLCanvasSV( GLCanvas ):
         self._cachedSetSize = None
 
         if self._cacheSizeImage == sizeImage and self._cacheSizeWindow == sizeWindow:
-            self.SetCurrent( self.glContextSV )
+            try:
+                self.SetCurrent( self.glContextSV )
+            except Exception:
+                return
             return
 
         offsetX = 0
@@ -272,7 +293,7 @@ class GLCanvasSV( GLCanvas ):
         imY     = sizeImage[ 1 ]
         windowX = sizeWindow[ 0 ]
         windowY = sizeWindow[ 1 ]
-        if imY == 0 or windowY == 0:
+        if imX == 0 or imY == 0 or windowX == 0 or windowY == 0:
             return
 
         ratioWindow = float( windowX ) / float( windowY )
@@ -302,7 +323,10 @@ class GLCanvasSV( GLCanvas ):
         # 2015-01-22  DLE  ... and it seems important to SetCurrent immediately before the reshape (which used the global
         # gl) to avoid a multi-threaded / multi-canvas confusion about which is being rendered.  (In SV camera view, I
         # have multiple - at least the largeView and each small camera view.)
-        self.SetCurrent( self.glContextSV )
+        try:
+            self.SetCurrent( self.glContextSV )
+        except Exception:
+            return
         self.storedOffset = ( int( offsetX*self.GetContentScaleFactor() ), int( offsetY*self.GetContentScaleFactor() ) )
         self.storedSize = ( int( widthAdj*self.GetContentScaleFactor() ), int( heightAdj*self.GetContentScaleFactor() ))
 
@@ -315,7 +339,11 @@ class GLCanvasSV( GLCanvas ):
         if self.bDidInitTexture:
             return
 
-        self.SetCurrent( self.glContextSV )
+        try:
+            self.SetCurrent( self.glContextSV )
+        except Exception:
+            # The native window may not exist yet. OnPaint retries this.
+            return
 
         gl.glClearColor(*_kDefaultBgColorRGBAf)
 
@@ -346,7 +374,10 @@ class GLCanvasSV( GLCanvas ):
         if self._cachedSetSize is not None:
             self.SetImageAndWindowSizes( self._cachedSetSize[0], self._cachedSetSize[1], self._cachedSetSize[2] )
 
-        self.SetCurrent( self.glContextSV )
+        try:
+            self.SetCurrent( self.glContextSV )
+        except Exception:
+            return
         if ( self._cacheFrameSizeWidth == width ) and ( self._cacheFrameSizeHeight == height ):
             # try the faster routine
             gl.glTexSubImage2D( self._texType, 0, 0, 0, width, height, self._inputFormat, gl.GL_UNSIGNED_BYTE, data )
@@ -377,7 +408,7 @@ class GLCanvasSV( GLCanvas ):
             self.UpdateTextureRaw( data, width, height )
             self.HandleDraw(True)
         except:
-            print("Crash in updateImageBuffer size %s" % traceback.format_exc())
+            print(("Crash in updateImageBuffer size %s" % traceback.format_exc()))
 
     ###########################################################
     def GetImageData(self):
@@ -415,7 +446,12 @@ class GLContextSV( GLContext ):
         # 2015-02-05 14:44:50,912 - WARNING - _core.py - ProcessEvent - :
         # 2015-02-05 14:44:50,912 - WARNING - _core.py - ProcessEvent - C++ assertion "Assert failure" failed at /BUILD/wxPython-src-3.0.1.1/src/osx/cocoa/glcanvas.mm(42) in WXGLCreateContext(): NSOpenGLContext creation failed
         GLContext.__init__( self, winCanvas )
-        self.SetCurrent( winCanvas )
+        try:
+            self.SetCurrent( winCanvas )
+        except Exception:
+            # GTK/GLX requires a realized window. The canvas calls SetCurrent
+            # again before it draws, after the toplevel window is on screen.
+            pass
         # Possibly this (fixed):
         #   http://trac.wxwidgets.org/ticket/16555#no1
         #try:

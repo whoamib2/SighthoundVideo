@@ -56,8 +56,9 @@ from vitaToolbox.loggingUtils.LoggingUtils import getLogger
 # Local imports...
 from appCommon.CommonStrings import kTestLiveFileName
 from appCommon.CommonStrings import kTestLiveHeaderSize
-import MessageIds
-from videoLib2.python.StreamReader import StreamReader
+from . import MessageIds
+from backEnd.native.capture import StreamReader
+from appCommon.LiveViewBuffer import blank_bytes, format_test_live_header
 
 def OB_KEYARG(a): return a
 
@@ -83,8 +84,8 @@ def runStream(cameraUri, storageDir, logDir, configDir, queue, extras):
     @param  queue           A queue used to send messages to the back end.
     @param  extras          A dictionary of extra params for the camera.
     """
-    assert type(storageDir) == unicode
-    assert type(logDir) == unicode
+    assert type(storageDir) == str
+    assert type(logDir) == str
 
     camera = TestStream(cameraUri, storageDir, logDir, configDir, queue, extras)
     camera.run()
@@ -117,7 +118,7 @@ class TestStream(object):
         self._ms = 0
 
         self._extras = extras
-        for k,v in _kCaptureExtras.iteritems():
+        for k,v in _kCaptureExtras.items():
             self._extras[k] = v
 
         self._mmap = None
@@ -223,8 +224,9 @@ class TestStream(object):
             self._mmap.seek(0)
             dataArr = (c_char*(frame.height*frame.width*3)).from_address(
                                                             frame.buffer.value)
-            header = "%d%4d%4d\n" % (self._sharedFrameCounter, frame.width,
-                                   frame.height)
+            header = format_test_live_header(
+                self._sharedFrameCounter, frame.width, frame.height
+            )
             self._mmap.write(header + dataArr.raw)
             self._sharedFrameCounter = (self._sharedFrameCounter+1) % 10
 
@@ -250,7 +252,7 @@ class TestStream(object):
             f = open(filename, 'w+b')
 
         f.seek(0)
-        f.write('\x00'*size)
+        f.write(blank_bytes(size))
         # OSX requires a flush
         f.flush()
         try:
@@ -267,7 +269,7 @@ class TestStream(object):
 
         # Write 'black' to the file to mark it as no longer valid.
         self._mmap.seek(0)
-        self._mmap.write('\x00'*self._mmap.size())
+        self._mmap.write(blank_bytes(self._mmap.size()))
         self._mmap.close()
         self._mmap = None
 

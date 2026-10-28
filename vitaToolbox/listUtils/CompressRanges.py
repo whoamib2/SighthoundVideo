@@ -76,7 +76,7 @@ def compressRanges(rangeList):
     start, end = rangeList[0]
     compressedRanges = [(start, end)]
 
-    for i in xrange(1, len(rangeList)):
+    for i in range(1, len(rangeList)):
         start, end = rangeList[i]
         prevStart, prevEnd = compressedRanges[-1]
 

@@ -42,6 +42,25 @@ import ctypes
 # Common 3rd-party imports...
 import wx
 
+from appCommon.startuplog import instance_lock_name
+from appCommon.startuplog import log_startup
+
+
+# Window class names used by wx on Windows. Phoenix builds have used both.
+_WINDOW_CLASSES = ("wxWindowClassNR", "wxWindowNR")
+
+
+###########################################################
+def _bring_existing_window_forward(mainWindowName):
+    """Return True when an existing top-level window was found and raised."""
+    if wx.Platform != '__WXMSW__':
+        return False
+    for className in _WINDOW_CLASSES:
+        hwnd = ctypes.windll.user32.FindWindowW(className, mainWindowName)
+        if hwnd:
+            ctypes.windll.user32.SetForegroundWindow(hwnd)
+            return True
+    return False
 
 
 ###########################################################
@@ -63,32 +82,26 @@ def lookForOtherInstances(mainWindowName=None):
     if mainWindowName is None:
         mainWindowName = appName
 
-    if type(mainWindowName) == str:
+    if isinstance(mainWindowName, (bytes, bytearray)):
         mainWindowName = mainWindowName.decode('utf-8')
 
     # Make an object to check for a single instance of apps.  We
     # temporarily disable logs so we never see a "stale lock file" error...
+    lockName = instance_lock_name(appName, wx.GetUserId())
     log = wx.LogNull()
-    singleInstanceChecker = \
-        wx.SingleInstanceChecker("%s-%s" % (appName, wx.GetUserId()))
+    singleInstanceChecker = wx.SingleInstanceChecker(lockName)
     del log
 
     if singleInstanceChecker.IsAnotherRunning():
-        # On Windows, try to bring the other process to the front...
-        # ...note that we assume the class is wxWindowClassNR, which we got
-        # from:
-        #   hwnd = self.GetHandle()
-        #   className = ctypes.create_unicode_buffer(1024)
-        #   result = ctypes.windll.user32.GetClassNameW(hwnd, className, 1024)
-        #   print className.value
-        if wx.Platform == '__WXMSW__':
-            hwnd = ctypes.windll.user32.FindWindowW(u'wxWindowClassNR', #PYCHECKER OK: No module attribute (windll) found
-                                                    mainWindowName)
-            if hwnd:
-                ctypes.windll.user32.SetForegroundWindow(hwnd) #PYCHECKER OK: No module attribute (windll) found
-
-        # OK, return None--we weren't first...
-        return None
+        # A lock we cannot create also reports "another instance". Only stop
+        # when a real window from that instance can be brought forward.
+        if _bring_existing_window_forward(mainWindowName):
+            log_startup("another instance is already running (%s)" % lockName)
+            return None
+        log_startup(
+            "single-instance lock %s is set, but no window was found; continuing"
+            % lockName
+        )
 
     # Return the checker, for the caller to hold...
     return singleInstanceChecker

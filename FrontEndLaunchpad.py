@@ -51,7 +51,30 @@ import os
 import sys
 import traceback, tempfile, time, uuid
 
+from appCommon.startuplog import console_requested
+from appCommon.startuplog import enable_windows_console
+from appCommon.startuplog import log_startup
+from appCommon.startuplog import log_startup_exception
+from appCommon.startuplog import show_fatal
+from appCommon.startuplog import startup_log_path
+
 _kIsWin = "win32" == sys.platform
+
+# A windowed executable has nowhere to print. Open a console before anything
+# else can fail when the user asked for one.
+if console_requested():
+    enable_windows_console()
+log_startup("FrontEndLaunchpad import pid=%s argv=%s frozen=%s" % (
+    os.getpid(), sys.argv, hasattr(sys, "frozen")))
+
+# Bundled images and sounds are opened from sys._MEIPASS (or the executable
+# directory), not from the working directory. Install that lookup before any
+# UI module constructs a wx bitmap.
+try:
+    from appCommon.resources import install_resource_hooks
+    install_resource_hooks()
+except Exception:
+    log_startup_exception("could not install resource path hooks")
 
 
 def get_utf8_arguments_windows_only():
@@ -75,7 +98,7 @@ def get_utf8_arguments_windows_only():
         (("CommandLineToArgvW", windll.shell32))
     argc = c_int(0)
     argv_unicode = CommandLineToArgvW(GetCommandLineW(), byref(argc))
-    argv = [argv_unicode[i].encode('utf-8') for i in xrange(0, argc.value)]
+    argv = [argv_unicode[i] for i in range(0, argc.value)]
 
     if not hasattr(sys, 'frozen'):
         # If this is an executable produced by py2exe or bbfreeze, then it will
@@ -86,22 +109,27 @@ def get_utf8_arguments_windows_only():
         # Also skip option arguments to the Python interpreter.
         while len(argv) > 0:
             arg = argv[0]
-            if not arg.startswith(u"-") or arg == u"-":
+            if not arg.startswith("-") or arg == "-":
                 break
             argv = argv[1:]
-            if arg == u'-m':
+            if arg == '-m':
                 # sys.argv[0] should really be the absolute path of the module source,
                 # but never mind
                 break
-            if arg == u'-c':
-                argv[0] = u'-c'
+            if arg == '-c':
+                argv[0] = '-c'
                 break
     # Make our changes available app-wide...
     sys.argv = argv
 
 if hasattr(sys, 'frozen'):
     if _kIsWin:
-        get_utf8_arguments_windows_only()
+        try:
+            get_utf8_arguments_windows_only()
+        except Exception:
+            log_startup_exception("could not read the Unicode command line")
+        if console_requested():
+            enable_windows_console()
 
 
 # TODO: Do we still need this?  All this is doing is forcing linecache.getline
@@ -120,9 +148,10 @@ def _disable_linecache():
     linecache.getline = fake_getline
 
 
-# CxFreeze makes the app's working directory start in the "MacOS" directory; We
-# change our working directory to the Resources directory so that our bmp's and
-# and other resource files can be found and loaded.
+# CxFreeze used to start in the MacOS directory. Resource files are resolved by
+# appCommon.resources (sys._MEIPASS or the executable directory), not by this
+# working directory. The directory change remains so older relative paths that
+# are not bundled resource roots still match the historical frozen layout.
 # ...we also call _disable_linecache(), which also seems to be done by the
 # normal __boot__ script.
 if hasattr(sys, 'frozen'):
@@ -137,13 +166,22 @@ from multiprocessing import freeze_support
 
 # Set a handler to catch c crashes in all processes...
 from vitaToolbox.loggingUtils.CatchCCrashes import catchCCrashes
-catchCCrashes()
+try:
+    catchCCrashes()
+except Exception:
+    log_startup_exception("catchCCrashes failed")
 
 errFileTag = "error"
 
 def main():
+    errFileTag = "error"
 
     try:
+        if os.environ.get("SIGHTHOUND_TEST_UI") == "1":
+            log_startup("SIGHTHOUND_TEST_UI probe")
+            from frontEnd.startup_probe import run_startup_probe
+            run_startup_probe()
+            return
         if (len(sys.argv) > 1) and (sys.argv[1] == '--backEnd'):
             errFileTag = "launch"
             from backEnd import BackEndApp
@@ -170,20 +208,38 @@ def main():
             doRunPacketCapture(*sys.argv[2:])
         else:
             errFileTag = "launch"
+            log_startup("starting front end")
             from frontEnd import FrontEndApp
             FrontEndApp.main()
-    except:
+    except Exception:
         try:
             dump = traceback.format_exc()
+            log_startup_exception("unhandled startup exception (%s)" % errFileTag)
             dumpFile = "sighthound_%s_%d_%s.log" % (errFileTag,
                 int(time.time() * 1000), uuid.uuid4().hex)
             fl = open(os.path.join(tempfile.gettempdir(), dumpFile), "w")
             fl.write(dump)
             fl.close()
-        except:
-            pass
+            log_startup("also wrote %s" % os.path.join(tempfile.gettempdir(), dumpFile))
+        except Exception:
+            log_startup_exception("could not write the temp traceback")
+        show_fatal(
+            "VigilCam hit an unexpected error and closed.\n\n%s"
+            % startup_log_path()
+        )
 
 if __name__ == '__main__':
     # This supports multiprocessing on Windows; seems OK to run on Mac too...
-    freeze_support()
-    main()
+    try:
+        log_startup("calling freeze_support")
+        freeze_support()
+        log_startup("freeze_support returned")
+        main()
+    except SystemExit:
+        raise
+    except Exception:
+        log_startup_exception("startup failed outside main")
+        show_fatal(
+            "VigilCam hit an unexpected error and closed.\n\n%s"
+            % startup_log_path()
+        )

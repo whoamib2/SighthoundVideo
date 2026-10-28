@@ -35,10 +35,10 @@
 #*****************************************************************************
 
 import base64
-import httplib
+import http.client
 import ssl
 import sys
-import urlparse
+import urllib.parse
 
 from vitaToolbox.loggingUtils.LoggingUtils import EmptyLogger
 
@@ -86,14 +86,16 @@ class HttpClient(object):
         @return          Response headers. None on error.
         """
         try:
-            u = urlparse.urlparse(url)
+            u = urllib.parse.urlparse(url)
         except:
             err = "invalid URL '%s' (%s)" % (url, sys.exc_info()[1])
             self._logger.error(err)
             return None, err, None
         try:
+            if isinstance(body, str):
+                body = body.encode("utf-8")
             if body:
-                headers["Content-Length"] = len(body)
+                headers["Content-Length"] = str(len(body))
             kargs = {}
             kargs["timeout"] = self._timeout
             if "https" == u.scheme.lower():
@@ -103,23 +105,23 @@ class HttpClient(object):
                     kargs["context"] = ssl._create_unverified_context()
                 except:
                     pass
-                conn = httplib.HTTPSConnection(u.hostname, port, **kargs)
+                conn = http.client.HTTPSConnection(u.hostname, port, **kargs)
             else:
                 port = u.port if u.port else 80
-                conn = httplib.HTTPConnection(u.hostname, port, **kargs)
+                conn = http.client.HTTPConnection(u.hostname, port, **kargs)
             path = u.path if u.path else ""
             if u.query:
                 path += "?" + u.query
             if u.username and u.password:
-                cred = "%s:%s" % (u.username, u.password)
-                auth = base64.b64encode(cred).decode("ISO-8859-1")
+                cred = ("%s:%s" % (u.username, u.password)).encode("utf-8")
+                auth = base64.b64encode(cred).decode("ascii")
                 headers['Authorization'] = 'Basic %s' % auth
             method = method.upper()
             self._logger.info("sending %s request to %s ..." % (method, url))
             conn.request(method, path, body, headers)
             rsp = conn.getresponse()
             try:
-                contLen = int(rsp.getheader("Content-Length"))
+                contLen = int(rsp.get("Content-Length"))
             except:
                 contLen = -1
             if output:

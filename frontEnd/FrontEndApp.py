@@ -46,6 +46,7 @@ from subprocess import Popen, PIPE
 import sys
 import tempfile
 import time
+import traceback
 
 # Common 3rd-party imports...
 import wx
@@ -60,9 +61,15 @@ from vitaToolbox.sysUtils.FileUtils import safeRemove
 
 
 # Local imports...
-from BackEndClient import BackEndClient
-from DbCorruptedDialog import DbCorruptedDialog
+from .BackEndClient import BackEndClient
+from .DbCorruptedDialog import DbCorruptedDialog
 
+from appCommon.process_cleanup import kill_process_tree
+from appCommon.startuplog import console_requested
+from appCommon.startuplog import log_startup
+from appCommon.startuplog import log_startup_exception
+from appCommon.startuplog import show_fatal
+from appCommon.startuplog import startup_log_path
 from appCommon.CommonStrings import kAppName
 from appCommon.CommonStrings import kFrontEndLogName
 from appCommon.CommonStrings import kMaxRecordSize, kMatchSourceSize
@@ -81,16 +88,16 @@ try:
     kHasBugReportDialog = True
 except:
     kHasBugReportDialog = False
-from GetLaunchParameters import getLaunchParameters
+from .GetLaunchParameters import getLaunchParameters
 
-from FrontEndFrame import FrontEndFrame
-from FrontEndPrefs import getFrontEndPref, setFrontEndPref
-from FrontEndUtils import getUserLocalDataDir
-from FrontEndUtils import getServiceStartsBackend
-from FrontEndUtils import getRemotePathsFromSettings
-from FrontEndUtils import setServiceStartsBackend, setServiceAutoStart
+from .FrontEndFrame import FrontEndFrame
+from .FrontEndPrefs import getFrontEndPref, setFrontEndPref
+from .FrontEndUtils import getUserLocalDataDir
+from .FrontEndUtils import getServiceStartsBackend
+from .FrontEndUtils import getRemotePathsFromSettings
+from .FrontEndUtils import setServiceStartsBackend, setServiceAutoStart
 
-from LicensingHelpers import getLicense
+from .LicensingHelpers import getLicense
 
 from launch.Launch import serviceAvailable
 from launch.Launch import Launch
@@ -131,13 +138,13 @@ _kLicenseLoadTimeout=30
 
 # Offer to move data...
 _kMoveDataOffer = (
-'''Would you like to import your existing data into Sighthound Video?'''
+'''Would you like to import your existing data into VigilCam?'''
 '''\n\n'''
-'''This data will no longer be accessible by Sighthound Video. Please '''
-'''first ensure that no Sighthound Video processes are running before '''
+'''This data will no longer be stored under the previous folder name. Please '''
+'''first ensure that no VigilCam processes are running before '''
 '''continuing, and make a backup of your existing data.'''
 )
-_kMoveDataOfferTitle = "Sighthound Video installation detected"
+_kMoveDataOfferTitle = "Previous installation detected"
 
 _kMoveFailedText = (
 '''Couldn't move existing data.'''
@@ -151,7 +158,7 @@ _kMoveFailedTitle = "Couldn't move"
 _kVideoMoveFailedText = (
 '''Couldn't move existing video files.'''
 '''\n\n'''
-'''Sighthound Video could not migrate the existing video files. Hit OK '''
+'''VigilCam could not migrate the existing video files. Hit OK '''
 '''to continue launching the application and begin from scratch, or Cancel '''
 '''to exit and attempt to manually back up existing video files. They may '''
 '''be located at "%s" or "%s".\n\n'''
@@ -163,7 +170,7 @@ _kStartError = \
 "The application could not be started.\nPlease wait a minute and try again."
 
 _kServiceMissingWin32 = \
-"""The service is not running.\nPlease check the Sighthound Video Launch """
+"""The service is not running.\nPlease check the VigilCam Launch """
 """entry in the 'Services' section of """
 """the Control Panel, or reinstall the application."""
 
@@ -233,6 +240,13 @@ class FrontEndApp(wx.App):
 
         self._closingApp = False
         self._closedWins = []
+        self._quietExit = False
+        self._fatalShown = False
+        # The backend process this frontend started, and the client for it.
+        # Startup failure has to stop both, or the backend restart loop and
+        # its child processes keep running after the window never opens.
+        self._backEndProc = None
+        self._backEndClient = None
 
         return True
 
@@ -248,6 +262,10 @@ class FrontEndApp(wx.App):
         @return success  True if the post-init was successful
         """
         isOSX = sys.platform == "darwin"
+        log_startup(
+            "PostInit frozen=%s service=%s platform=%s"
+            % (hasattr(sys, "frozen"), serviceAvailable(), sys.platform)
+        )
 
         if isOSX and \
            (sys.argv[0].startswith("/Volumes/") or sys.argv[0].startswith("/private/")):
@@ -279,12 +297,20 @@ class FrontEndApp(wx.App):
                         return False
                 else:
                     if not launchCheckWin():
+                        log_startup("launch service check failed")
                         wx.MessageBox(_kServiceMissingWin32, "Error",
                                       wx.ICON_ERROR | wx.OK, None)
+                        self._fatalShown = True
                         return False
-            except:
+            except Exception:
+                log_startup_exception("launch service check raised")
                 launchLog("UNCAUGHT LAUNCH CHECK ERROR (%s)" %
                           sys.exc_info()[1])
+                show_fatal(
+                    "VigilCam could not check the launch service.\n\n%s"
+                    % startup_log_path()
+                )
+                self._fatalShown = True
                 return False
 
         if isOSX:
@@ -307,7 +333,11 @@ class FrontEndApp(wx.App):
         if (wx.Platform == "__WXMSW__"):
             self._singleInstanceChecker = lookForOtherInstances()
             if self._singleInstanceChecker is None:
-                return True
+                # The other window was raised. Do not enter MainLoop with no
+                # frame of our own: wx then returns immediately and the
+                # process exits 0 with nothing on screen.
+                self._quietExit = True
+                return False
 
         self._startDlg = DelayedProgressDialog(_kStartDialogWait,
                                     "Starting %s..." % (kAppName),
@@ -320,7 +350,7 @@ class FrontEndApp(wx.App):
             isRightVersionRunning = self._handleOldBackends()
 
             # Offer to move the user's data directory if they are upgrading
-            # from VDV to Sighthound Video. Must happen after setting app name
+            # from VDV to VigilCam. Must happen after setting app name
             # but before we do anything with the data directory...
             if not self._offerMoveDataDir():
                 return False
@@ -369,7 +399,9 @@ class FrontEndApp(wx.App):
                 os.dup2(self._cStdStreams.fileno(), 2)
 
             def showStartError():
+                log_startup("backend did not become ready")
                 wx.MessageBox(_kStartError, "Error", wx.ICON_ERROR|wx.OK, None)
+                self._fatalShown = True
 
             # For now, service on Windows is unable to reach any network paths
             # (whether it is by UNC or letter drive), so if any of the settings
@@ -435,8 +467,9 @@ class FrontEndApp(wx.App):
                 elif pid == 0:
                     self._logger.info("launching backend...")
                     openParams = getLaunchParameters()
+                    log_startup("launching backend: %s" % openParams)
                     openParams.extend(["--backEnd",
-                                       userLocalDataDir.encode('utf-8'),
+                                       userLocalDataDir,
                     # mark the backend progress via an argument which is not
                     # used directly but picked up through process enumeration
                     # where we examine the command lines ...
@@ -453,9 +486,13 @@ class FrontEndApp(wx.App):
                     # important on Mac now that we're running from a fork, but
                     # I don't think it hurts...
                     self._logger.disableDiskLogging()
+                    launchCwd = None
+                    if not hasattr(sys, "frozen") and len(openParams) > 1:
+                        launchCwd = os.path.dirname(openParams[1])
                     subProc = Popen(openParams, stdin=PIPE, stdout=PIPE,
-                                    stderr=PIPE,
+                                    stderr=PIPE, cwd=launchCwd,
                                     close_fds=(wx.Platform == "__WXMAC__"))
+                    self._backEndProc = subProc
                     self._logger.enableDiskLogging()
                     subProc.stdin.close()
                     subProc.stdout.close()
@@ -493,7 +530,8 @@ class FrontEndApp(wx.App):
             self._logger.info("Waiting for backend connection ...")
 
             backEndClient = BackEndClient()
-            for _ in xrange(_kConnectTimeout * 10):
+            self._backEndClient = backEndClient
+            for _ in range(_kConnectTimeout * 10):
                 if backEndClient.connect():
                     break
                 time.sleep(.1)
@@ -502,7 +540,7 @@ class FrontEndApp(wx.App):
             if backEndClient.isConnected():
                 self._logger.info("Waiting for backend readiness ...")
                 try:
-                    for _ in xrange(_kReadyTimeout * 10):
+                    for _ in range(_kReadyTimeout * 10):
                         item = backEndClient.memstoreGet(kMemStoreBackendReady,
                                                          .1, -1)
                         if item and item[0]:
@@ -510,7 +548,7 @@ class FrontEndApp(wx.App):
                             break
                         else:
                             self._startDlg.Pulse()
-                except Exception, e:
+                except Exception as e:
                     self._logger.error(
                         "Waiting for backend readiness failed: " + str(e))
 
@@ -528,9 +566,17 @@ class FrontEndApp(wx.App):
         # TODO: OK?
         lic = getLicense(backEndClient, None, _kLicenseLoadTimeout)
         if not lic:
+            log_startup("backend did not provide license data; leaving the window closed")
+            wx.MessageBox(
+                "VigilCam could not read a license from the local backend.\n\n%s"
+                % startup_log_path(),
+                "Cannot start VigilCam",
+                wx.OK | wx.ICON_ERROR,
+            )
+            self._fatalShown = True
             backEndClient.quit(_kQuitTimeout)
             backEndClient.forceQuit(_kForceQuitTimeout)
-            return True
+            return False
 
         # Check for any previous crashes and prompt user to send any
         # available logs.
@@ -550,10 +596,37 @@ class FrontEndApp(wx.App):
         self.SetTopWindow(frame)
 
         frame.Show(True)
+        log_startup("main window shown")
 
         setFrontEndPref('launchFailures', 0)
 
         return True
+
+
+    ############################################################
+    def shutdown_launched_backend(self):
+        """Stop the backend this process started, and its child processes.
+
+        A failed PostInit used to return while the backend's restart loop and
+        the camera/multiprocessing children were still alive. Ask the backend
+        to quit, then kill the process tree we recorded at launch.
+        """
+        log_startup("stopping the backend after frontend startup failed")
+        client = self._backEndClient
+        if client is not None:
+            try:
+                if client.isConnected():
+                    client.quit(2)
+            except Exception:
+                log_startup_exception("backend quit request failed")
+            try:
+                client.forceQuit(2)
+            except Exception:
+                log_startup_exception("backend force-quit failed")
+        proc = self._backEndProc
+        if proc is not None:
+            kill_process_tree(proc.pid)
+            self._backEndProc = None
 
 
     ############################################################
@@ -659,7 +732,7 @@ class FrontEndApp(wx.App):
 
         dataDir = getUserLocalDataDir()
 
-        # Look for old data in "Sighthound Video" and offer to move it...
+        # Look for old data in "VigilCam" and offer to move it...
         oldAppDir = os.path.join(os.path.split(dataDir)[0], "Sighthound Video" + os.sep)
         if os.path.isdir(oldAppDir):
             choice = wx.MessageBox(_kMoveDataOffer, _kMoveDataOfferTitle,
@@ -669,7 +742,7 @@ class FrontEndApp(wx.App):
                     try:
                         os.rename(oldAppDir, dataDir)
                         setFrontEndPref("vdvImportOffered", True)
-                    except Exception, e:
+                    except Exception as e:
                         # If we can't just rename, give an error message.
                         choice = wx.MessageBox(_kMoveFailedText % str(e),
                                                _kMoveFailedTitle,
@@ -691,7 +764,7 @@ class FrontEndApp(wx.App):
                             prefs = BackEndPrefs(os.path.join(dataDir, kPrefsFile))
 
                             oldVideoDir = prefs.getPref('videoDir')
-                            if type(oldVideoDir) == str:
+                            if isinstance(oldVideoDir, (bytes, bytearray)):
                                 oldVideoDir = oldVideoDir.decode('utf-8')
                             if oldVideoDir is not None:
                                 prefix = os.path.commonprefix([oldVideoDir, oldAppDir])
@@ -706,7 +779,7 @@ class FrontEndApp(wx.App):
                                     prefs.setPref('dataDir',
                                             os.path.join(dataDir, storageDir[len(prefix):]))
 
-                        except Exception, e:
+                        except Exception as e:
                             choice = wx.MessageBox(_kVideoMoveFailedText %
                                                    (oldVideoDir, newVideoDir, str(e)),
                                                    _kVideoMoveFailedTitle,
@@ -743,7 +816,7 @@ class FrontEndApp(wx.App):
                                        is already running.
         """
         client = BackEndClient()
-        for _ in xrange(_kTestConnectTimeout * 10):
+        for _ in range(_kTestConnectTimeout * 10):
             didConnect = client.connect()
             if didConnect:
                 break
@@ -789,7 +862,7 @@ class FrontEndApp(wx.App):
         buildFilePath = os.path.join(lookInDir, _kBuildFile)
 
         try:
-            buildStr = file(buildFilePath).read().split()[-1].strip()
+            buildStr = open(buildFilePath).read().split()[-1].strip()
         except Exception:
             buildStr = "unknown"
         return _kBuildTemplateStr % (buildStr)
@@ -825,7 +898,7 @@ class FrontEndApp(wx.App):
                 osDir = os.path.expanduser("~/Library/Logs/DiagnosticReports")
                 crashes = os.listdir(osDir)
                 crashes = [os.path.join(osDir, crash) for crash in crashes if
-                    crash.startswith('Sighthound')]
+                    crash.startswith('Sighthound') or crash.startswith('VigilCam')]
 
                 if len(crashes):
                     prompt = _kCrashError
@@ -875,7 +948,7 @@ class FrontEndApp(wx.App):
                     now = max(now, os.path.getmtime(log))
 
 
-        except Exception, e:
+        except Exception as e:
             self._logger.error("Error checking for crash reports - " + str(e))
 
         # Update the 'last checked' time.
@@ -974,13 +1047,13 @@ def validateOSVersion(logger):
         errStr = "Unsupported macOS version. macOS 10.10 or greater is required"
     elif major == 10 and minor == 12 and patch < 4:
         errStr = """Unsupported macOS version %s. This macOS version has a known problem, """\
-                 """which prevents Sighthound Video from functioning correctly. """\
+                 """which prevents VigilCam from functioning correctly. """\
                  """Please upgrade macOS to 10.12.4 or later version.""" % release
 
     if errStr is not None:
         dlg = wx.MessageDialog(None,
                         errStr,
-                        "Cannot start Sighthound Video",
+                        "Cannot start VigilCam",
                         wx.OK | wx.ICON_ERROR)
         dlg.ShowModal()
         return False
@@ -991,29 +1064,75 @@ def main():
     # Grab the standard streams before creating the app.  This seems to be
     # needed on Windows.  Note that we can't give a log directory yet because
     # we can't use getUserLocalDataDir() until after the app is created...
+    # --console keeps the real stderr so a windowed build can show tracebacks.
+    log_startup("FrontEndApp.main argv=%s" % (sys.argv,))
     logger = getLogger(kFrontEndLogName)
-    logger.grabStdStreams()
+    if not console_requested():
+        logger.grabStdStreams()
 
-
-    # If OnInit() returns false, the app will automatically exit.
-    app = FrontEndApp(logger)
+    try:
+        # If OnInit() returns false, the app will automatically exit.
+        app = FrontEndApp(logger)
+    except Exception:
+        log_startup_exception("FrontEndApp constructor failed")
+        show_fatal(
+            "VigilCam failed before the window opened.\n\n%s"
+            % startup_log_path()
+        )
+        return
 
     try:
         if not validateOSVersion(logger):
+            log_startup("OS version check rejected this system")
             return
-    except:
-        import traceback
+    except Exception:
+        log_startup_exception("OS version check failed")
         traceback.print_exc()
 
     # Immediately call PostInit() so that we perform our checks before the
     # application is started. If True is returned, start the MainLoop to begin
     # processing GUI events.  If false, log as an error.
-    if app.PostInit():
+    try:
+        started = app.PostInit()
+    except Exception:
+        log_startup_exception("PostInit failed")
+        try:
+            app.shutdown_launched_backend()
+        except Exception:
+            log_startup_exception("could not stop the backend after PostInit failed")
+        show_fatal(
+            "VigilCam failed during startup.\n\n%s" % startup_log_path()
+        )
+        return
+
+    if started:
+        windows = wx.GetTopLevelWindows()
+        log_startup("PostInit returned true, top-level windows=%d" % len(windows))
+        if not windows:
+            try:
+                app.shutdown_launched_backend()
+            except Exception:
+                log_startup_exception("could not stop the backend when no window opened")
+            show_fatal(
+                "VigilCam did not open a window.\n\n%s" % startup_log_path()
+            )
+            return
+        log_startup("entering MainLoop")
         app.MainLoop()
+        log_startup("MainLoop returned")
     else:
         # When OnInit() returns false, we get a similar message, so I copied
         # that, and applied it here for when PostInit returns false.
         logger.error("PostInit returned false, exiting...")
+        log_startup("PostInit returned false, exiting")
+        try:
+            app.shutdown_launched_backend()
+        except Exception:
+            log_startup_exception("could not stop the backend after PostInit returned false")
+        if not getattr(app, "_quietExit", False) and not getattr(app, "_fatalShown", False):
+            show_fatal(
+                "VigilCam could not start.\n\n%s" % startup_log_path()
+            )
     logger.info("Front end application closed...")
 
 

@@ -8,7 +8,7 @@ from datetime import datetime
 import traceback
 import time
 import base64
-import httplib
+import http.client
 import json
 import os
 import ssl
@@ -53,7 +53,7 @@ class TimeframeSearch:
         start = time.time()
         objRangesRes = self._dataMgr.getObjectRangesBetweenTimes(beginTime, endTime)
         objRanges = {key: ((x1,x2),(y1,y2),cam) for (key, ((x1,x2),(y1,y2)), cam) in objRangesRes}
-        objs = objRanges.keys()
+        objs = list(objRanges.keys())
         objQueryTime = time.time() - start
         self._logger.info("Retrieved %d objects in %d ms" % (len(objs), int(objQueryTime*1000)))
 
@@ -80,14 +80,14 @@ class TimeframeSearch:
 
                 if totalBoxesForKey > (self._offset+1)*2:
                     # middle frame
-                    filteredBoxes[key].append(sortedBoxes[key][totalBoxesForKey/2])
+                    filteredBoxes[key].append(sortedBoxes[key][totalBoxesForKey//2])
 
                 if totalBoxesForKey > self._offset*2:
                     # last frame (-offset)
                     filteredBoxes[key].append(sortedBoxes[key][-self._offset-1])
             else:
                 # too few frames, can't even apply offset, just take the middle one
-                filteredBoxes[key].append(sortedBoxes[key][totalBoxesForKey/2])
+                filteredBoxes[key].append(sortedBoxes[key][totalBoxesForKey//2])
             filteredBoxes[key].sort(key=operator.itemgetter(0))
         boxQueryTime = time.time() - start
         self._logger.info("Retrieved %d boxes for %d objects in %d ms" % (len(boxes), len(sortedBoxes), int(boxQueryTime*1000)))
@@ -187,7 +187,7 @@ class TimeframeSearch:
                 index = index + 1
                 annotation  = x["vehicleAnnotation"]
                 objType     = x["objectType"]
-                print "Processing object" + objType
+                print("Processing object" + objType)
                 box         = annotation["bounding"]
                 boxTuple = self._recognitionBbToTuple(box)
                 confidence  = annotation["recognitionConfidence"]
@@ -221,7 +221,7 @@ class TimeframeSearch:
     def cloudCall(self, image, name):
         output = []
         headers = {"Content-type": "application/json", "X-Access-Token": _kCloudToken}
-        conn = httplib.HTTPSConnection("dev.sighthoundapi.com",
+        conn = http.client.HTTPSConnection("dev.sighthoundapi.com",
             context=ssl.SSLContext(ssl.PROTOCOL_TLSv1))
 
         with BytesIO() as f:
@@ -298,7 +298,7 @@ def _getopts(argv):
 
 #===========================================================================
 def _printUsage():
-    print "Usage ./TimeframeSearch.py -d [YYYYMMDD] [-o outfolder] [-f cameraNameFilter] [-v]"
+    print("Usage ./TimeframeSearch.py -d [YYYYMMDD] [-o outfolder] [-f cameraNameFilter] [-v]")
 
 #===========================================================================
 def main():
