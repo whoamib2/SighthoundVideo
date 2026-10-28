@@ -119,6 +119,28 @@ def pyinstaller_command(
     return command
 
 
+_DEBUG_LAUNCHER = """@echo off
+\"%~dp0{exe}\" --console %*
+echo.
+echo Exit code %ERRORLEVEL%
+echo Startup log: %LOCALAPPDATA%\\Sighthound Video\\logs\\startup.log
+pause
+"""
+
+
+def write_debug_launcher(folder: Path, exe_name: str = "SighthoundVideo.exe") -> Path:
+    """Console double-click launcher next to the windowed executable.
+
+    The windowed exe has no console. This command file starts it with
+    --console, which allocates one, and leaves the window open if startup
+    returns.
+    """
+    folder.mkdir(parents=True, exist_ok=True)
+    path = folder / "SighthoundVideo-Debug.cmd"
+    path.write_text(_DEBUG_LAUNCHER.format(exe=exe_name), encoding="utf-8", newline="\r\n")
+    return path
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description="Build a Sighthound Video bundle")
     parser.add_argument("--name", default="SighthoundVideo")
@@ -153,6 +175,9 @@ def main(argv: list[str] | None = None) -> int:
     folder = Path(args.distpath) / args.name
     print("PyInstaller one-folder bundle: %s" % folder)
     pyinstaller_run(command)
+    if sys.platform == "win32" or args.windowed:
+        launcher = write_debug_launcher(folder, args.name + ".exe")
+        print("Debug launcher: %s" % launcher)
     return 0
 
 

@@ -51,7 +51,21 @@ import os
 import sys
 import traceback, tempfile, time, uuid
 
+from appCommon.startuplog import console_requested
+from appCommon.startuplog import enable_windows_console
+from appCommon.startuplog import log_startup
+from appCommon.startuplog import log_startup_exception
+from appCommon.startuplog import show_fatal
+from appCommon.startuplog import startup_log_path
+
 _kIsWin = "win32" == sys.platform
+
+# A windowed executable has nowhere to print. Open a console before anything
+# else can fail when the user asked for one.
+if console_requested():
+    enable_windows_console()
+log_startup("FrontEndLaunchpad import pid=%s argv=%s frozen=%s" % (
+    os.getpid(), sys.argv, hasattr(sys, "frozen")))
 
 
 def get_utf8_arguments_windows_only():
@@ -101,7 +115,12 @@ def get_utf8_arguments_windows_only():
 
 if hasattr(sys, 'frozen'):
     if _kIsWin:
-        get_utf8_arguments_windows_only()
+        try:
+            get_utf8_arguments_windows_only()
+        except Exception:
+            log_startup_exception("could not read the Unicode command line")
+        if console_requested():
+            enable_windows_console()
 
 
 # TODO: Do we still need this?  All this is doing is forcing linecache.getline
@@ -137,13 +156,22 @@ from multiprocessing import freeze_support
 
 # Set a handler to catch c crashes in all processes...
 from vitaToolbox.loggingUtils.CatchCCrashes import catchCCrashes
-catchCCrashes()
+try:
+    catchCCrashes()
+except Exception:
+    log_startup_exception("catchCCrashes failed")
 
 errFileTag = "error"
 
 def main():
+    errFileTag = "error"
 
     try:
+        if os.environ.get("SIGHTHOUND_TEST_UI") == "1":
+            log_startup("SIGHTHOUND_TEST_UI probe")
+            from frontEnd.startup_probe import run_startup_probe
+            run_startup_probe()
+            return
         if (len(sys.argv) > 1) and (sys.argv[1] == '--backEnd'):
             errFileTag = "launch"
             from backEnd import BackEndApp
@@ -170,20 +198,38 @@ def main():
             doRunPacketCapture(*sys.argv[2:])
         else:
             errFileTag = "launch"
+            log_startup("starting front end")
             from frontEnd import FrontEndApp
             FrontEndApp.main()
-    except:
+    except Exception:
         try:
             dump = traceback.format_exc()
+            log_startup_exception("unhandled startup exception (%s)" % errFileTag)
             dumpFile = "sighthound_%s_%d_%s.log" % (errFileTag,
                 int(time.time() * 1000), uuid.uuid4().hex)
             fl = open(os.path.join(tempfile.gettempdir(), dumpFile), "w")
             fl.write(dump)
             fl.close()
-        except:
-            pass
+            log_startup("also wrote %s" % os.path.join(tempfile.gettempdir(), dumpFile))
+        except Exception:
+            log_startup_exception("could not write the temp traceback")
+        show_fatal(
+            "Sighthound Video hit an unexpected error and closed.\n\n%s"
+            % startup_log_path()
+        )
 
 if __name__ == '__main__':
     # This supports multiprocessing on Windows; seems OK to run on Mac too...
-    freeze_support()
-    main()
+    try:
+        log_startup("calling freeze_support")
+        freeze_support()
+        log_startup("freeze_support returned")
+        main()
+    except SystemExit:
+        raise
+    except Exception:
+        log_startup_exception("startup failed outside main")
+        show_fatal(
+            "Sighthound Video hit an unexpected error and closed.\n\n%s"
+            % startup_log_path()
+        )

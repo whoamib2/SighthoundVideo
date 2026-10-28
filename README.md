@@ -48,6 +48,8 @@ The build prefers Python 3.14 (`py -3.14`). Checked on PyPI on 2026-10-27: wxPyt
 
 The package is a PyInstaller one-folder bundle. Python, wxPython, PyAV/FFmpeg, and ONNX Runtime DirectML are inside the folder, so the installed app does not need Python. Inno Setup adds Start menu and desktop shortcuts, an uninstaller, and an optional "start with Windows" task. The finished file is `dist\SighthoundVideo-Setup.exe`, and the script prints that path.
 
+Startup always appends to `%LOCALAPPDATA%\Sighthound Video\logs\startup.log`. A fatal error also opens a message box. The installed app is windowed; `SighthoundVideo.exe --console` allocates a console, and `SighthoundVideo-Debug.cmd` in the install folder launches it that way. A frozen build starts the backend itself unless the legacy launch service is actually reachable.
+
 The Windows build depends on `onnxruntime-directml` and not the CPU `onnxruntime` wheel. Those two distributions own the same `onnxruntime` package directory, so the script removes any CPU or CUDA wheel and force-reinstalls DirectML, then checks `get_available_providers`. The analytics process uses the GPU when DirectML is available and the CPU otherwise. YOLOX-Nano, plate OCR, YuNet, and SFace are fetched at build time and copied into the app folder, so the installed program works offline. Together those weights are about 45 MB, small enough to ship in the installer. A carrier file is not downloaded. The color heuristic runs until you train `models\carrier.onnx`.
 
 The default weights are Megvii YOLOX-Nano (Apache-2.0). They are not in git:
