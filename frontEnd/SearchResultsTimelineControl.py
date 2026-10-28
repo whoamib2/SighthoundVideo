@@ -202,13 +202,13 @@ class SearchResultsTimelineControl(wx.Control):
             # We'll do things based on today's mightnight by default...
             midnightSecs = int(time.mktime(datetime.date.today().timetuple()))
         else:
-            midnightSecs = self._curMidnightMs/1000
+            midnightSecs = int(self._curMidnightMs) // 1000
 
         midnightDate = datetime.date.fromtimestamp(midnightSecs)
         nextMidnightDate = midnightDate + datetime.timedelta(1)  # Handles DST!
         nextMidnightSec = int(time.mktime(nextMidnightDate.timetuple()))
 
-        hoursInThisDay = (nextMidnightSec - midnightSecs) / _kSecIn1H
+        hoursInThisDay = (nextMidnightSec - midnightSecs) // _kSecIn1H
         self._numMsToday = hoursInThisDay*_kMsIn1H
 
         # Adjust labels...
@@ -540,7 +540,7 @@ class SearchResultsTimelineControl(wx.Control):
             return
 
         self._timebarWidth = w
-        self._timebarX = self._width12a/2
+        self._timebarX = self._width12a//2
 
         bitmap = wx.Bitmap.FromRGBA(w, _kTimebarHeight)
         dc = wx.MemoryDC()
@@ -647,7 +647,7 @@ class SearchResultsTimelineControl(wx.Control):
         for i, label in enumerate(self._labels):
             cx = int(round((self._timebarX) + (i * spacePerLabel)))
             labelWidth, _ = dc.GetTextExtent(label)
-            dc.DrawText(label, cx - labelWidth/2, _kTimebarHeight + _kSpacing)
+            dc.DrawText(label, cx - labelWidth//2, _kTimebarHeight + _kSpacing)
 
         # Draw the blue line at the bottom
         dc.SetPen(wx.Pen(_kBlueLineColor))

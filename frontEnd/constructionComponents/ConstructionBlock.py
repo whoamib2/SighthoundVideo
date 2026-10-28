@@ -335,7 +335,7 @@ def drawConstructionBlock(dc, size, bitmap, label, font, txtColor,
     # Draw the bitmap...
     y = _kMarginWidth
     if bitmap is not None:
-        dc.DrawBitmap(bitmap, (fullWidth - bitmap.GetWidth()) / 2, y, True)
+        dc.DrawBitmap(bitmap, (fullWidth - bitmap.GetWidth()) // 2, y, True)
         y += bitmap.GetHeight()
 
     # Add the text, centering and trimming each line...
@@ -347,7 +347,7 @@ def drawConstructionBlock(dc, size, bitmap, label, font, txtColor,
 
     _, allTextHeight = dc.GetMultiLineTextExtent(label)
     spaceLeft = (fullHeight - _kMarginWidth) - y
-    y += (spaceLeft - allTextHeight) / 2
+    y += (spaceLeft - allTextHeight) // 2
 
     availTextWidth = fullWidth - (2 * _kMarginWidth)
     dotdotWidth, _ = dc.GetTextExtent("...")
@@ -362,7 +362,7 @@ def drawConstructionBlock(dc, size, bitmap, label, font, txtColor,
             line = line[:i] + "..."
             lineWidth, lineHeight = dc.GetTextExtent(line)
 
-        dc.DrawText(line, (fullWidth - lineWidth) / 2, y)
+        dc.DrawText(line, (fullWidth - lineWidth) // 2, y)
         y += lineHeight
 
     # Draw the border...
@@ -371,11 +371,11 @@ def drawConstructionBlock(dc, size, bitmap, label, font, txtColor,
     if wx.Platform == "__WXMSW__":
         # Windows seems to have an off-by-one error on the width when you've
         # got a pen width > 1.  It makes the rectangle one pixel too small.
-        dc.DrawRectangle(borderWidth/2, borderWidth/2,
+        dc.DrawRectangle(borderWidth//2, borderWidth//2,
                          fullWidth - borderWidth+1,
                          fullHeight - borderWidth+1)
     else:
-        dc.DrawRectangle(borderWidth/2, borderWidth/2,
+        dc.DrawRectangle(borderWidth//2, borderWidth//2,
                          fullWidth - borderWidth,
                          fullHeight - borderWidth)
 

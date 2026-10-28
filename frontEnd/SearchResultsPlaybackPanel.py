@@ -1368,7 +1368,7 @@ class SearchResultsPlaybackPanel(BorderImagePanel):
 
         if self._playbackSpeed != 0:
             speedLog2 = math.log(self._playbackSpeed,2)
-            self._maxFramesToSkip = _kMaxFramesToSkip*(speedLog2+1) if speedLog2 > 0 else _kMaxFramesToSkip/2
+            self._maxFramesToSkip = _kMaxFramesToSkip*(speedLog2+1) if speedLog2 > 0 else _kMaxFramesToSkip//2
 
         menu.Check()
         button.SetValue(1)
@@ -1636,7 +1636,7 @@ class SearchResultsPlaybackPanel(BorderImagePanel):
         if self._resultsModel.isVideoLoaded():
             centerTimeAround = self._resultsModel.getCurrentAbsoluteMs()
         else:
-            centerTimeAround = self._resultsModel.getMidnightMs() + 24*60*60*1000 / 2
+            centerTimeAround = self._resultsModel.getMidnightMs() + 24*60*60*1000 // 2
 
         defName = "export"
         defPath = self._getClipExportPath()

@@ -222,7 +222,7 @@ class FixedMultiSplitterWindow(MultiSplitterWindow):
             h = self.GetSize()[1]
             dc.DrawBitmap(self._sashBmp,
                           self.GetSashPosition(0),
-                          (h-self._sashSize)/2)
+                          (h-self._sashSize)//2)
 
         # Below is for experimental purposes ONLY (for now, anyway).
         # This piece of code draws a solid black bar for the sash.

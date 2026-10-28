@@ -64,6 +64,7 @@ from vitaToolbox.sysUtils.FileUtils import safeRemove
 from .BackEndClient import BackEndClient
 from .DbCorruptedDialog import DbCorruptedDialog
 
+from appCommon.process_cleanup import kill_process_tree
 from appCommon.startuplog import console_requested
 from appCommon.startuplog import log_startup
 from appCommon.startuplog import log_startup_exception
@@ -241,6 +242,11 @@ class FrontEndApp(wx.App):
         self._closedWins = []
         self._quietExit = False
         self._fatalShown = False
+        # The backend process this frontend started, and the client for it.
+        # Startup failure has to stop both, or the backend restart loop and
+        # its child processes keep running after the window never opens.
+        self._backEndProc = None
+        self._backEndClient = None
 
         return True
 
@@ -486,6 +492,7 @@ class FrontEndApp(wx.App):
                     subProc = Popen(openParams, stdin=PIPE, stdout=PIPE,
                                     stderr=PIPE, cwd=launchCwd,
                                     close_fds=(wx.Platform == "__WXMAC__"))
+                    self._backEndProc = subProc
                     self._logger.enableDiskLogging()
                     subProc.stdin.close()
                     subProc.stdout.close()
@@ -523,6 +530,7 @@ class FrontEndApp(wx.App):
             self._logger.info("Waiting for backend connection ...")
 
             backEndClient = BackEndClient()
+            self._backEndClient = backEndClient
             for _ in range(_kConnectTimeout * 10):
                 if backEndClient.connect():
                     break
@@ -593,6 +601,32 @@ class FrontEndApp(wx.App):
         setFrontEndPref('launchFailures', 0)
 
         return True
+
+
+    ############################################################
+    def shutdown_launched_backend(self):
+        """Stop the backend this process started, and its child processes.
+
+        A failed PostInit used to return while the backend's restart loop and
+        the camera/multiprocessing children were still alive. Ask the backend
+        to quit, then kill the process tree we recorded at launch.
+        """
+        log_startup("stopping the backend after frontend startup failed")
+        client = self._backEndClient
+        if client is not None:
+            try:
+                if client.isConnected():
+                    client.quit(2)
+            except Exception:
+                log_startup_exception("backend quit request failed")
+            try:
+                client.forceQuit(2)
+            except Exception:
+                log_startup_exception("backend force-quit failed")
+        proc = self._backEndProc
+        if proc is not None:
+            kill_process_tree(proc.pid)
+            self._backEndProc = None
 
 
     ############################################################
@@ -1062,6 +1096,10 @@ def main():
         started = app.PostInit()
     except Exception:
         log_startup_exception("PostInit failed")
+        try:
+            app.shutdown_launched_backend()
+        except Exception:
+            log_startup_exception("could not stop the backend after PostInit failed")
         show_fatal(
             "VigilCam failed during startup.\n\n%s" % startup_log_path()
         )
@@ -1071,6 +1109,10 @@ def main():
         windows = wx.GetTopLevelWindows()
         log_startup("PostInit returned true, top-level windows=%d" % len(windows))
         if not windows:
+            try:
+                app.shutdown_launched_backend()
+            except Exception:
+                log_startup_exception("could not stop the backend when no window opened")
             show_fatal(
                 "VigilCam did not open a window.\n\n%s" % startup_log_path()
             )
@@ -1083,6 +1125,10 @@ def main():
         # that, and applied it here for when PostInit returns false.
         logger.error("PostInit returned false, exiting...")
         log_startup("PostInit returned false, exiting")
+        try:
+            app.shutdown_launched_backend()
+        except Exception:
+            log_startup_exception("could not stop the backend after PostInit returned false")
         if not getattr(app, "_quietExit", False) and not getattr(app, "_fatalShown", False):
             show_fatal(
                 "VigilCam could not start.\n\n%s" % startup_log_path()

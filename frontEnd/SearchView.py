@@ -397,7 +397,7 @@ class SearchView(BaseView):
         self._curThrobberId = 0
 
         # Add to sizer
-        choiceSizer = wx.FlexGridSizer(4, 2, _ctrlPadding/2, _ctrlPadding)
+        choiceSizer = wx.FlexGridSizer(4, 2, _ctrlPadding//2, _ctrlPadding)
         choiceSizer.AddGrowableCol(1)
         choiceSizer.Add(cameraLabel, 0, wx.ALIGN_LEFT)
         choiceSizer.Add(self._cameraChoice, 1, wx.EXPAND)

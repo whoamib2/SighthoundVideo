@@ -358,11 +358,11 @@ class HoverBitmapButton(wx.Control):
         style = self.GetWindowStyle()
         x = offset
         if style & wx.ALIGN_CENTER:
-            x += (widthForText - textWidth) / 2
+            x += (widthForText - textWidth) // 2
         elif style & wx.ALIGN_RIGHT:
             x += widthForText - textWidth
 
-        dc.DrawText(label, x, (height - textHeight) / 2)
+        dc.DrawText(label, x, (height - textHeight) // 2)
 
 
     ###########################################################

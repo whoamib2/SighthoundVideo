@@ -168,16 +168,16 @@ class ToolbarBitmapTextButton(wx.lib.buttons.GenBitmapTextButton):
         if not self.up:
             dx = dy = self.labelDelta
 
-        pos_x = (width-bw-tw)/2+dx      # adjust for bitmap and text to centre
+        pos_x = (width-bw-tw)//2+dx      # adjust for bitmap and text to centre
 
         if self._bmpOnLeft:
             if bmp is not None:
-                dc.DrawBitmap(bmp, pos_x, (height-bh)/2+dy, hasMask) # draw bitmap if available
+                dc.DrawBitmap(bmp, pos_x, (height-bh)//2+dy, hasMask) # draw bitmap if available
                 pos_x = pos_x + 2   # extra spacing from bitmap
 
-            dc.DrawText(label, pos_x + dx+bw, (height-th)/2+dy)      # draw the text
+            dc.DrawText(label, pos_x + dx+bw, (height-th)//2+dy)      # draw the text
         else:
-            dc.DrawText(label, pos_x + dx, (height-th)/2+dy)
+            dc.DrawText(label, pos_x + dx, (height-th)//2+dy)
             pos_x = pos_x+2
             if bmp is not None:
-                dc.DrawBitmap(bmp, pos_x + tw, (height-bh)/2+dy, hasMask)
+                dc.DrawBitmap(bmp, pos_x + tw, (height-bh)//2+dy, hasMask)

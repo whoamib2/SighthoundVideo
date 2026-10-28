@@ -454,19 +454,19 @@ def makeVideoStatusBitmap(statusText, font, startColor, endColor,
         totalHeight += icon.GetHeight() + kSpace
 
     # Determine the top position
-    top = kSpace if totalHeight > height else (height - totalHeight) / 2
+    top = kSpace if totalHeight > height else (height - totalHeight) // 2
     offset = top
 
     # Draw icon at the top, if appicable
     if icon is not None:
         iconW = icon.GetWidth()
         iconH = icon.GetHeight()
-        gc.DrawBitmap(icon, width / 2 - iconW / 2, offset, iconW, iconH)
+        gc.DrawBitmap(icon, width // 2 - iconW // 2, offset, iconW, iconH)
         offset += iconH + kSpace
 
     for line in lines:
         textWidth, textHeight = gc.GetTextExtent(line)
-        gc.DrawText(line, width / 2 - textWidth / 2, offset)
+        gc.DrawText(line, width // 2 - textWidth // 2, offset)
         offset += textHeight + kSpace
 
     memDC.SelectObject(wx.NullBitmap)

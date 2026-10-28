@@ -95,7 +95,7 @@ _kExpiresWidth = 100
 _kAvailableOffset = _kExpiresOffset+_kExpiresWidth+_kItemXOffset
 _kAvailableWidth = 100
 _kActivePaddingY = 3
-_kActiveRadius = (_kItemHeight-2*_kActivePaddingY)/2
+_kActiveRadius = (_kItemHeight-2*_kActivePaddingY)//2
 _kActivePaddingX = _kActiveRadius
 
 if wx.Platform == '__WXMSW__':

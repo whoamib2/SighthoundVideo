@@ -114,7 +114,7 @@ class TranslucentStaticText(wx.StaticText):
 
         textWidth, _ = dc.GetTextExtent(label)
         if style & wx.ALIGN_CENTER:
-            x = (width - textWidth) / 2
+            x = (width - textWidth) // 2
         elif style & wx.ALIGN_RIGHT:
             x = width - textWidth
         else:

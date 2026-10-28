@@ -815,7 +815,7 @@ class GridView(BaseMonitorView):
             # Set an arbitrary high refresh value for 'unlimited' fps
             fps = 100
 
-        self._timer.Start(1000 / fps, False)
+        self._timer.Start(1000 // fps, False)
 
 
     ###########################################################
@@ -957,7 +957,7 @@ class GridView(BaseMonitorView):
             height = size[1]
 
             # Use the default font of the window, size it reasonably.
-            fontSize = min(20, max(10, min(height, width) / 10))
+            fontSize = min(20, max(10, min(height, width) // 10))
             font = self.GetFont()
             font.SetPointSize(fontSize)
             self._gridDebug("creating %dx%d bitmap for status '%s' ..." %

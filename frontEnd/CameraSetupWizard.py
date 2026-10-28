@@ -1740,7 +1740,7 @@ class _DetectedCamerasScreen(_BasePage):
                            wx.RESERVE_SPACE_EVEN_IF_HIDDEN)
         modelNameSizer.Add(self._modelNameLabel, 1,
                            wx.RESERVE_SPACE_EVEN_IF_HIDDEN | wx.LEFT,
-                           _kPaddingSize/2)
+                           _kPaddingSize//2)
         upnpSizer.Add(modelNameSizer, 0, wx.RESERVE_SPACE_EVEN_IF_HIDDEN |
                       wx.EXPAND)
         deviceAddrSizer = wx.BoxSizer(wx.HORIZONTAL)
@@ -1748,9 +1748,9 @@ class _DetectedCamerasScreen(_BasePage):
                             wx.RESERVE_SPACE_EVEN_IF_HIDDEN)
         deviceAddrSizer.Add(self._addressLink, 1,
                             wx.RESERVE_SPACE_EVEN_IF_HIDDEN | wx.LEFT,
-                            _kPaddingSize/2)
+                            _kPaddingSize//2)
         upnpSizer.Add(deviceAddrSizer, 0, wx.RESERVE_SPACE_EVEN_IF_HIDDEN |
-                      wx.EXPAND | wx.TOP, _kPaddingSize/2)
+                      wx.EXPAND | wx.TOP, _kPaddingSize//2)
         self._upnpPanel.SetSizer(upnpSizer)
         self._upnpPanel.Show(False)
 
