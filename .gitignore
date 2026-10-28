@@ -2,6 +2,7 @@
 *.iss
 !installer/*.iss
 *.pyc
+*.egg-info/
 *.tar
 install_manifest.txt
 .build

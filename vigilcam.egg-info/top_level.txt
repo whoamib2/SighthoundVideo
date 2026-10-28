@@ -1,6 +1,0 @@
-appCommon
-backEnd
-frontEnd
-launch
-vitaToolbox
-xnat
