@@ -288,18 +288,25 @@ class QueuedDataManagerCloud(object_collector_base()):
             # This is the first time we receive anything
             self._currentFrameTime = time
             self._currentFrameId = frameId
-            return
+            return True
 
-        # Current implementation of Sentry serializes frames, until
-        # all the objects had been labeled.
-        # This may change in the future: when/if it will, most of the code here
-        # and interpolation in particular will have to change
-        assert time >= self._currentFrameTime
+        # A backwards media timestamp used to assert and kill the capture
+        # process. Keep the camera up and drop that one frame.
+        if time < self._currentFrameTime:
+            self._logger.warning(
+                "Ignoring frame timestamp %s before %s" % (time, self._currentFrameTime)
+            )
+            return False
 
         if self._currentFrameTime == time:
             # Time hasn't changed yet
-            assert frameId == self._currentFrameId
-            return
+            if frameId != self._currentFrameId:
+                self._logger.warning(
+                    "Ignoring frame id %s at timestamp %s (current id %s)"
+                    % (frameId, time, self._currentFrameId)
+                )
+                return False
+            return True
 
         # Time had changed
         self._previousFrameTime = self._currentFrameTime
@@ -314,6 +321,7 @@ class QueuedDataManagerCloud(object_collector_base()):
             self._lostFrames.popleft()
             counter += 1
         self._totalInterpolated += counter
+        return True
 
     ###########################################################
     def reportFrame(self, ms, frameObj=None):
@@ -692,7 +700,8 @@ class QueuedDataManagerCloud(object_collector_base()):
         """
         self._checkForRealDbIds()
         # Check if this is a new frame coming from Sentry
-        self._checkTime(time, frameId)
+        if not self._checkTime(time, frameId):
+            return
 
         # Sentry uses OpenCV rectangle convention, where 2nd point is exclusive
         # We expect both points being inclusive. Validate data before correction.

@@ -118,7 +118,7 @@ class _AboutBox(wx.Dialog):
         titleLabel = wx.StaticText(self, -1, kAppName)
         makeFontDefault(titleLabel)
         titleFont = titleLabel.GetFont()
-        titleFont.SetPointSize(titleFont.GetPointSize() + 6)
+        titleFont.SetPointSize(int(titleFont.GetPointSize() + 6))
         titleFont.SetWeight(wx.FONTWEIGHT_BOLD)
         titleLabel.SetFont(titleFont)
 

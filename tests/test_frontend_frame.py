@@ -130,6 +130,27 @@ class _FakeBackend:
     def getRules(self):
         return []
 
+    def getRuleNames(self):
+        return []
+
+    def getRule(self, _name=""):
+        class _Rule:
+            def getSchedule(self):
+                return {
+                    "dayType": "Every day",
+                    "customDays": [],
+                    "is24Hours": True,
+                    "startHour": 0,
+                    "startMin": 0,
+                    "stopHour": 0,
+                    "stopMin": 0,
+                }
+
+            def getName(self):
+                return _name or "People"
+
+        return _Rule()
+
     def memstoreGet(self, *_args, **_kwargs):
         return [None]
 
@@ -359,6 +380,18 @@ def test_main_frame_and_simple_dialogs_construct(wx_app, tmp_path):
 
 class _FakeDataManager:
     def getCameraLocations(self):
+        return ["Driveway Center"]
+
+    def getProcSize(self, _location=""):
+        return (0, 0)
+
+    def listFaces(self):
+        return []
+
+    def getFaceThreshold(self):
+        return 0.4
+
+    def listPlateWatchlist(self):
         return []
 
 
@@ -381,4 +414,68 @@ def test_camera_setup_wizard_constructs(wx_app):
         if wizard is not None:
             wizard.CleanupTimers()
             wizard.Destroy()
+        parent.Destroy()
+
+
+def test_rule_editor_and_subdialogs_construct(wx_app):
+    """New Rule builds the editor, each default rule, and the rule dialogs."""
+    import wx
+    _use_uniform_bitmaps()
+    from appCommon.CommonStrings import kSearchViewDefaultRules
+    from backEnd.SavedQueryDataModel import SavedQueryDataModel
+    from frontEnd.QueryEditorDialog import QueryEditorDialog
+    from frontEnd.RuleScheduleDialog import RuleScheduleDialog
+    from frontEnd.constructionComponents.ResponseConfigPanel import (
+        ResponseConfigPanel,
+        WebhookEditor,
+    )
+    from frontEnd.constructionComponents.TargetConfigPanel import TargetConfigPanel
+    from frontEnd.constructionComponents.WhereConfigPanel import WhereConfigPanel
+
+    parent = wx.Frame(None, title="rule-parent")
+    client = _FakeBackend("", "")
+    data = _FakeDataManager()
+    created = []
+    try:
+        queries = [SavedQueryDataModel("")]
+        for name in kSearchViewDefaultRules:
+            query = SavedQueryDataModel(name)
+            query.getVideoSource().setLocationName("Driveway Center")
+            queries.append(query)
+        for query in queries:
+            dialog = QueryEditorDialog(
+                parent, data, client, query, list(kSearchViewDefaultRules),
+                ["Driveway Center"],
+            )
+            created.append(dialog)
+            assert dialog.GetTitle()
+        schedule = RuleScheduleDialog(parent, "People", client, False)
+        created.append(schedule)
+        webhook = WebhookEditor(parent, "https://example.test/hook", "application/json", "{}")
+        created.append(webhook)
+        sample = queries[0]
+        video = created[0]._constructionView._videoWindow
+        target_params = inspect.signature(TargetConfigPanel.__init__).parameters
+        if len(target_params) > 4:
+            created.append(TargetConfigPanel(parent, video, sample.getTargets()[0], sample))
+        else:
+            created.append(TargetConfigPanel(parent, video, sample.getTargets()[0]))
+        where_params = inspect.signature(WhereConfigPanel.__init__).parameters
+        if len(where_params) > 4:
+            created.append(WhereConfigPanel(
+                parent, video, sample.getTriggers()[0], sample.getTriggers()[1],
+            ))
+        else:
+            created.append(WhereConfigPanel(parent, video, sample.getTriggers()[0]))
+        created.append(ResponseConfigPanel(parent, sample, client, data))
+        try:
+            from frontEnd.AttributeLibraryDialog import AttributeLibraryDialog
+        except ImportError:
+            AttributeLibraryDialog = None
+        if AttributeLibraryDialog is not None:
+            created.append(AttributeLibraryDialog(parent, data))
+    finally:
+        for window in reversed(created):
+            if window is not None:
+                window.Destroy()
         parent.Destroy()

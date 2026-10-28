@@ -118,7 +118,7 @@ class ConstructionBlock(wx.Control):
         # Set our default font to be 2 less than the default font for a button,
         # but not less than 10 point...
         font = self.GetFont()
-        font.SetPointSize(max(font.GetPointSize()-2, 10))
+        font.SetPointSize(int(max(font.GetPointSize() - 2, 10)))
         self.SetFont(font)
 
         # We start out not being selected...

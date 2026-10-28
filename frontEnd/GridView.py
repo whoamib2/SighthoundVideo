@@ -959,7 +959,7 @@ class GridView(BaseMonitorView):
             # Use the default font of the window, size it reasonably.
             fontSize = min(20, max(10, min(height, width) // 10))
             font = self.GetFont()
-            font.SetPointSize(fontSize)
+            font.SetPointSize(int(fontSize))
             self._gridDebug("creating %dx%d bitmap for status '%s' ..." %
                               (width, height, status))
             result = makeVideoStatusBitmap(statusText, font,

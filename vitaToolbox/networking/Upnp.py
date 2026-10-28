@@ -2032,8 +2032,10 @@ class _StringSock(object):
 
     ###########################################################
     """NO_OBS makefile"""
-    def makefile(self, mode, bufsize):
+    def makefile(self, mode="rb", bufsize=-1):
         """Make a file out of our string.
+
+        Python 3's http.client calls makefile('rb') with no buffer size.
 
         @param  mode     Ignored.
         @param  bufsize  Ignored.
