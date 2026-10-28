@@ -52,7 +52,6 @@ import wx
 
 # Toolbox imports...
 from vitaToolbox.wx.BindChildren import bindChildren
-from vitaToolbox.wx.FixedStaticBitmap import FixedStaticBitmap
 from vitaToolbox.wx.TextSizeUtils import makeFontDefault
 from vitaToolbox.wx.TextCtrlUtils import setHyperlinkColors
 
@@ -115,9 +114,13 @@ class _AboutBox(wx.Dialog):
         This function exists so we can put a "try" around it easily...
         """
 
-        mainBitmap = wx.Bitmap("frontEnd/bmps/About_Image.png")
-
-        mainStaticBitmap = FixedStaticBitmap(self, -1, mainBitmap)
+        # The old about artwork was a Sighthound logo. The dialog is text.
+        titleLabel = wx.StaticText(self, -1, kAppName)
+        makeFontDefault(titleLabel)
+        titleFont = titleLabel.GetFont()
+        titleFont.SetPointSize(titleFont.GetPointSize() + 6)
+        titleFont.SetWeight(wx.FONTWEIGHT_BOLD)
+        titleLabel.SetFont(titleFont)
 
         intMatch = re.search('[0-9]+', wx.GetApp().getAppBuildStr())
         buildStr = 'unknown'
@@ -146,11 +149,11 @@ class _AboutBox(wx.Dialog):
 
         makeFontDefault(appInfoLabel, copyrightLabel, copyrightMoreInfoCtrl,
                         okButton)
-        copyrightLabel.Wrap(mainBitmap.Size[0]-24)
+        copyrightLabel.Wrap(420)
 
         sizer = wx.BoxSizer(wx.VERTICAL)
-        sizer.Add(mainStaticBitmap,  0, wx.ALIGN_RIGHT | wx.BOTTOM, 5)
-        sizer.Add(appInfoLabel, 0, wx.LEFT, 12)
+        sizer.Add(titleLabel, 0, wx.LEFT | wx.TOP, 12)
+        sizer.Add(appInfoLabel, 0, wx.LEFT | wx.TOP, 12)
         sizer.Add(copyrightLabel, 0, wx.EXPAND | wx.TOP | wx.LEFT | wx.RIGHT, 12)
         sizer.Add(copyrightMoreInfoCtrl, 0, wx.LEFT | wx.RIGHT, 12)
 

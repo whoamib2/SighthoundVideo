@@ -214,7 +214,7 @@ def main():
         except Exception:
             log_startup_exception("could not write the temp traceback")
         show_fatal(
-            "Sighthound Video hit an unexpected error and closed.\n\n%s"
+            "VigilCam hit an unexpected error and closed.\n\n%s"
             % startup_log_path()
         )
 
@@ -230,6 +230,6 @@ if __name__ == '__main__':
     except Exception:
         log_startup_exception("startup failed outside main")
         show_fatal(
-            "Sighthound Video hit an unexpected error and closed.\n\n%s"
+            "VigilCam hit an unexpected error and closed.\n\n%s"
             % startup_log_path()
         )

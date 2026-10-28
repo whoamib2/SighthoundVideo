@@ -55,7 +55,7 @@ import urllib.parse
 import logging
 import copy
 # Common 3rd-party imports...
-import netifaces
+from vitaToolbox.sysUtils.interfaces import ipv4_addresses
 
 # Toolbox imports...
 from vitaToolbox.strUtils.EnsureUnicode import ensureUtf8
@@ -394,17 +394,7 @@ class ControlPointManager(object):
         """
         addrs = []
         try:
-            for ifName in netifaces.interfaces():
-                ifAddresses = netifaces.ifaddresses(ifName)
-                if netifaces.AF_INET in ifAddresses:
-                    for inetAddress in ifAddresses[netifaces.AF_INET]:
-                        addr = inetAddress.get('addr')
-                        if addr != '0.0.0.0':
-                            try:
-                                socket.inet_aton(addr) # valid IPv4, please
-                            except:
-                                continue
-                            addrs.append(inetAddress)
+            addrs = ipv4_addresses()
         except:
             # due to IPHLPAPI.DLL incompatibilities we've seen this happening
             # in the wild, so protecting us against it cannot hurt ...

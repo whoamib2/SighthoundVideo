@@ -147,7 +147,7 @@ is a must, at least under Windows.
 ###############################################################################
 
 # realm, used in the basic auth mechanism
-REALM = "Sighthound"
+REALM = "VigilCam"
 
 ###############################################################################
 

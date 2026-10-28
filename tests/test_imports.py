@@ -61,7 +61,6 @@ _ALLOWED_MISSING = {
     "SIOWrapper",
     "fcntl",
     "winreg",
-    "netifaces",
     "requests",
 }
 

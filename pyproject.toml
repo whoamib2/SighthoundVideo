@@ -1,7 +1,7 @@
 [project]
-name = "sighthound-video"
+name = "vigilcam"
 version = "7.0.16"
-description = "Sighthound Video desktop VMS, ported to Python 3.11+"
+description = "VigilCam desktop VMS, based on the Sighthound Video GPL-3.0 release"
 readme = "README.md"
 # 3.11+ stays supported. The Windows build prefers 3.14 and refuses 3.15:
 # onnxruntime-directml 1.24.4 has no win_amd64 cp315 wheel.
@@ -12,6 +12,7 @@ dependencies = [
     "Pillow>=10",
     "requests>=2.31",
     "wxPython>=4.2",
+    "psutil>=6",
 ]
 
 [project.optional-dependencies]

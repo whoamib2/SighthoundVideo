@@ -64,7 +64,7 @@ from vitaToolbox.wx.TextCtrlUtils import setHyperlinkColors
 _kTitle = "Sign In"
 
 _kErrorText = (
-"""There was a problem authenticating your Sighthound account. """
+"""There was a problem authenticating your VigilCam account. """
 """Please enter your email address and password to sign in again."""
 )
 
@@ -73,7 +73,7 @@ _kLegacyPaidAction = "."
 _kLegacyStarterAction = " and claim your free Pro trial."
 
 _kWelcomeTextLegacy = (
-"""Sighthound Video now requires a Sighthound Account. This system allows """
+"""VigilCam can use an account. This system allows """
 """for easier license storage, activation, upgrades, and will enable the """
 """addtion of many new features going forward. You must create an account """
 """to continue receiving application updates"""

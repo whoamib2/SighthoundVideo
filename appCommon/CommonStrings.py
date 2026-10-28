@@ -61,19 +61,20 @@ kSighthoundWebsiteBaseUrl   = "https://%s/" % kSighthoundWebsite
 kOpenSourceVersion=True
 
 
-# Info about whatever company is shipping the app (the OEM)...
-kOemName         = kSighthoundCompanyName
-kOemWebsite      = kSighthoundWebsite
+# The product shipped from this tree. Sighthound, Inc. remains the copyright
+# holder of the original GPL-3.0 release; that name is not the product name.
+kOemName         = "VigilCam"
+kOemWebsite      = "vigilcam.ai"
 
 
 
 # Names of the apps...
-kAppName          = "Sighthound Video"
-kExeName          = "Sighthound Video"  # Limit to 16 chars for Mac
-kBackendExeName   = "Sighthound Agent"
-kWebcamExeName    = "Sighthound USB"
-kWebserverExeName = "Sighthound Web"
-kXNATExeName      = "SighthoundXNAT"
+kAppName          = "VigilCam"
+kExeName          = "VigilCam"  # Limit to 16 chars for Mac
+kBackendExeName   = "VigilCam Agent"
+kWebcamExeName    = "VigilCam USB"
+kWebserverExeName = "VigilCam Web"
+kXNATExeName      = "VigilCamXNAT"
 
 # Backend command line argument: identifies an agent/backend process.
 kBackendMarkerArg = "--sh-2e4fce7e"
@@ -111,24 +112,25 @@ kApiVersion = "1.1"
 
 # These try to make the URLs below easier to customize if we have OEMs that
 # have their own of any of these...
-kStoreWebsite         = kSighthoundWebsite
+kStoreWebsite         = kOemWebsite
 
-_kDocumentationBaseUrl = "https://%s/app-help/" % kSighthoundWebsite
+_kDocumentationBaseUrl = "https://%s/" % kOemWebsite
 _kStoreBaseUrl         = _kDocumentationBaseUrl
 
 
 
-kDocumentationIconUrl = "https://%s/favicon.ico" % kSighthoundWebsite
+kDocumentationIconUrl = "https://%s/favicon.ico" % kOemWebsite
 kDocumentationDescription = "View Online Reference Guide"
 
 kOemUrl               = "http://%s/"            % kOemWebsite
 
 
 
-kCopyrightMoreInfoUrl = "https://%s/opensource/" % kSighthoundWebsite   # (!!!) ALSO IN the EULA (.rtf and SLAResources.r)
+# Original Sighthound Video source. The GitHub repository name is unchanged.
+kCopyrightMoreInfoUrl = "https://github.com/sighthoundinc/SighthoundVideo"
 
 
-kForumsUrl         = kSighthoundWebsiteBaseUrl + "forums"
+kForumsUrl         = "https://%s/" % kOemWebsite
 
 
 kDocumentationUrl  = _kDocumentationBaseUrl + "reference-guide"
@@ -155,10 +157,10 @@ kDirectBuyPro = _kStoreBaseUrl + "buy-pro?id=%s&mach=%s"
 
 kServicesHost = "licensing.sighthound.com"
 
-kSupportEmail = "support@sighthound.com"
+kSupportEmail = "support@vigilcam.ai"
 
 # Mac PLST strings
-kBundleIdentifier  = "com.sighthound.sighthoundvideo"
+kBundleIdentifier  = "ai.vigilcam.app"
 kMinMacOSVersion   = "10.10"
 
 
@@ -172,7 +174,9 @@ kSoftwareLicenseAgreementResource = "SLAResources.r"  # Also in FrontEnd.mk
 # Copyright info...
 kCopyrightYear = "2008-2021"
 kCopyrightStr = (
-    """© %s %s All rights reserved.\n\n"""
+    """VigilCam\n\n"""
+    """Based on the Sighthound Video open-source release, """
+    """© %s %s, licensed under the GNU GPLv3.\n\n"""
     """This product contains software whose copyright and """
     """IPR are owned by and licensed from x264, LLC\n"""
     """FFmpeg copyright © 2000-2021 Fabrice Bellard, et al. """
@@ -182,7 +186,7 @@ kCopyrightStr = (
     """FreeType © 2006-2021 The FreeType Project.""") % (
     kCopyrightYear, kSighthoundCompanyName,
 )
-kCopyrightMoreInfoStr = "Click here for detailed copyright information."
+kCopyrightMoreInfoStr = "Original Sighthound Video source (GPL-3.0)."
 
 
 # Log names

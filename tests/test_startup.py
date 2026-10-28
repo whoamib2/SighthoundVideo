@@ -26,16 +26,45 @@ def test_startup_log_uses_localappdata(monkeypatch, tmp_path):
     monkeypatch.setattr(sys, "platform", "win32")
     startup = _load(ROOT / "appCommon" / "startuplog.py", "sighthound_startuplog")
     startup.log_startup("hello")
-    path = tmp_path / "Sighthound Video" / "logs" / "startup.log"
+    path = tmp_path / "VigilCam" / "logs" / "startup.log"
     assert path.is_file()
     assert "hello" in path.read_text(encoding="utf-8")
     assert startup.startup_log_path() == str(path)
 
 
+def test_legacy_sighthound_video_folder_is_renamed(monkeypatch, tmp_path):
+    monkeypatch.setenv("LOCALAPPDATA", str(tmp_path))
+    monkeypatch.setattr(sys, "platform", "win32")
+    startup = _load(ROOT / "appCommon" / "startuplog.py", "sighthound_startuplog_migrate")
+    old = tmp_path / "Sighthound Video"
+    old.mkdir()
+    (old / "keep.txt").write_text("kept", encoding="utf-8")
+    new = Path(startup.migrate_legacy_data_dir(str(tmp_path)))
+    assert new == tmp_path / "VigilCam"
+    assert (new / "keep.txt").read_text(encoding="utf-8") == "kept"
+    assert not old.exists()
+    # A second call must not destroy an existing VigilCam folder.
+    old.mkdir()
+    (old / "other.txt").write_text("left", encoding="utf-8")
+    again = Path(startup.migrate_legacy_data_dir(str(tmp_path)))
+    assert again == new
+    assert (old / "other.txt").is_file()
+
+
+def test_netifaces_is_not_imported():
+    text = "\n".join(
+        path.read_text(encoding="utf-8", errors="replace")
+        for path in ROOT.rglob("*.py")
+        if "tests" not in path.parts and ".venv" not in path.parts
+    )
+    assert "import netifaces" not in text
+    assert "psutil.net_if_addrs" in (ROOT / "vitaToolbox" / "sysUtils" / "interfaces.py").read_text(encoding="utf-8")
+
+
 def test_instance_lock_name_strips_domain_slash():
     startup = _load(ROOT / "appCommon" / "startuplog.py", "sighthound_startuplog_lock")
-    assert "\\" not in startup.instance_lock_name("Sighthound Video", r"OFFICE\Pat")
-    assert startup.instance_lock_name("Sighthound Video", r"OFFICE\Pat") == "Sighthound_Video-OFFICE_Pat"
+    assert "\\" not in startup.instance_lock_name("VigilCam", r"OFFICE\Pat")
+    assert startup.instance_lock_name("VigilCam", r"OFFICE\Pat") == "VigilCam-OFFICE_Pat"
 
 
 def test_frozen_app_does_not_require_a_missing_launch_service(monkeypatch):
@@ -59,7 +88,7 @@ def test_frozen_windows_backend_relaunches_this_executable(monkeypatch):
     monkeypatch.setattr(
         sys,
         "executable",
-        r"C:\Program Files\Sighthound Video\SighthoundVideo.exe",
+        r"C:\Program Files\VigilCam\VigilCam.exe",
     )
     params = getLaunchParameters()
     assert params == [sys.executable]
@@ -69,7 +98,7 @@ def test_debug_launcher_passes_console(tmp_path):
     package = _load(ROOT / "scripts" / "package_app.py", "sighthound_package_app_debug")
     path = package.write_debug_launcher(tmp_path)
     text = path.read_text(encoding="utf-8")
-    assert '"%~dp0SighthoundVideo.exe" --console %*' in text
+    assert '"%~dp0VigilCam.exe" --console %*' in text
     assert "startup.log" in text
 
 
@@ -171,8 +200,8 @@ def test_launchpad_startup_reaches_mainloop(tmp_path, monkeypatch):
         timeout=60,
     )
     candidates = (
-        tmp_path / "appdata" / "Sighthound Video" / "logs" / "startup.log",
-        tmp_path / "share" / "Sighthound Video" / "logs" / "startup.log",
+        tmp_path / "appdata" / "VigilCam" / "logs" / "startup.log",
+        tmp_path / "share" / "VigilCam" / "logs" / "startup.log",
     )
     log = next((path for path in candidates if path.is_file()), candidates[-1])
     detail = (ran.stdout or "") + (ran.stderr or "")

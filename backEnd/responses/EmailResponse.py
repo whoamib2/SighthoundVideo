@@ -217,7 +217,7 @@ class EmailResponse(BaseResponse):
                                        self._ruleName, self._camLoc,
                                        self._emailSettings, self._configDict,
                                        numTriggers, objList, firstMs, lastMs,
-                                       make_msgid("SighthoundEmailResponse")])
+                                       make_msgid("VigilCamEmailResponse")])
 
         self._lastEmailTime = firstMs
 
