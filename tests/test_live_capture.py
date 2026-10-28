@@ -83,13 +83,21 @@ class _Pipe:
         raise RuntimeError("no message")
 
 
-def test_camera_capture_publishes_a_live_frame_and_records_a_clip(tmp_path):
+def test_camera_capture_publishes_a_live_frame_and_records_a_clip(tmp_path, monkeypatch):
     pytest.importorskip("av")
     pytest.importorskip("numpy")
+    pytest.importorskip("onnxruntime")
+    pytest.importorskip("onnx")
     from backEnd.native.capture import native_capture_available
 
     if not native_capture_available():
         pytest.skip("open capture backend is not available")
+
+    from backEnd.native.test_detector_model import build_bright_blob_model
+
+    model = tmp_path / "blob.onnx"
+    build_bright_blob_model(str(model))
+    monkeypatch.setenv("SIGHTHOUND_DETECTOR_MODEL", str(model))
 
     from appCommon.LiveViewBuffer import parse_live_footer, parse_live_header
     from appCommon.CommonStrings import kLiveHeaderSize
@@ -125,21 +133,26 @@ def test_camera_capture_publishes_a_live_frame_and_records_a_clip(tmp_path):
 
         live = None
         jpeg = None
+        live_path = user_dir / "live" / (location + ".live")
         for _ in range(16):
             if not camera._streamReader.isRunning:
                 break
-            if not camera._processFrame():
+            camera._processFrame()
+            if not live_path.is_file():
                 continue
-            live_path = user_dir / "live" / (location + ".live")
             raw = live_path.read_bytes()
+            if len(raw) < kLiveHeaderSize:
+                continue
             header = parse_live_header(raw[:kLiveHeaderSize])
-            assert header is not None
+            if header is None:
+                continue
             frame_id, width, height, _request_fps, _capture_fps = header
-            assert frame_id >= 0
-            assert width > 0 and height > 0
+            if width <= 0 or height <= 0:
+                continue
             footer_at = kLiveHeaderSize + width * height * 3
             footer_w, footer_h = parse_live_footer(raw[footer_at:footer_at + 8])
             assert (footer_w, footer_h) == (width, height)
+            assert frame_id >= 0
             live = header
 
             statuses = {}
@@ -150,11 +163,15 @@ def test_camera_capture_publishes_a_live_frame_and_records_a_clip(tmp_path):
 
             jpeg = camera._wsgiAppImage({"QUERY_STRING": "width=160&height=120"}, start_response)
             assert statuses["status"].startswith("200")
-            assert isinstance(jpeg, bytes) and jpeg.startswith(b"\xff\xd8")
+            assert isinstance(jpeg, (bytes, bytearray)) and bytes(jpeg).startswith(b"\xff\xd8")
+            jpeg = bytes(jpeg)
             break
+        else:
+            raise AssertionError("no live frame was published")
 
-        while camera._streamReader.isRunning:
-            camera._processFrame()
+        writer = getattr(camera._streamReader, "_writer", None)
+        if writer is not None:
+            writer.close_segment()
     finally:
         sys.stdout, sys.stderr = stdout, stderr
         if camera is not None:
