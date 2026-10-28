@@ -6,7 +6,7 @@
 #define MyAppExeName "SighthoundVideo.exe"
 #define MyAppVersion "7.0.16"
 ; SourcePath ends with a backslash and may contain spaces (C:\App Dev\...).
-#define DistDir "{#SourcePath}..\dist\SighthoundVideo"
+#define DistDir SourcePath + "..\dist\SighthoundVideo"
 
 [Setup]
 AppId={{8F3A1C2E-6B47-4D19-9E5A-2C7B0D4F1A83}
