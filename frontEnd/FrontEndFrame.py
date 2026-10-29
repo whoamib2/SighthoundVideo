@@ -268,6 +268,8 @@ class FrontEndFrame(wx.Frame):
         self._backEndTimer.Start(_kBackEndPollMsecs)
         from .SelfTest import installSelfTestHook
         installSelfTestHook(self, getUserLocalDataDir())
+        from .TrainingScheduler import installAutoRetrain
+        installAutoRetrain(self)
         from .SelfTest import installStallWatchdog
         installStallWatchdog(self)
         self._backEndErrorCount = 0
@@ -825,6 +827,7 @@ class FrontEndFrame(wx.Frame):
                     (MenuIds.kExportClipForBugReportMenuEx, "", wx.ID_ANY, None),
                     (MenuIds.kExportFrame, "", wx.ID_ANY, None),
                     (MenuIds.kMarkMissed, "", wx.ID_ANY, None),
+                    (MenuIds.kRescanSelected, "", wx.ID_ANY, None),
                     (MenuIds.kExportAllWithinTimeRangeMenu, "", wx.ID_ANY, None),
                     (MenuIds.kSubmitClipForAnalysis, "", conditionalAny, None),
                     (MenuIds.kSubmitClipForAnalysisWithNote, "", conditionalAny, None),
@@ -852,6 +855,7 @@ class FrontEndFrame(wx.Frame):
                      self.OnAttributeLibrary),
                     (MenuIds.kTrainingSamples, "", wx.ID_ANY,
                      self.OnTrainingSamples),
+                    (MenuIds.kRescanClips, "", wx.ID_ANY, self.OnRescanClips),
                     # (None, None, None, None), Separator auto-added on Win...
                     (_kMenuOptions, "", wx.ID_PREFERENCES, self.OnOptions),
                 ) + extraToolsData,
@@ -1367,6 +1371,13 @@ class FrontEndFrame(wx.Frame):
         finally:
             self.Thaw()
 
+
+    ############################################################
+    def OnRescanClips(self, event=None):
+        """Re-scan a camera / all cameras (or the selected results)."""
+        from frontEnd.TrainingDialogs import selectedObjectIds, showRescanDialog
+
+        showRescanDialog(self, selectedObjectIds(self))
 
     ############################################################
     def OnTrainingSamples(self, event=None):

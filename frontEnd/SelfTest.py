@@ -177,6 +177,8 @@ def _after(frame, num):
              _t(model.getCurrentAbsoluteMs()))
     log.info("SELFTEST maxStallMs=%d", int(_stall["max"] * 1000))
     _frameGrabTest(panel, num)
+    _rescanTest(frame)
+    wx.CallLater(45000, _wizardTest, frame)
     _playTest(frame, num)
 
 
@@ -238,3 +240,96 @@ def _playTest(frame, num, seconds=5.0):
     frame.Bind(wx.EVT_TIMER, onTick, timer)
     timer.Start(50)
     frame._selfTestPlayTimer = timer
+
+
+def _rescanTest(frame):
+    """Re-scan the vehicles of the newest few results in the background."""
+    from backEnd.rescan import run_rescan
+    from frontEnd.TrainingDialogs import refreshSearch, rescanPaths
+
+    log = getLogger(kFrontEndLogName)
+    model = frame._searchView._resultsModel
+    clips = model.getMatchingClips()
+    ids = []
+    for clip in clips[-4:]:
+        for obj in getattr(clip, "objList", None) or []:
+            ids.append(int(obj[0] if isinstance(obj, (tuple, list)) else obj))
+    objDb, clipDb, videoDir = rescanPaths(frame)
+    try:
+        import sqlite3
+
+        conn = sqlite3.connect(objDb, timeout=5)
+        try:
+            ids += [r[0] for r in conn.execute(
+                "SELECT uid FROM objects WHERE type='vehicle' ORDER BY timeStart DESC LIMIT 3")]
+        finally:
+            conn.close()
+    except Exception:
+        log.exception("SELFTEST rescan could not list vehicles")
+    log.info("SELFTEST rescan start objects=%d ids=%s db=%s videos=%s", len(ids), ids, objDb, videoDir)
+    started = time.monotonic()
+
+    def work():
+        try:
+            first = run_rescan(objDb, clipDb, videoDir, 0, 2 ** 62, None, ids)
+            log.info("SELFTEST rescan first run %r", first)
+            result = run_rescan(objDb, clipDb, videoDir, 0, 2 ** 62, None, ids)
+            import sqlite3
+
+            conn = sqlite3.connect(objDb, timeout=5)
+            try:
+                labels = conn.execute(
+                    "SELECT objUid, value FROM objAttributes WHERE key='delivery_carrier' AND objUid IN (%s)"
+                    % (",".join(str(i) for i in ids) or "0")).fetchall()
+            finally:
+                conn.close()
+            log.info("SELFTEST rescan done in %.1fs %r labels=%s",
+                     time.monotonic() - started, result, labels[:10])
+            wx.CallAfter(refreshSearch, frame)
+        except Exception:
+            log.exception("SELFTEST rescan crashed")
+
+    threading.Thread(target=work, name="selftest-rescan", daemon=True).start()
+
+
+def _wizardTest(frame):
+    """Open the Add Camera wizard, step through its setup pages, then cancel."""
+    log = getLogger(kFrontEndLogName)
+    try:
+        from frontEnd.CameraSetupWizard import CameraSetupWizard
+
+        wizard = CameraSetupWizard(frame, frame._backEndClient, frame._dataManager)
+    except Exception:
+        log.exception("SELFTEST wizard construct crashed")
+        return
+    visited = []
+
+    def step():
+        try:
+            for name in ("_welcomeScreen", "_detectedCamerasScreen", "_manualSettingsScreen",
+                         "_upnpSettingsScreen", "_onvifCredentialsScreen"):
+                page = getattr(wizard, name, None)
+                if page is not None:
+                    wizard.ShowPage(page)
+                    wx.SafeYield()
+                    visited.append(name)
+            page = wizard._manualSettingsScreen
+            page._passCtrl.SetValue("selftest-pw")
+            page._passCtrl.SetShown(True)
+            shown = page._passCtrl.GetValue()
+            page._passCtrl.SetShown(False)
+            log.info("SELFTEST wizard ok pages=%s showPassword=%s verifyField=%s",
+                     visited, shown == "selftest-pw", type(page._passVerifyCtrl).__name__)
+        except Exception:
+            log.exception("SELFTEST wizard step crashed after %s", visited)
+        finally:
+            wizard.EndModal(wx.ID_CANCEL)
+
+    wx.CallLater(1500, step)
+    try:
+        wizard.run()
+    except Exception:
+        log.exception("SELFTEST wizard run crashed")
+    finally:
+        wizard.Destroy()
+    log.info("SELFTEST wizard closed")

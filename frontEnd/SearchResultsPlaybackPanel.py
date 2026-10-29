@@ -225,6 +225,7 @@ class SearchResultsPlaybackPanel(BorderImagePanel):
         self._exportForBugReportMenuItem = MenuIds.getToolsMenuItem(menuBar, MenuIds.kExportClipForBugReportMenu)
         self._exportFrameMenuItem        = MenuIds.getToolsMenuItem(menuBar, MenuIds.kExportFrame)
         self._markMissedMenuItem         = MenuIds.getToolsMenuItem(menuBar, MenuIds.kMarkMissed)
+        self._rescanSelectedMenuItem     = MenuIds.getToolsMenuItem(menuBar, MenuIds.kRescanSelected)
         self._deleteClipMenuItem         = MenuIds.getToolsMenuItem(menuBar, MenuIds.kDeleteClipMenu)
         self._exportForTimeRangeMenuItem = MenuIds.getToolsMenuItem(menuBar, MenuIds.kExportAllWithinTimeRangeMenu)
         self._submitClipForAnalysisMenuItem = MenuIds.getToolsMenuItem(menuBar, MenuIds.kSubmitClipForAnalysis)
@@ -236,6 +237,9 @@ class SearchResultsPlaybackPanel(BorderImagePanel):
         if self._markMissedMenuItem:
             self._menuItems.append(self._markMissedMenuItem)
             topWin.Bind(wx.EVT_MENU, self.OnMarkMissed, self._markMissedMenuItem)
+        if self._rescanSelectedMenuItem:
+            self._menuItems.append(self._rescanSelectedMenuItem)
+            topWin.Bind(wx.EVT_MENU, self.OnRescanSelected, self._rescanSelectedMenuItem)
 
         if self._submitClipForAnalysisMenuItem and self._submitClipForAnalysisWithNoteMenuItem:
             self._menuItems += [ self._submitClipForAnalysisMenuItem,
@@ -1767,6 +1771,14 @@ class SearchResultsPlaybackPanel(BorderImagePanel):
         return self._progressDlg.SetPercentageDone(percentage)
 
     ###########################################################
+    def OnRescanSelected(self, event=None):
+        """Re-scan the vehicles in the selected search result(s)."""
+        from frontEnd.TrainingDialogs import selectedObjectIds, showRescanDialog
+
+        frame = self.GetTopLevelParent()
+        showRescanDialog(frame, selectedObjectIds(frame))
+
+    ###########################################################
     def grabCurrentFrame(self, framePath, absMs=None):
         """Write the paused frame (no overlays) to ``framePath`` as JPEG.
 
@@ -2103,6 +2115,8 @@ class SearchResultsPlaybackPanel(BorderImagePanel):
                         not self._resultsModel.isPlaying())
         if self._markMissedMenuItem:
             self._markMissedMenuItem.Enable(self._exportFrameMenuItem.IsEnabled())
+        if self._rescanSelectedMenuItem:
+            self._rescanSelectedMenuItem.Enable(self._exportClipMenuItem.IsEnabled())
 
 
     ###########################################################
