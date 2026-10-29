@@ -47,14 +47,27 @@ _searchlib = None
 
 
 def _lib():
-    """Load optsearches the first time a search actually runs."""
+    """Load optsearches the first time a search actually runs.
+
+    When the compiled library is missing (MSVC not installed at build time)
+    the pure-Python port in optsearches_py is used, so region and line
+    rules keep working instead of raising on every real-time search.
+    """
     global _searchlib
     if _searchlib is None:
-        lib = LoadLibrary(None, _libName)
-        lib.is_obj_inside.argtypes = [BBOX, c_int, POINTER(BBOX), c_int]
-        lib.is_obj_inside.restype = c_int
-        lib.did_obj_cross.argtypes = [BBOX, BBOX, BBOX, c_int, c_int]
-        lib.did_obj_cross.restype = c_int
+        try:
+            lib = LoadLibrary(None, _libName)
+            lib.is_obj_inside.argtypes = [BBOX, c_int, POINTER(BBOX), c_int]
+            lib.is_obj_inside.restype = c_int
+            lib.did_obj_cross.argtypes = [BBOX, BBOX, BBOX, c_int, c_int]
+            lib.did_obj_cross.restype = c_int
+        except Exception:
+            import logging
+
+            from backEnd.triggers import optsearches_py as lib
+
+            logging.getLogger(__name__).warning(
+                "Native optsearches library not found; using the Python implementation")
         _searchlib = lib
     return _searchlib
 

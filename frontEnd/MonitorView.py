@@ -212,6 +212,8 @@ class MonitorView(BaseMonitorView):
 
         # A _FpsStats object per camera.
         self._fpsStats = {}
+        self._decoderBadges = {}
+        self._lastBadgeCheck = 0
 
         self._lastStatusQueryTime = time.time()
 
@@ -399,6 +401,10 @@ class MonitorView(BaseMonitorView):
         self._topLeftColSizer = wx.BoxSizer(wx.VERTICAL)
         self._topLeftColSizer.Add(hSizer, 1, wx.EXPAND)
         self._topLeftColSizer.Add(self._shadowBottom, 0, wx.EXPAND)
+        # Decoder / stream status of the camera in the large view.
+        self._largeViewDecoderText = wx.StaticText(self._topLeftPanel, -1, "")
+        self._largeViewDecoderText.SetFont(self._largeViewDecoderText.GetFont().Smaller())
+        self._topLeftColSizer.Add(self._largeViewDecoderText, 0, wx.LEFT | wx.EXPAND, 4)
         self._activeViewTimer = wx.Timer(self, _kActiveTimerId)
 
         self._ruleListPanel = RuleListPanel(self._leftSplitterWindow, self._backEndClient,
@@ -977,6 +983,11 @@ class MonitorView(BaseMonitorView):
                                         name=cameraLocation)
         warningIcon.Hide()
 
+        decoderBadge = wx.StaticText(self._previewWin, -1, "  ", name=cameraLocation)
+        decoderBadge.SetFont(decoderBadge.GetFont().Smaller())
+        decoderBadge.SetToolTip("Decoder: not reported yet")
+        self._decoderBadges[cameraLocation] = decoderBadge
+
         self._previewControls[cameraLocation] = \
                     (videoWindow, recordOn, recordOff, nameLabel, warningIcon)
 
@@ -1019,6 +1030,9 @@ class MonitorView(BaseMonitorView):
             labelSizer.Add(overlapSizer, 0, wx.ALL | wx.ALIGN_CENTER_VERTICAL,
                            _kCtrlPadding//2)
             labelSizer.Add(nameLabel, 1, wx.ALIGN_CENTER_VERTICAL)
+            decoderBadge = self._decoderBadges.get(cameraLocation)
+            if decoderBadge:
+                labelSizer.Add(decoderBadge, 0, wx.ALIGN_CENTER_VERTICAL | wx.RIGHT, 2)
 
             # ...extra craziness to make sure that the warning takes up space
             # even if hidden...
@@ -1100,6 +1114,38 @@ class MonitorView(BaseMonitorView):
             self._backEndClient.setLiveViewParams(self._largeViewCamera, _kSmallVideoSize[0], _kSmallVideoSize[1], 0, _kSmallVideoFps)
         self._backEndClient.setLiveViewParams(cameraLocation, w, h, audioVolume, 0)
         self._largeViewCamera = cameraLocation
+        self._lastBadgeCheck = 0
+        self._updateDecoderBadges()
+
+
+    ###########################################################
+    def _updateDecoderBadges(self):
+        """Refresh HW/SW tile badges and the large-view status (every 5 s)."""
+        now = time.time()
+        if now - self._lastBadgeCheck < 5:
+            return
+        self._lastBadgeCheck = now
+        try:
+            from frontEnd.DecoderBadge import badge_for, read_decoder_info, status_line
+            dataDir = getUserLocalDataDir()
+            for camera, badge in list(self._decoderBadges.items()):
+                if not badge:
+                    continue
+                text, tip = badge_for(read_decoder_info(dataDir, camera))
+                if badge.GetLabel().strip() != text:
+                    badge.SetLabel(text or "  ")
+                    badge.SetForegroundColour(wx.Colour(0, 140, 0) if text == "HW" else wx.Colour(170, 110, 0))
+                    badge.GetContainingSizer() and self._previewWin.Layout()
+                badge.SetToolTip(tip)
+            label = getattr(self, "_largeViewDecoderText", None)
+            if label:
+                camera = self._largeViewCamera
+                info = read_decoder_info(dataDir, camera) if camera else {}
+                line = status_line(camera, info) if camera else ""
+                if label.GetLabel() != line:
+                    label.SetLabel(line)
+        except Exception:
+            self._logger.debug("decoder badge update failed", exc_info=True)
 
 
     ###########################################################
@@ -1399,6 +1445,10 @@ class MonitorView(BaseMonitorView):
             videoWindow.SetName(curLocation)
             warningIcon.SetName(curLocation)
             del self._previewControls[origLocation]
+            if origLocation in self._decoderBadges:
+                badge = self._decoderBadges.pop(origLocation)
+                badge.SetName(curLocation)
+                self._decoderBadges[curLocation] = badge
             nameLabel.SetLabel(curLocation)
             self._previewControls[curLocation] = \
                     (videoWindow, recordOn, recordOff, nameLabel, warningIcon)
@@ -1456,6 +1506,9 @@ class MonitorView(BaseMonitorView):
         for ctrl in self._previewControls[cameraLocation]:
             ctrl.Destroy()
         del self._previewControls[cameraLocation]
+        badge = self._decoderBadges.pop(cameraLocation, None)
+        if badge:
+            badge.Destroy()
 
         del self._cameraSettings[cameraLocation]
         self._enabledModel.enableCamera(cameraLocation, None)
@@ -1749,6 +1802,7 @@ class MonitorView(BaseMonitorView):
                         fpsStats.trackFrameRate(requestFps, captureFps, self._logger)
                         if not warningIcon is None:
                             warningIcon.Show(fpsStats.checkForErrors())
+                        self._updateDecoderBadges()
 
                         if self._debugModeModel.isDebugMode() and nameLabel is not None:
                             nameLabel.SetLabel("%s %.2f %.2f" % (location,
