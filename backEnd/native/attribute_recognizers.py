@@ -17,6 +17,7 @@ from __future__ import annotations
 
 import json
 import os
+import time
 from typing import Any, Optional, Sequence
 
 from backEnd.attribute_text import (
@@ -488,6 +489,45 @@ class AttributePipeline:
             use_heuristic = os.environ.get(_ENV_HEURISTIC, "1") != "0"
         self.use_heuristic = bool(use_heuristic) and carrier is None
         self._logger = logger
+        self._enable_gpu = False
+        self._user_carrier_path: Optional[str] = None
+        self._user_carrier_mtime: Optional[float] = None
+        self._user_carrier_checked = 0.0
+
+    def watch_user_carrier_model(self, path: Optional[str], enable_gpu: bool = False) -> None:
+        """Hot-load ``path`` (the in-app "Retrain now" output) when it changes."""
+        self._user_carrier_path = path or None
+        self._user_carrier_mtime = None
+        self._user_carrier_checked = 0.0
+        self._enable_gpu = bool(enable_gpu)
+        self._maybe_reload_user_carrier(force=True)
+
+    def _maybe_reload_user_carrier(self, force: bool = False) -> None:
+        path = self._user_carrier_path
+        if not path:
+            return
+        now = time.monotonic()
+        if not force and now - self._user_carrier_checked < 15.0:
+            return
+        self._user_carrier_checked = now
+        try:
+            mtime = os.path.getmtime(path)
+        except OSError:
+            return
+        if mtime == self._user_carrier_mtime:
+            return
+        try:
+            graph = OnnxGraph(path, enable_gpu=self._enable_gpu)
+        except Exception as exc:
+            if self._logger is not None and hasattr(self._logger, "error"):
+                self._logger.error("user carrier model %s failed to load: %s" % (path, exc))
+            self._user_carrier_mtime = mtime
+            return
+        self.carrier = graph
+        self.use_heuristic = False
+        self._user_carrier_mtime = mtime
+        if self._logger is not None and hasattr(self._logger, "info"):
+            self._logger.info("loaded user-trained carrier model %s" % path)
 
     @classmethod
     def from_environment(cls, enable_gpu: bool = False, logger: Any = None) -> "AttributePipeline":
@@ -502,7 +542,7 @@ class AttributePipeline:
                     logger.error("attribute model %s failed to load: %s" % (path, exc))
                 return None
 
-        return cls(
+        pipeline = cls(
             plate_detector=_graph(_ENV_PLATE_DETECTOR),
             plate_ocr=_graph(_ENV_PLATE_OCR),
             face_detector=_graph(_ENV_FACE_DETECTOR),
@@ -510,6 +550,11 @@ class AttributePipeline:
             carrier=_graph(_ENV_CARRIER),
             logger=logger,
         )
+        if _ENV_CARRIER not in os.environ:
+            from backEnd.training_samples import user_carrier_model_path
+
+            pipeline.watch_user_carrier_model(user_carrier_model_path(), enable_gpu=enable_gpu)
+        return pipeline
 
     def set_gallery_db(self, path: Optional[str]) -> None:
         self._gallery_db = path or None
@@ -728,6 +773,7 @@ class AttributePipeline:
         return list(self._db_gallery)
 
     def _read_carrier(self, crop) -> dict:
+        self._maybe_reload_user_carrier()
         if self.carrier is not None:
             label, confidence = self._carrier_model(crop)
         elif self.use_heuristic:

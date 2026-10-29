@@ -824,6 +824,7 @@ class FrontEndFrame(wx.Frame):
                     (MenuIds.kExportClipMenuEx, "", wx.ID_ANY, None),
                     (MenuIds.kExportClipForBugReportMenuEx, "", wx.ID_ANY, None),
                     (MenuIds.kExportFrame, "", wx.ID_ANY, None),
+                    (MenuIds.kMarkMissed, "", wx.ID_ANY, None),
                     (MenuIds.kExportAllWithinTimeRangeMenu, "", wx.ID_ANY, None),
                     (MenuIds.kSubmitClipForAnalysis, "", conditionalAny, None),
                     (MenuIds.kSubmitClipForAnalysisWithNote, "", conditionalAny, None),
@@ -849,6 +850,8 @@ class FrontEndFrame(wx.Frame):
                     ("&FTP Status", "", wx.ID_ANY, self.OnFtpStatus),
                     ("Face Gallery && Plate Watchlist...", "", wx.ID_ANY,
                      self.OnAttributeLibrary),
+                    (MenuIds.kTrainingSamples, "", wx.ID_ANY,
+                     self.OnTrainingSamples),
                     # (None, None, None, None), Separator auto-added on Win...
                     (_kMenuOptions, "", wx.ID_PREFERENCES, self.OnOptions),
                 ) + extraToolsData,
@@ -1364,6 +1367,20 @@ class FrontEndFrame(wx.Frame):
         finally:
             self.Thaw()
 
+
+    ############################################################
+    def OnTrainingSamples(self, event=None):
+        """Show collected training samples and offer "Retrain now".
+
+        @param  event  The menu event (ignored).
+        """
+        from frontEnd.TrainingDialogs import TrainingSamplesDialog
+
+        dlg = TrainingSamplesDialog(self)
+        try:
+            dlg.ShowModal()
+        finally:
+            dlg.Destroy()
 
     ############################################################
     def OnAttributeLibrary(self, event=None):

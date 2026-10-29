@@ -224,6 +224,7 @@ class SearchResultsPlaybackPanel(BorderImagePanel):
         self._exportClipMenuItem         = MenuIds.getToolsMenuItem(menuBar, MenuIds.kExportClipMenu)
         self._exportForBugReportMenuItem = MenuIds.getToolsMenuItem(menuBar, MenuIds.kExportClipForBugReportMenu)
         self._exportFrameMenuItem        = MenuIds.getToolsMenuItem(menuBar, MenuIds.kExportFrame)
+        self._markMissedMenuItem         = MenuIds.getToolsMenuItem(menuBar, MenuIds.kMarkMissed)
         self._deleteClipMenuItem         = MenuIds.getToolsMenuItem(menuBar, MenuIds.kDeleteClipMenu)
         self._exportForTimeRangeMenuItem = MenuIds.getToolsMenuItem(menuBar, MenuIds.kExportAllWithinTimeRangeMenu)
         self._submitClipForAnalysisMenuItem = MenuIds.getToolsMenuItem(menuBar, MenuIds.kSubmitClipForAnalysis)
@@ -232,6 +233,9 @@ class SearchResultsPlaybackPanel(BorderImagePanel):
         self._menuItems = [self._deleteClipMenuItem, self._exportClipMenuItem,
                            self._exportForBugReportMenuItem,
                            self._exportFrameMenuItem,  self._exportForTimeRangeMenuItem]
+        if self._markMissedMenuItem:
+            self._menuItems.append(self._markMissedMenuItem)
+            topWin.Bind(wx.EVT_MENU, self.OnMarkMissed, self._markMissedMenuItem)
 
         if self._submitClipForAnalysisMenuItem and self._submitClipForAnalysisWithNoteMenuItem:
             self._menuItems += [ self._submitClipForAnalysisMenuItem,
@@ -1763,6 +1767,49 @@ class SearchResultsPlaybackPanel(BorderImagePanel):
         return self._progressDlg.SetPercentageDone(percentage)
 
     ###########################################################
+    def OnMarkMissed(self, event=None):
+        """Grab the paused frame and let the user label a missed or wrong object.
+
+        Works anywhere the playback can export a frame, including recorded
+        time with no event on the timeline.
+
+        @param  event  The menu event.
+        """
+        import tempfile
+
+        from frontEnd.TrainingDialogs import MarkMissedDialog
+
+        if self._resultsModel.isPlaying():
+            wx.MessageBox("Pause playback on the moment you want to mark first.",
+                          "Mark as Missed", wx.ICON_INFORMATION | wx.OK,
+                          self.GetTopLevelParent())
+            return
+        startTime = self._resultsModel.getCurrentClipStart() + \
+                    self._resultsModel.getCurrentRelativeMs()
+        handle, framePath = tempfile.mkstemp(prefix="vigilcam_mark_", suffix=".jpg")
+        os.close(handle)
+        try:
+            ok = self._dataMgr.saveCurrentClip(framePath, startTime, startTime,
+                    getUserLocalDataDir(),
+                    {"format": "jpg", "drawBoxes": False, "enableTimestamps": False})
+            if not ok or not os.path.getsize(framePath):
+                wx.MessageBox("Could not read the current frame.", "Mark as Missed",
+                              wx.ICON_ERROR | wx.OK, self.GetTopLevelParent())
+                return
+            dlg = MarkMissedDialog(self.GetTopLevelParent(), framePath,
+                                   self._resultsModel.getCurrentCameraName() or "",
+                                   startTime)
+            try:
+                dlg.ShowModal()
+            finally:
+                dlg.Destroy()
+        finally:
+            try:
+                os.remove(framePath)
+            except OSError:
+                pass
+
+    ###########################################################
     def OnExportFrame(self, event):
         """Export the current frame.
 
@@ -2043,6 +2090,8 @@ class SearchResultsPlaybackPanel(BorderImagePanel):
 
         self._exportFrameMenuItem.Enable(self._exportClipMenuItem.IsEnabled() and \
                         not self._resultsModel.isPlaying())
+        if self._markMissedMenuItem:
+            self._markMissedMenuItem.Enable(self._exportFrameMenuItem.IsEnabled())
 
 
     ###########################################################
