@@ -1838,11 +1838,21 @@ class _DetectedCamerasScreen(_BasePage):
         """Log into Blue Iris, pick a camera and continue as a manual
         (\"Other IP camera\") setup with the URL filled in."""
         from .BlueIrisDialog import BlueIrisDialog
-        dlg = BlueIrisDialog(self.GetTopLevelParent(), self._blueIrisServers)
+        cameras = []
+        try:
+            client = self.wizard.backEndClient
+            for location in client.getCameraLocations():
+                _t, uri, _e, extra = client.getCameraSettings(location)
+                cameras.append((uri, extra))
+        except Exception:
+            client = None
+        dlg = BlueIrisDialog(self.GetTopLevelParent(), self._blueIrisServers,
+                             backEndClient=client, cameras=cameras)
         try:
             if dlg.ShowModal() != wx.ID_OK or not dlg.getResult():
                 return
             url, camName = dlg.getResult()
+            self.wizard.camExtras.update(dlg.getExtras())
         finally:
             dlg.Destroy()
         self.wizard.cameraManufacturer = kOtherCameraManufacturer
