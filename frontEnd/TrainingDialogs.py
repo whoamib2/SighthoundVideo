@@ -263,11 +263,20 @@ class TrainingSamplesDialog(wx.Dialog):
                 counts = ts.retrain_carrier_model()
                 ok, message = True, "Retrained successfully at %s using %d samples; new model active (loaded within ~15 s)." % (
                     time.strftime("%I:%M %p").lstrip("0"), sum(counts.values()))
+                try:
+                    wx.CallAfter(self._setStatusIfAlive, message + " Re-scanning source clips...")
+                    message += " " + rescanSampleSources(self._frame)
+                except Exception as exc:
+                    message += " Re-scan of source clips failed: %s" % exc
             except Exception as exc:
                 ok, message = False, "Retrain failed: %s (previous model kept)" % exc
             wx.CallAfter(self._done, ok, message)
 
         threading.Thread(target=work, name="carrier-retrain", daemon=True).start()
+
+    def _setStatusIfAlive(self, text):
+        if self:
+            self._setStatus(text, wx.Colour(0, 0, 160))
 
     def _done(self, ok, message):
         if not self:
@@ -344,6 +353,26 @@ def showRescanDialog(frame, objIds, parent=None):
         dlg.ShowModal()
     finally:
         dlg.Destroy()
+
+
+def rescanSampleSources(frame):
+    """After a successful retrain: re-scan the clips the samples came from.
+
+    Returns a short result line (empty when there was nothing to scan).
+    """
+    from backEnd.rescan import rescan_sample_sources
+
+    objDb, clipDb, videoDir = rescanPaths(frame)
+    result = rescan_sample_sources(objDb, clipDb, videoDir, ts.read_samples(), pause_s=0.01)
+    wx.CallAfter(refreshSearch, frame)
+    return sourceRescanLine(result)
+
+
+def sourceRescanLine(result):
+    if result.error and not result.scanned:
+        return "Re-scan of source clips failed: %s" % result.error
+    return "Re-scanned %d source clip%s (%d label%s changed)." % (
+        result.clips, "" if result.clips == 1 else "s", result.changed, "" if result.changed == 1 else "s")
 
 
 def refreshSearch(frame):

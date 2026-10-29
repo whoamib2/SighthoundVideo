@@ -51,6 +51,16 @@ def installAutoRetrain(frame):
             try:
                 counts = ts.retrain_carrier_model()
                 log.info("auto retrain (%s) succeeded: %s", reason, counts)
+                try:
+                    from frontEnd.TrainingDialogs import rescanSampleSources
+
+                    line = rescanSampleSources(frame)
+                    log.info("auto retrain: %s", line)
+                    state_ = ts.load_state()
+                    state_["last_result"] = ("%s %s" % (state_.get("last_result", ""), line)).strip()
+                    ts.save_state(state_)
+                except Exception as exc:
+                    log.warning("re-scan of sample source clips failed: %s", exc)
                 if settings.get("rescan_after"):
                     from backEnd.rescan import run_rescan
                     from frontEnd.TrainingDialogs import rescanPaths

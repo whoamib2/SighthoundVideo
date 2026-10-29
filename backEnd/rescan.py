@@ -29,12 +29,13 @@ class RescanResult:
         self.scanned = 0
         self.changed = 0
         self.skipped = 0
+        self.clips = 0
         self.cancelled = False
         self.error = ""
 
     def __repr__(self):
-        return ("RescanResult(objects=%d scanned=%d changed=%d skipped=%d cancelled=%s error=%r)"
-                % (self.objects, self.scanned, self.changed, self.skipped, self.cancelled, self.error))
+        return ("RescanResult(clips=%d objects=%d scanned=%d changed=%d skipped=%d cancelled=%s error=%r)"
+                % (self.clips, self.objects, self.scanned, self.changed, self.skipped, self.cancelled, self.error))
 
 
 _PIPELINE_LOCK = threading.Lock()
@@ -88,6 +89,38 @@ def _classify(pipeline, crop, previous: str):
         found = pipeline._read_carrier(crop)
     label = found.get(_CARRIER)
     return (str(label) if label else None), float(found.get("delivery_confidence") or 0.0)
+
+
+def sample_source_clips(clip_conn, samples):
+    """Distinct ``(camera, firstMs, lastMs)`` clips the training samples came from."""
+    found = set()
+    for sample in samples:
+        cam, ms = sample.get("camera"), sample.get("timestamp_ms")
+        if not cam or not ms:
+            continue
+        clip = _clip_for(clip_conn, cam, int(ms))
+        if clip:
+            found.add((cam, int(clip[1]), int(clip[2])))
+    return sorted(found)
+
+
+def rescan_sample_sources(obj_db: str, clip_db: str, video_dir: str, samples, **kwargs) -> RescanResult:
+    """Re-scan every vehicle in the clips the given training samples came from."""
+    clip_conn = sqlite3.connect(clip_db, timeout=30)
+    obj_conn = sqlite3.connect(obj_db, timeout=30)
+    try:
+        clips = sample_source_clips(clip_conn, samples)
+        ids = set()
+        for cam, first, last in clips:
+            ids.update(int(r[0]) for r in find_vehicle_objects(obj_conn, first, last, [cam]))
+    finally:
+        clip_conn.close()
+        obj_conn.close()
+    if not clips:
+        return RescanResult()
+    result = run_rescan(obj_db, clip_db, video_dir, min(c[1] for c in clips), max(c[2] for c in clips),
+                        sorted({c[0] for c in clips}), sorted(ids), **kwargs)
+    return result
 
 
 def find_vehicle_objects(obj_conn, start_ms, end_ms, cameras=None, obj_ids=None):
@@ -157,6 +190,7 @@ def _run_rescan(obj_db: str, clip_db: str, video_dir: str, start_ms: int, end_ms
                 result.skipped += 1
                 continue
             by_file.setdefault(clip, []).append((int(uid), box))
+        result.clips = len(by_file)
         done = result.skipped
         if progress:
             progress(done, result.objects)

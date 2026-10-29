@@ -301,6 +301,22 @@ def list_samples(folder: str, root=None) -> list:
             if f.lower().endswith((".jpg", ".jpeg", ".png"))]
 
 
+def read_samples(root=None) -> list:
+    """All records from samples.jsonl (bad lines skipped)."""
+    path = os.path.join(root or training_root(), "samples.jsonl")
+    out = []
+    try:
+        with open(path, encoding="utf-8") as handle:
+            for line in handle:
+                try:
+                    out.append(json.loads(line))
+                except ValueError:
+                    pass
+    except OSError:
+        pass
+    return out
+
+
 def retrain_carrier_model(root=None) -> dict:
     """Fit the carrier classifier on ``dataset/`` and write the user model.
 
