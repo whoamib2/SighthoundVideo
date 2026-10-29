@@ -128,6 +128,13 @@ def save_sample(image, label, box=None, camera="", timestamp_ms=0, kind=MISSED,
     }
     with open(os.path.join(root, "samples.jsonl"), "a", encoding="utf-8") as handle:
         handle.write(json.dumps(record) + "\n")
+    try:  # Community sharing (opt-in, off by default): queue a sanitized copy.
+        from backEnd import community
+
+        community.queue_sample(image, box, record["label"], camera, stamp,
+                               root=os.path.join(root, "community") if root != training_root() else None)
+    except Exception:
+        pass
     return path
 
 

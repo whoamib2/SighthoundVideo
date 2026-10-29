@@ -31,6 +31,7 @@ IMPORT_TO_REQUIREMENTS = {
     "certifi": ("certifi",),
     "cv2": ("opencv-python-headless",),
     "onnx": ("onnx",),
+    "cryptography": ("cryptography",),
     "onnxruntime": ("onnxruntime", "onnxruntime-directml"),
 }
 

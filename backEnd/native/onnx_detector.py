@@ -86,11 +86,24 @@ def installed_models_dirs() -> list[str]:
     return unique
 
 
+def _shared_detector_path() -> Optional[str]:
+    """Community-updated detector (see backEnd/community.py), if installed."""
+    try:
+        from backEnd.community import shared_model_path
+
+        return shared_model_path("detector")
+    except Exception:
+        return None
+
+
 def default_model_candidates(model_dir: Optional[str] = None) -> list[str]:
     candidates = []
     env = os.environ.get(_ENV_MODEL)
     if env:
         candidates.append(env)
+    shared = _shared_detector_path()
+    if shared:
+        candidates.append(shared)
     if model_dir:
         candidates.append(os.path.join(model_dir, "yolox_nano.onnx"))
         candidates.append(os.path.join(model_dir, "detector.onnx"))

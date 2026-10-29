@@ -72,6 +72,54 @@ def installAutoRetrain(frame):
 
         threading.Thread(target=work, name="auto-retrain", daemon=True).start()
 
-    frame.Bind(wx.EVT_TIMER, onTimer, timer)
+    community_state = {"running": False, "ticks": 0}
+
+    def communityTick():
+        """Every 15 min upload queued samples; once a day check for model updates."""
+        community_state["ticks"] += 1
+        if community_state["running"]:
+            return
+        from backEnd import community
+
+        settings = community.get_settings()
+        state = community.load_state()
+        doUpload = (community_state["ticks"] % 15 == 1) and (
+            settings["share_enabled"] or state.get("deletion_pending"))
+        lastCheck = (state.get("last_check") or {}).get("at", "")
+        doCheck = settings["update_mode"] != "off" and lastCheck[:10] != time.strftime("%Y-%m-%d")
+        if not (doUpload or doCheck):
+            return
+        community_state["running"] = True
+
+        def work():
+            _lowerThreadPriority()
+            try:
+                if doUpload:
+                    community.send_deletion_request()
+                    log.info("community upload: %s", community.upload_pending())
+                if doCheck:
+                    result = community.apply_updates()
+                    if result.get("installed"):
+                        log.info("community models installed: %s", result["installed"])
+                    elif result.get("available"):
+                        log.info("community model update available (%s): %s",
+                                 result.get("reason") or "signed", [e.get("version") for e in result["available"]])
+                    elif result.get("error"):
+                        log.info("community manifest not reachable: %s", result["error"])
+            except Exception:
+                log.exception("community background task failed")
+            finally:
+                community_state["running"] = False
+
+        threading.Thread(target=work, name="community", daemon=True).start()
+
+    def onTimerAll(event):
+        onTimer(event)
+        try:
+            communityTick()
+        except Exception:
+            log.exception("community tick failed")
+
+    frame.Bind(wx.EVT_TIMER, onTimerAll, timer)
     timer.Start(_kCheckMs)
     frame._autoRetrainTimer = timer

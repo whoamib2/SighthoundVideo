@@ -499,7 +499,7 @@ class AttributePipeline:
         self._user_carrier_mtime: Optional[float] = None
         self._user_carrier_checked = 0.0
 
-    def watch_user_carrier_model(self, path: Optional[str], enable_gpu: bool = False) -> None:
+    def watch_user_carrier_model(self, path, enable_gpu: bool = False) -> None:
         """Hot-load ``path`` (the in-app "Retrain now" output) when it changes."""
         self._user_carrier_path = path or None
         self._user_carrier_mtime = None
@@ -509,6 +509,11 @@ class AttributePipeline:
 
     def _maybe_reload_user_carrier(self, force: bool = False) -> None:
         path = self._user_carrier_path
+        if callable(path):  # e.g. community.active_carrier_model_path
+            try:
+                path = path()
+            except Exception:
+                return
         if not path:
             return
         now = time.monotonic()
@@ -519,7 +524,7 @@ class AttributePipeline:
             mtime = os.path.getmtime(path)
         except OSError:
             return
-        if mtime == self._user_carrier_mtime:
+        if (path, mtime) == getattr(self, "_user_carrier_key", None):
             return
         try:
             graph = OnnxGraph(path, enable_gpu=self._enable_gpu)
@@ -527,10 +532,12 @@ class AttributePipeline:
             if self._logger is not None and hasattr(self._logger, "error"):
                 self._logger.error("user carrier model %s failed to load: %s" % (path, exc))
             self._user_carrier_mtime = mtime
+            self._user_carrier_key = (path, mtime)
             return
         self.carrier = graph
         self.use_heuristic = False
         self._user_carrier_mtime = mtime
+        self._user_carrier_key = (path, mtime)
         if self._logger is not None and hasattr(self._logger, "info"):
             self._logger.info("loaded user-trained carrier model %s" % path)
 
@@ -556,9 +563,9 @@ class AttributePipeline:
             logger=logger,
         )
         if _ENV_CARRIER not in os.environ:
-            from backEnd.training_samples import user_carrier_model_path
+            from backEnd.community import active_carrier_model_path
 
-            pipeline.watch_user_carrier_model(user_carrier_model_path(), enable_gpu=enable_gpu)
+            pipeline.watch_user_carrier_model(active_carrier_model_path, enable_gpu=enable_gpu)
         return pipeline
 
     def set_gallery_db(self, path: Optional[str]) -> None:

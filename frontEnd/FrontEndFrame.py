@@ -856,6 +856,7 @@ class FrontEndFrame(wx.Frame):
                     (MenuIds.kTrainingSamples, "", wx.ID_ANY,
                      self.OnTrainingSamples),
                     (MenuIds.kRescanClips, "", wx.ID_ANY, self.OnRescanClips),
+                    (MenuIds.kCommunityTraining, "", wx.ID_ANY, self.OnCommunityTraining),
                     # (None, None, None, None), Separator auto-added on Win...
                     (_kMenuOptions, "", wx.ID_PREFERENCES, self.OnOptions),
                 ) + extraToolsData,
@@ -1371,6 +1372,17 @@ class FrontEndFrame(wx.Frame):
         finally:
             self.Thaw()
 
+
+    ############################################################
+    def OnCommunityTraining(self, event=None):
+        """Opt-in sample sharing and shared model updates."""
+        from frontEnd.CommunityDialog import CommunityDialog
+
+        dlg = CommunityDialog(self)
+        try:
+            dlg.ShowModal()
+        finally:
+            dlg.Destroy()
 
     ############################################################
     def OnRescanClips(self, event=None):

@@ -69,9 +69,9 @@ def _default_pipeline():
                     carrier = None
             pipeline = AttributePipeline(carrier=carrier)
             if _ENV_CARRIER not in os.environ:
-                from backEnd.training_samples import user_carrier_model_path
+                from backEnd.community import active_carrier_model_path
 
-                pipeline.watch_user_carrier_model(user_carrier_model_path(), enable_gpu=False)
+                pipeline.watch_user_carrier_model(active_carrier_model_path, enable_gpu=False)
             _CACHED_PIPELINE = pipeline
         else:
             _CACHED_PIPELINE._maybe_reload_user_carrier()
