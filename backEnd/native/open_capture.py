@@ -222,6 +222,99 @@ def _tolerant_decode(container: Any, stream: Any, max_bad: int = 100, on_packet:
             yield frame
 
 
+_MAX_QUEUED_FRAMES = 10
+
+
+class _ThreadedFrames:
+    """Runs a frame iterator (demux + decode + passthrough recording) on its
+    own thread so the network socket is always drained at the camera's rate.
+
+    If analytics fall behind, the oldest undelivered frames are dropped
+    instead of letting the TCP receive window fill up: Blue Iris (and many
+    cameras) reset an RTSP client whose socket backs up (WSAECONNRESET 10054
+    about every 50 s). Recording is unaffected since packets are remuxed on
+    this thread before decoding.
+    """
+
+    _END = object()
+
+    def __init__(self, source: Any, maxlen: int = _MAX_QUEUED_FRAMES, log: Any = None) -> None:
+        import collections
+        import threading
+
+        self._source = source
+        self._queue: "collections.deque" = collections.deque()
+        self._maxlen = max(1, int(maxlen))
+        self._cond = threading.Condition()
+        self._error: Optional[BaseException] = None
+        self._done = False
+        self._stop = False
+        self.dropped = 0
+        self._dropped_logged = 0
+        self._last_log = time.monotonic()
+        self._log = log
+        self._thread = threading.Thread(target=self._run, name="stream-reader", daemon=True)
+        self._thread.start()
+
+    def _run(self) -> None:
+        try:
+            for frame in self._source:
+                with self._cond:
+                    if self._stop:
+                        break
+                    if len(self._queue) >= self._maxlen:
+                        self._queue.popleft()
+                        self.dropped += 1
+                    self._queue.append(frame)
+                    self._cond.notify()
+        except BaseException as exc:
+            self._error = exc
+        finally:
+            with self._cond:
+                self._done = True
+                self._cond.notify_all()
+
+    def __iter__(self) -> "_ThreadedFrames":
+        return self
+
+    def __next__(self) -> Any:
+        with self._cond:
+            while not self._queue and not self._done:
+                self._cond.wait(1.0)
+            self._maybe_log()
+            if self._queue:
+                return self._queue.popleft()
+            if self._error is not None:
+                raise self._error
+            raise StopIteration
+
+    def _maybe_log(self) -> None:
+        now = time.monotonic()
+        if self._log is None or now - self._last_log < 60 or self.dropped == self._dropped_logged:
+            return
+        try:
+            self._log.info("Analytics behind the camera: skipped %d frames in the last %.0f s "
+                           "(recording unaffected)" % (self.dropped - self._dropped_logged, now - self._last_log))
+        except Exception:
+            pass
+        self._dropped_logged = self.dropped
+        self._last_log = now
+
+    def stop(self) -> None:
+        with self._cond:
+            self._stop = True
+            self._queue.clear()
+            self._cond.notify_all()
+
+
+def _maybe_threaded(uri: str, frames: Any, log: Any) -> Any:
+    """Live network streams get a reader thread; files are read on demand
+    (reading ahead would drop frames that are simply not consumed yet)."""
+    if str(uri or "").lower().startswith(("rtsp://", "rtsps://", "http://", "https://")):
+        return _ThreadedFrames(frames, log=log)
+    return frames
+
+
 def _video_stream(container: Any):
     stream = container.streams.video[0]
     stream.thread_type = "AUTO"
@@ -992,12 +1085,14 @@ class StreamReader:
             self._sub_container = sub
             self._stream = sub_stream
             self._recorder = _MainRecorder(self, main, main_stream, writer)
-            self._iterator = _tolerant_decode(sub, sub_stream)
+            self._iterator = _maybe_threaded(uri, _tolerant_decode(sub, sub_stream), log)
             self._stream_mode = "sub"
         else:
             self._stream = main_stream
-            self._iterator = _tolerant_decode(main, main_stream,
-                                              on_packet=writer.write_packet if writer is not None else None)
+            self._iterator = _maybe_threaded(
+                uri,
+                _tolerant_decode(main, main_stream, on_packet=writer.write_packet if writer is not None else None),
+                log)
             self._stream_mode = "main"
         self._hw_device = hw
         self._decoder_info = {}
@@ -1048,6 +1143,8 @@ class StreamReader:
             except Exception:
                 pass
             self._container = None
+        if isinstance(self._iterator, _ThreadedFrames):
+            self._iterator.stop()
         self._iterator = None
         if self._capture is not None:
             try:

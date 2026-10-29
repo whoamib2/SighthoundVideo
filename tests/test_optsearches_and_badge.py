@@ -60,3 +60,20 @@ def test_decoder_badge(tmp_path):
     line = DecoderBadge.status_line("Cam", got)
     assert "HW Hardware (D3D11VA)" in line and "640x360" in line and "analytics: sub" in line
     assert DecoderBadge.read_decoder_info(str(tmp_path), "Missing") == {}
+
+
+def test_fallback_warning_goes_to_app_logger(monkeypatch):
+    seen = []
+
+    class _L:
+        def warning(self, msg, *a):
+            seen.append(msg)
+
+    def boom(*a, **k):
+        raise OSError("optsearches not found")
+    monkeypatch.setattr(TriggerUtils, "LoadLibrary", boom)
+    monkeypatch.setattr(TriggerUtils, "_searchlib", None)
+    monkeypatch.setattr(TriggerUtils, "_logger", _L())
+    TriggerUtils._lib()
+    TriggerUtils._lib()
+    assert len(seen) == 1 and "Python implementation" in seen[0]

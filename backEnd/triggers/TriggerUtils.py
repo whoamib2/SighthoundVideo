@@ -44,6 +44,14 @@ from vitaToolbox.ctypesUtils.LoadLibrary import LoadLibrary
 
 _libName = 'optsearches'
 _searchlib = None
+_logger = None
+
+
+def setLogger(logger):
+    """Log optsearches messages (e.g. the Python fallback) to this logger
+    (BackEndApp.log) instead of the unconfigured module logger."""
+    global _logger
+    _logger = logger
 
 
 def _lib():
@@ -66,7 +74,7 @@ def _lib():
 
             from backEnd.triggers import optsearches_py as lib
 
-            logging.getLogger(__name__).warning(
+            (_logger or logging.getLogger(__name__)).warning(
                 "Native optsearches library not found; using the Python implementation")
         _searchlib = lib
     return _searchlib

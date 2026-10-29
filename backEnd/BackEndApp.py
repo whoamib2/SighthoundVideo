@@ -331,6 +331,8 @@ class BackEndApp(object):
         self._userLocalDataDir = userLocalDataDir
         self._logDir = os.path.join(self._userLocalDataDir, "logs")
         self._logger = getLogger(_kLogName, self._logDir, _kLogSize)
+        from backEnd.triggers import TriggerUtils
+        TriggerUtils.setLogger(self._logger)
         self._logger.grabStdStreams()
 
         assert type(self._userLocalDataDir) == str
