@@ -9,7 +9,7 @@ import time
 import wx
 
 _COLUMNS = (("Camera", 150), ("Decoder", 140), ("Codec", 60), ("Resolution", 90),
-            ("Pixel format", 80), ("FPS", 50), ("Reconnects today", 110), ("Stream started", 130))
+            ("Pixel format", 80), ("FPS", 50), ("Analytics", 70), ("Main stream", 90), ("Recording", 90), ("Reconnects today", 110), ("Stream started", 130))
 
 
 def _reconnects_today(logPath, today):
@@ -48,6 +48,9 @@ def collect_diagnostics(dataDir, today=None):
             "resolution": "%sx%s" % (info["width"], info["height"]) if info.get("width") else "",
             "pix_fmt": info.get("pix_fmt", ""),
             "fps": info.get("fps", ""),
+            "analytics": info.get("analytics_stream", ""),
+            "main": info.get("main_resolution", ""),
+            "recording": info.get("recording", ""),
             "reconnects": info.get("reconnects", 0),
             "started": info.get("started", ""),
         })
@@ -85,5 +88,5 @@ class CameraDiagnosticsDialog(wx.Dialog):
         for row in collect_diagnostics(self._dataDir):
             index = self._list.InsertItem(self._list.GetItemCount(), row["camera"])
             for col, key in enumerate(("decoder", "codec", "resolution", "pix_fmt", "fps",
-                                       "reconnects", "started"), start=1):
+                                       "analytics", "main", "recording", "reconnects", "started"), start=1):
                 self._list.SetItem(index, col, str(row[key]))

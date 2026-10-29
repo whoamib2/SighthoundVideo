@@ -3685,6 +3685,20 @@ class _OnvifSettingsScreen(_BasePage):
                     _getHighestResolutionByLicense(self.wizard)
                 self.wizard.camExtras['recordAudio'] = self._audioCtrl.GetValue()
                 self.wizard.camExtras['forceTCP'] = self._forceTcpCtrl.GetValue()
+                # Lowest-resolution other ONVIF profile feeds analytics and
+                # grid thumbnails; the chosen profile is recorded.
+                try:
+                    from backEnd.native.open_capture import pick_onvif_sub_uri
+                    choices = [(self._onvifUriCtrl.GetString(i),
+                                self._onvifUriCtrl.GetClientData(i))
+                               for i in range(self._onvifUriCtrl.GetCount())]
+                    subUri = pick_onvif_sub_uri(choices, cameraUri)
+                except Exception:
+                    subUri = None
+                if subUri:
+                    self.wizard.camExtras['subStreamUri'] = subUri
+                else:
+                    self.wizard.camExtras.pop('subStreamUri', None)
 
 
     ###########################################################

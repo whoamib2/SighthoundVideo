@@ -85,7 +85,8 @@ def OB_KEYARG(a): return a
 # Constants...
 
 # Time to wait between retry attempts when connecting to a camera
-_kRetryTimeList = [0, 20, 20, 20, 60]
+# Quick first retry, then exponential backoff capped at a minute.
+_kRetryTimeList = [0, 2, 4, 8, 16, 32, 60]
 _kMaxRetries = 10
 
 # Min time to sleep when we have a bogus URL...
@@ -736,6 +737,11 @@ class CameraCapture(object):
             self._runner.processClipFrame(frame, self._ms)
             self._numObjFramesSinceLastNotify = \
                 self._queuedDataMgr.numObjectsAddedSinceLastCheck
+            if self._numObjFramesSinceLastNotify:
+                # Objects in view: keep analytics at full frame rate.
+                noteActivity = getattr(self._streamReader, "noteActivity", None)
+                if noteActivity is not None:
+                    noteActivity()
 
             self._timingInfo.inputItemMark( 'capture.DProcessed' )
 

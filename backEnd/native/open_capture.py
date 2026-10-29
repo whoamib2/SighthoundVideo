@@ -197,7 +197,7 @@ def decoder_label(codec_context: Any, hw_device: Optional[str]) -> str:
     return "Software"
 
 
-def _tolerant_decode(container: Any, stream: Any, max_bad: int = 100):
+def _tolerant_decode(container: Any, stream: Any, max_bad: int = 100, on_packet: Any = None):
     """Decode frames, skipping corrupt packets instead of dropping the stream.
 
     One damaged packet (common on Wi-Fi doorbells / Blue Iris restreams)
@@ -207,6 +207,8 @@ def _tolerant_decode(container: Any, stream: Any, max_bad: int = 100):
 
     bad = 0
     for packet in container.demux(stream):
+        if on_packet is not None and packet.size:
+            on_packet(packet)
         try:
             frames = packet.decode()
         except (av.error.InvalidDataError, av.error.PatchWelcomeError) as exc:
@@ -454,6 +456,367 @@ class _HlsWriter:
             self._close_segment(0.1)
 
 
+
+# --------------------------------------------------------------------------
+# Stream selection, network options, passthrough recording
+# --------------------------------------------------------------------------
+
+_IDLE_ANALYTICS_FPS = 3.0
+_IDLE_AFTER_S = 15.0
+_MAX_PREROLL_PACKETS = 900
+_SUB_MAX_ASPECT_DIFF = 0.35
+
+
+def network_options(uri: str) -> dict:
+    """FFmpeg demuxer options for network cameras (FFmpeg 7+ names).
+
+    RTSP over TCP (no UDP packet loss -> fewer smeared frames), a socket
+    I/O timeout of 10 s ("timeout", in microseconds; "stimeout" no longer
+    exists), and a 2 MB receive buffer. FFmpeg's RTSP demuxer already sends
+    GET_PARAMETER/OPTIONS keep-alives at half the server session timeout
+    while we keep reading.
+    """
+    lowered = str(uri or "").lower()
+    if lowered.startswith(("rtsp://", "rtsps://")):
+        return {"rtsp_transport": "tcp", "timeout": "10000000", "buffer_size": "2097152",
+                "max_delay": "500000"}
+    if lowered.startswith(("http://", "https://")):
+        return {"timeout": "10000000"}
+    return {}
+
+
+def sub_stream_uri(uri: str, extras: Optional[dict] = None) -> Optional[str]:
+    """Lower-resolution stream URI for analytics / grid thumbnails, or None.
+
+    Order: an explicit ``subStreamUri`` extra (ONVIF wizard stores the
+    lowest-resolution profile), then known vendor templates. Blue Iris
+    restreams have no reliable sub path, so they use ``blueIrisSubStream``
+    only when set. Callers fall back to the main stream when the sub
+    stream cannot be opened or does not match.
+    """
+    import re
+
+    extras = extras or {}
+    if str(extras.get("useSubStream", True)).lower() in ("false", "0", "no", "off"):
+        return None
+    explicit = extras.get("subStreamUri") or extras.get("blueIrisSubStream")
+    if explicit:
+        explicit = str(explicit)
+        return None if explicit == uri else explicit
+    if not uri or not str(uri).lower().startswith(("rtsp://", "rtsps://", "rtmp://", "http://", "https://")):
+        return None
+    if extras.get("blueIrisServer") or extras.get("blueIrisShortName"):
+        return None
+    rules = (
+        (r"(h26[45]Preview_\d+_)main", r"\g<1>sub"),           # Reolink RTSP
+        (r"(Preview_\d+_)main", r"\g<1>sub"),
+        (r"(channel\d+_)main(\.bcs)", r"\g<1>sub\g<2>"),        # Reolink RTMP/FLV
+        (r"([?&]subtype=)0\b", r"\g<1>1"),                     # Amcrest / Dahua
+        (r"(/Streaming/Channels/\d*?)01\b", r"\g<1>02"),        # Hikvision
+        (r"(/stream)1\b", r"\g<1>2"),                          # many generic IPCs
+    )
+    for pattern, repl in rules:
+        new, n = re.subn(pattern, repl, uri, count=1, flags=re.IGNORECASE)
+        if n and new != uri:
+            return new
+    return None
+
+
+def sub_stream_usable(main_wh: tuple[int, int], sub_wh: tuple[int, int]) -> bool:
+    mw, mh = main_wh
+    sw, sh = sub_wh
+    if min(mw, mh, sw, sh) <= 0 or sw * sh >= mw * mh:
+        return False
+    return abs((sw / float(sh)) / (mw / float(mh)) - 1.0) <= _SUB_MAX_ASPECT_DIFF
+
+
+def pick_onvif_sub_uri(choices: list, main_uri: str) -> Optional[str]:
+    """From wizard ONVIF choices [(label "name: enc, WxH (...)", uri)], the
+    lowest-resolution other profile, used as subStreamUri."""
+    import re
+
+    best = None
+    for label, uri in choices:
+        if not uri or uri == main_uri or not str(uri).lower().startswith("rtsp"):
+            continue
+        m = re.search(r"(\d+)x(\d+)", str(label))
+        if not m:
+            continue
+        area = int(m.group(1)) * int(m.group(2))
+        if best is None or area < best[0]:
+            best = (area, uri)
+    return best[1] if best else None
+
+
+class _PtsClock:
+    """Wall-clock ms for a stream's frames/packets: anchored at the first
+    arrival, then following the camera's pts so spacing is smooth. Large
+    pts jumps (>10 s off the wall clock) re-anchor; output is monotonic."""
+
+    def __init__(self) -> None:
+        self._anchor: Optional[tuple[float, float]] = None
+        self._last = -1
+
+    def ms(self, seconds: Optional[float]) -> int:
+        now = time.time() * 1000.0
+        if seconds is None:
+            value = now
+        else:
+            seconds = float(seconds)
+            if self._anchor is None:
+                self._anchor = (now, seconds)
+            value = self._anchor[0] + (seconds - self._anchor[1]) * 1000.0
+            if abs(value - now) > 10_000:
+                self._anchor = (now, seconds)
+                value = now
+        out = int(value)
+        if out <= self._last:
+            out = self._last + 1
+        self._last = out
+        return out
+
+
+def _packet_seconds(packet: Any) -> Optional[float]:
+    stamp = packet.pts if packet.pts is not None else packet.dts
+    tb = packet.time_base
+    if stamp is None or tb is None:
+        return None
+    return float(stamp * tb)
+
+
+class _RemuxWriter:
+    """Records the camera's own compressed packets into fragmented MP4
+    segments (no decode, no re-encode). Segments start on a keyframe; the
+    packets since the last keyframe are kept as pre-roll so a new segment
+    (after a flush, a size roll, or a write error) starts without a gap."""
+
+    def __init__(self, reader: "StreamReader", in_stream: Any) -> None:
+        import threading
+
+        self._reader = reader
+        self._in_stream = in_stream
+        self._clock = _PtsClock()
+        self._lock = threading.RLock()
+        self._container = None
+        self._out = None
+        self._full_path = ""
+        self._relative = ""
+        self._first_ms: Optional[int] = None
+        self._last_ms: Optional[int] = None
+        self._base: Optional[int] = None
+        self._last_dts: Optional[int] = None
+        self._prev_relative = ""
+        self._roll_requested = False
+        self._gop: list[tuple[Any, int]] = []
+        self._segments: list[tuple[int, str]] = []
+        self.packets_written = 0
+
+    @property
+    def relative_path(self) -> str:
+        return self._relative
+
+    def filename_for(self, ms: int) -> str:
+        with self._lock:
+            name = ""
+            for first, rel in self._segments:
+                if first <= ms:
+                    name = rel
+            return name or self._relative
+
+    def write_packet(self, packet: Any) -> None:
+        if packet.size == 0 or packet.stream is not self._in_stream and packet.stream.index != self._in_stream.index:
+            return
+        ms = self._clock.ms(_packet_seconds(packet))
+        with self._lock:
+            key = bool(packet.is_keyframe)
+            if key:
+                self._gop = []
+            if self._gop or key:
+                self._gop.append((packet, ms))
+                if len(self._gop) > _MAX_PREROLL_PACKETS:
+                    self._gop = []
+            limit = int(self._reader._extras.get("maxClipMs", _DEFAULT_CLIP_MS) or _DEFAULT_CLIP_MS)
+            if key and self._container is not None and (
+                    self._roll_requested or (self._first_ms is not None and ms - self._first_ms >= limit)):
+                self.close_segment()  # roll exactly on the keyframe: no gap, no overlap
+            if self._container is None:
+                if not key:
+                    return  # wait for a keyframe; a segment must start decodable
+                self._open(ms)
+            try:
+                self._mux(packet, ms)
+            except Exception as exc:
+                (getattr(self._reader, "logger", None) or logging.getLogger(__name__)).warning(
+                    "Clip write failed, restarting segment from the last keyframe: %r" % (exc,))
+                self._recover(packet)
+
+    def _mux(self, packet: Any, ms: int) -> None:
+        dts = packet.dts if packet.dts is not None else packet.pts
+        pts = packet.pts if packet.pts is not None else dts
+        if dts is None:
+            tb = self._in_stream.time_base
+            dts = pts = int((ms - (self._first_ms or ms)) / 1000.0 / float(tb)) if tb else ms
+            base = 0
+        else:
+            if self._base is None:
+                self._base = int(dts)
+            base = self._base
+        dts = int(dts) - base
+        pts = int(pts) - base
+        if self._last_dts is not None and dts <= self._last_dts:
+            shift = self._last_dts + 1 - dts
+            dts += shift
+            pts += shift
+        pts = max(pts, dts)
+        self._last_dts = dts
+        # Mux a copy: the original packet is still decoded by the caller.
+        out = _av().Packet(bytes(packet))
+        out.is_keyframe = bool(packet.is_keyframe)
+        out.time_base = self._in_stream.time_base
+        out.dts = dts
+        out.pts = pts
+        if packet.duration:
+            out.duration = packet.duration
+        out.stream = self._out
+        self._container.mux(out)
+        self._last_ms = ms
+        self.packets_written += 1
+
+    def _open(self, ms: int) -> None:
+        root = self._reader._archive_path or self._reader._tmp_path or "."
+        camera = self._reader._camera_location or "camera"
+        folder = os.path.join(root, camera)
+        os.makedirs(folder, exist_ok=True)
+        name = "%d.mp4" % int(ms)
+        self._full_path = os.path.join(folder, name)
+        self._relative = (camera + "/" + name).replace("\\", "/")
+        av = _av()
+        # Fragmented MP4: every finished fragment stays playable if the
+        # capture process dies before the segment is closed.
+        self._container = av.open(self._full_path, mode="w",
+                                  options={"movflags": "frag_keyframe+empty_moov+default_base_moof"})
+        self._out = self._container.add_stream_from_template(self._in_stream)
+        self._first_ms = ms
+        self._last_ms = ms
+        self._base = None
+        self._last_dts = None
+        self._roll_requested = False
+        self._segments.append((ms, self._relative))
+        del self._segments[:-8]
+
+    def request_roll(self) -> int:
+        with self._lock:
+            if self._container is None or self._first_ms is None or self._last_ms is None:
+                return 0
+            if self._last_ms - self._first_ms < 2000:
+                return 0
+            self._roll_requested = True
+            return 1
+
+    flush_if_long_enough = request_roll
+
+    def close_segment(self) -> None:
+        with self._lock:
+            if self._container is None:
+                return
+            try:
+                self._container.close()
+            except Exception:
+                pass
+            self._container = None
+            self._out = None
+            if self._first_ms is not None and self._last_ms is not None and self._last_ms > self._first_ms:
+                _ClipWriter._register(self)
+            else:
+                try:
+                    os.remove(self._full_path)
+                except OSError:
+                    pass
+
+    def _recover(self, failed: Any) -> None:
+        """Pre-roll: after a write error, reopen a segment from the buffered
+        packets of the current GOP (keyframe first), minus the bad packet."""
+        gop = [(p, m) for (p, m) in self._gop if p is not failed]
+        self.close_segment()
+        self._gop = gop
+        if not gop or not gop[0][0].is_keyframe:
+            self._gop = []
+            return
+        try:
+            self._open(gop[0][1])
+            for packet, ms in gop:
+                self._mux(packet, ms)
+        except Exception:
+            self.close_segment()
+            self._gop = []
+
+    @property
+    def _width(self) -> int:
+        return int(self._reader.getProcSize()[0])
+
+    @property
+    def _height(self) -> int:
+        return int(self._reader.getProcSize()[1])
+
+
+class _MainRecorder:
+    """Background reader of the main stream when analytics use the sub
+    stream: remuxes every packet to disk and decodes only while an enlarged
+    live view wants main-stream quality."""
+
+    def __init__(self, reader: "StreamReader", container: Any, stream: Any, writer: Optional[_RemuxWriter]) -> None:
+        import threading
+
+        self._reader = reader
+        self._container = container
+        self._stream = stream
+        self._writer = writer
+        self._stop = threading.Event()
+        self.error: Optional[BaseException] = None
+        self.alive = True
+        self._thread = threading.Thread(target=self._run, name="main-stream-recorder", daemon=True)
+        self._thread.start()
+
+    def _run(self) -> None:
+        decoding = False
+        bad = 0
+        try:
+            for packet in self._container.demux(self._stream):
+                if self._stop.is_set():
+                    break
+                if packet.size == 0:
+                    continue
+                if self._writer is not None:
+                    self._writer.write_packet(packet)
+                want = self._reader._main_live_wanted()
+                if want and not decoding and packet.is_keyframe:
+                    decoding = True
+                if not want:
+                    decoding = False
+                if decoding:
+                    try:
+                        frames = packet.decode()
+                        bad = 0
+                    except Exception:
+                        bad += 1
+                        decoding = bad < 50
+                        continue
+                    for frame in frames:
+                        self._reader._live_from_frame(frame)
+        except BaseException as exc:  # reported to the capture loop
+            self.error = exc
+        finally:
+            self.alive = False
+
+    def stop(self) -> None:
+        self._stop.set()
+        try:
+            self._container.close()
+        except Exception:
+            pass
+        self._thread.join(timeout=5)
+
+
 class StreamReader:
     """File, RTSP/HTTP, and USB reader with clip recording and live view."""
 
@@ -531,45 +894,75 @@ class StreamReader:
             self._running = False
             return False
 
-    def _open_av(self, uri: str) -> bool:
-        av = _av()
-        options = {}
-        lowered = uri.lower()
-        if lowered.startswith(("rtsp://", "rtsps://", "http://", "https://")):
-            options["rtsp_transport"] = "tcp"
-            # Fewer stalls on lossy links; Dahua/Blue Iris honour it.
-            options["stimeout"] = "10000000"
-            options["buffer_size"] = "2097152"
+    def _hwaccel(self):
         hw = hw_device_for(self._extras.get("hardwareDevice", "auto"))
-        hwaccel = None
-        if hw:
-            try:
-                from av.codec.hwaccel import HWAccel
+        if not hw:
+            return None, None
+        try:
+            from av.codec.hwaccel import HWAccel
 
-                hwaccel = HWAccel(device_type=hw, allow_software_fallback=True)
-            except Exception:
-                hwaccel, hw = None, None
-        # Without a timeout a stalled RTSP read blocks the capture loop forever,
-        # and CameraCapture's own stream timeout never gets to run.
-        try:
-            self._container = av.open(uri, options=options or None, timeout=(15.0, 10.0), hwaccel=hwaccel)
-        except TypeError:
-            hwaccel, hw = None, None
-            self._container = av.open(uri, options=options or None, timeout=(15.0, 10.0))
-        stream = _video_stream(self._container)
-        try:
-            stream.thread_type = "AUTO"
+            return HWAccel(device_type=hw, allow_software_fallback=True), hw
         except Exception:
-            pass
-        self._stream = stream
+            return None, None
+
+    def _open_container(self, uri: str, hwaccel: Any = None):
+        av = _av()
+        options = network_options(uri) or None
+        # The (open, read) timeouts stop a stalled read from blocking the
+        # capture loop forever.
+        if hwaccel is not None:
+            try:
+                return av.open(uri, options=options, timeout=(15.0, 10.0), hwaccel=hwaccel)
+            except TypeError:
+                pass
+        return av.open(uri, options=options, timeout=(15.0, 10.0))
+
+    def _open_av(self, uri: str) -> bool:
+        log = getattr(self, "logger", None) or logging.getLogger(__name__)
+        hwaccel, hw = self._hwaccel()
+        main = self._open_container(uri, hwaccel)
+        main_stream = _video_stream(main)
+        self._container = main
+        self._main_size = (int(main_stream.codec_context.width or 0), int(main_stream.codec_context.height or 0))
+        self._clock = _PtsClock()
+        self._live_clock = _PtsClock()
+        self._last_analytics_t = 0.0
+        self._last_activity_t = time.time()
+        writer = _RemuxWriter(self, main_stream) if self._record else None
+        self._writer = writer
+        self._recorder = None
+        self._sub_container = None
+        sub_uri = sub_stream_uri(uri, self._extras)
+        sub = None
+        if sub_uri:
+            try:
+                sub = self._open_container(sub_uri, hwaccel)
+                sub_stream = _video_stream(sub)
+                sub_size = (int(sub_stream.codec_context.width or 0), int(sub_stream.codec_context.height or 0))
+                if not sub_stream_usable(self._main_size, sub_size):
+                    log.info("Sub stream %dx%d not usable for main %dx%d; analytics use the main stream"
+                             % (sub_size + self._main_size))
+                    sub.close()
+                    sub = None
+            except Exception as exc:
+                log.info("Sub stream unavailable (%s); analytics use the main stream" % (type(exc).__name__,))
+                sub = None
+        if sub is not None:
+            self._sub_container = sub
+            self._stream = sub_stream
+            self._recorder = _MainRecorder(self, main, main_stream, writer)
+            self._iterator = _tolerant_decode(sub, sub_stream)
+            self._stream_mode = "sub"
+        else:
+            self._stream = main_stream
+            self._iterator = _tolerant_decode(main, main_stream,
+                                              on_packet=writer.write_packet if writer is not None else None)
+            self._stream_mode = "main"
         self._hw_device = hw
         self._decoder_info = {}
-        self._width = int(stream.codec_context.width or 0)
-        self._height = int(stream.codec_context.height or 0)
-        self._iterator = _tolerant_decode(self._container, stream)
+        self._width = int(self._stream.codec_context.width or 0)
+        self._height = int(self._stream.codec_context.height or 0)
         self._running = True
-        if self._record:
-            self._writer = _ClipWriter(self)
         return True
 
     def _open_usb(self, index: int) -> bool:
@@ -591,6 +984,17 @@ class StreamReader:
     def _reset_source(self) -> None:
         """Close the current container without dropping the live-view map."""
         self._running = False
+        recorder = getattr(self, "_recorder", None)
+        if recorder is not None:
+            recorder.stop()
+            self._recorder = None
+        sub = getattr(self, "_sub_container", None)
+        if sub is not None:
+            try:
+                sub.close()
+            except Exception:
+                pass
+            self._sub_container = None
         if self._writer is not None:
             try:
                 self._writer.close_segment()
@@ -623,22 +1027,102 @@ class StreamReader:
         if termFunc is not None:
             termFunc()
 
+    def noteActivity(self) -> None:
+        """Analytics saw objects/motion: keep full analytics frame rate."""
+        self._last_activity_t = time.time()
+
+    def _analytics_idle(self) -> bool:
+        return time.time() - getattr(self, "_last_activity_t", 0.0) > _IDLE_AFTER_S
+
+    def _main_live_wanted(self) -> bool:
+        """Enlarged live view asks for more pixels than the sub stream has."""
+        if getattr(self, "_stream_mode", "main") != "sub" or self._mmap is None or not self._live_enabled:
+            return False
+        sw, sh = self._width, self._height
+        if sw <= 0 or sh <= 0 or self._live_width <= 0 or self._live_height <= 0:
+            return False
+        # Upscale the sub stream would need to fill the requested view.
+        return min(self._live_width / float(sw), self._live_height / float(sh)) > 1.1
+
+    def _live_from_frame(self, decoded: Any) -> None:
+        """Live view straight from a decoded frame, scaled in libswscale."""
+        if self._mmap is None:
+            return
+        w, h = int(decoded.width), int(decoded.height)
+        out_w = self._live_width if self._live_width > 0 else min(w, _LIVE_MAX_WIDTH)
+        out_h = self._live_height if self._live_height > 0 else min(h, _LIVE_MAX_HEIGHT)
+        scale = min(out_w / float(w), out_h / float(h), 1.0)
+        lw = max(4, int(w * scale) // 4 * 4)
+        lh = max(2, int(h * scale) // 2 * 2)
+        array = decoded.to_ndarray(width=lw, height=lh, format="rgb24")
+        clock = getattr(self, "_live_clock", None) or _PtsClock()
+        ms = clock.ms(getattr(decoded, "time", None))
+        self._write_mmap(VideoFrame(array.tobytes(), lw, lh, ms, dummy=False))
+
     def getNewFrame(self, liveViewEnabled: bool = False) -> Optional[VideoFrame]:
         if not self._running:
             return None
-        try:
-            rgb, width, height, _media_ms = self._read_rgb()
-        except Exception as exc:
-            (getattr(self, "logger", None) or logging.getLogger(__name__)).warning(
-                "Stream read failed: %r" % (exc,))
+        log = getattr(self, "logger", None) or logging.getLogger(__name__)
+        recorder = getattr(self, "_recorder", None)
+        if recorder is not None and not recorder.alive:
+            log.warning("Main stream (recording) stopped: %r" % (recorder.error,))
             self._running = False
             return None
+        if self._capture is not None:
+            return self._get_usb_frame(liveViewEnabled)
+        if self._iterator is None:
+            self._running = False
+            return None
+        try:
+            decoded = next(self._iterator)
+        except StopIteration:
+            self._running = False
+            return None
+        except Exception as exc:
+            log.warning("Stream read failed: %r" % (exc,))
+            self._running = False
+            return None
+        if not getattr(self, "_decoder_info", None):
+            self._note_decoder(decoded)
+        ms = self._clock.ms(getattr(decoded, "time", None))
+        self._last_ms = ms
+        writer = self._writer
+        filename = writer.filename_for(ms) if isinstance(writer, _RemuxWriter) else ""
+        self._width, self._height = int(decoded.width), int(decoded.height)
+        self._frame_index += 1
+        live = self._mmap is not None and (liveViewEnabled or self._live_enabled)
+        if live and not self._main_live_wanted():
+            try:
+                self._live_from_frame(decoded)
+            except Exception:
+                pass
+        # Idle: no objects for a while -> hand analytics ~3 fps; the other
+        # frames are "dummy" (timestamp only), skipping RGB conversion and
+        # tracking entirely.
+        now = time.time()
+        if self._analytics_idle() and now - self._last_analytics_t < 1.0 / _IDLE_ANALYTICS_FPS:
+            return VideoFrame(b"", self._width, self._height, ms, filename=filename, dummy=True)
+        self._last_analytics_t = now
+        out_w, out_h = _record_dims(self._width, self._height)
+        if (out_w, out_h) != (self._width, self._height):
+            array = decoded.to_ndarray(width=out_w, height=out_h, format="rgb24")
+        else:
+            array = decoded.to_ndarray(format="rgb24")
+        height, width = array.shape[:2]
+        frame = VideoFrame(array.tobytes(), int(width), int(height), ms, filename=filename, dummy=False)
+        self._latest = frame
+        for hls in list(self._hls.values()):
+            try:
+                hls.write(frame.rgb, frame.width, frame.height, ms)
+            except Exception:
+                pass
+        return frame
+
+    def _get_usb_frame(self, liveViewEnabled: bool) -> Optional[VideoFrame]:
+        rgb, width, height, _media_ms = self._read_rgb()
         if rgb is None:
             self._running = False
             return None
-        # Search and clips use arrival time. A camera PTS that starts at 0 or
-        # jumps by seconds never overlaps "today" and opens a new tiny file
-        # on every jump.
         ms = int(time.time() * 1000)
         if self._last_ms >= 0 and ms <= self._last_ms:
             ms = self._last_ms + 1
@@ -650,8 +1134,6 @@ class StreamReader:
                 filename = self._writer.relative_path
             except Exception as exc:
                 logging.getLogger(__name__).warning("Clip write failed, starting a new segment: %r", exc)
-                # Close what was written so the clip stays playable, then
-                # start a fresh segment on the next frame.
                 try:
                     self._writer.close_segment()
                 except Exception:
@@ -663,43 +1145,15 @@ class StreamReader:
         self._frame_index += 1
         if self._mmap is not None and (liveViewEnabled or self._live_enabled):
             self._write_mmap(frame)
-        for hls in list(self._hls.values()):
-            try:
-                hls.write(rgb, width, height, ms)
-            except Exception:
-                pass
         return analytics_frame(frame)
 
     def _read_rgb(self) -> tuple[Optional[bytes], int, int, int]:
-        if self._capture is not None:
-            ok, bgr = self._capture.read()
-            if not ok or bgr is None:
-                return None, 0, 0, 0
-            rgb_array = bgr[:, :, ::-1]
-            height, width = rgb_array.shape[:2]
-            ms = int(time.time() * 1000)
-            return rgb_array.tobytes(), int(width), int(height), ms
-        if self._iterator is None:
+        ok, bgr = self._capture.read()
+        if not ok or bgr is None:
             return None, 0, 0, 0
-        try:
-            decoded = next(self._iterator)
-        except StopIteration:
-            return None, 0, 0, 0
-        if not getattr(self, "_decoder_info", None):
-            self._note_decoder(decoded)
-        # Convert straight to the recording size inside libswscale. A full
-        # 4096x1536 RGB copy per frame plus a Python resize kept the loop at
-        # about 3 fps on a 15 fps camera, the RTSP backlog grew until reads
-        # stalled for 10 s and the capture process was restarted every minute.
-        out_w, out_h = _record_dims(int(decoded.width), int(decoded.height))
-        if (out_w, out_h) != (int(decoded.width), int(decoded.height)):
-            array = decoded.to_ndarray(width=out_w, height=out_h, format="rgb24")
-        else:
-            array = decoded.to_ndarray(format="rgb24")
-        height, width = array.shape[:2]
-        ms = _frame_ms(decoded, self._fallback_ms)
-        self._fallback_ms = ms + 1
-        return array.tobytes(), int(width), int(height), ms
+        rgb_array = bgr[:, :, ::-1]
+        height, width = rgb_array.shape[:2]
+        return rgb_array.tobytes(), int(width), int(height), int(time.time() * 1000)
 
     def _note_decoder(self, decoded: Any) -> None:
         stream = getattr(self, "_stream", None)
@@ -713,12 +1167,17 @@ class StreamReader:
             "pix_fmt": str(getattr(getattr(decoded, "format", None), "name", "") or ""),
             "fps": round(float(rate), 2) if rate else 0.0,
             "transport": "tcp" if self._uri.lower().startswith("rtsp") else "",
+            "analytics_stream": getattr(self, "_stream_mode", "main"),
+            "main_resolution": "%dx%d" % getattr(self, "_main_size", (0, 0)),
+            "recording": "passthrough" if isinstance(self._writer, _RemuxWriter) else (
+                "re-encode" if self._writer is not None else "off"),
             "started": time.strftime("%Y-%m-%d %H:%M:%S"),
         }
         self._decoder_info = info
         (getattr(self, "logger", None) or logging.getLogger(__name__)).info(
             "Stream started: decoder=%(decoder)s codec=%(codec)s %(width)dx%(height)d "
-            "pix_fmt=%(pix_fmt)s fps=%(fps)s" % info)
+            "pix_fmt=%(pix_fmt)s fps=%(fps)s analytics=%(analytics_stream)s main=%(main_resolution)s "
+            "recording=%(recording)s" % info)
         self._write_decoder_info()
 
     def _write_decoder_info(self) -> None:
@@ -827,6 +1286,15 @@ class StreamReader:
         self._mmap_file = None
 
     def _write_mmap(self, frame: VideoFrame) -> None:
+        if self._mmap is None:
+            return
+        import threading
+
+        lock = self.__dict__.setdefault("_mmap_lock", threading.Lock())
+        with lock:
+            self._write_mmap_locked(frame)
+
+    def _write_mmap_locked(self, frame: VideoFrame) -> None:
         if self._mmap is None:
             return
         out_w = self._live_width if self._live_width > 0 else min(frame.width, _LIVE_MAX_WIDTH)
