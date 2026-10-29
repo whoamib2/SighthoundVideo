@@ -135,3 +135,26 @@ def test_frozen_app_reads_models_beside_the_executable(tmp_path, monkeypatch):
 
     assert os.path.normcase(_models_dir()) == os.path.normcase(str(models))
     assert os.path.normcase(resolve_model_path()) == os.path.normcase(str(weight))
+
+
+def test_garbage_truck_heuristic_and_text():
+    import numpy as np
+
+    from backEnd.attribute_text import notification_sentence
+    from backEnd.native.detector import DELIVERY_CARRIERS, carrier_display_name
+
+    green_box = np.zeros((40, 48, 3), dtype=np.uint8)
+    green_box[:, :] = (30, 120, 50)
+    label, confidence = heuristic_carrier(green_box)
+    assert label == "Garbage" and 0.2 <= confidence <= 0.99
+    # A long, low green crop (car-shaped) is not called a garbage truck.
+    low_car = np.zeros((10, 60, 3), dtype=np.uint8)
+    low_car[:, :] = (30, 120, 50)
+    assert heuristic_carrier(low_car) is None
+    # Existing carriers still win on their colors.
+    blue = np.zeros((40, 48, 3), dtype=np.uint8)
+    blue[:, :] = (20, 40, 200)
+    assert heuristic_carrier(blue)[0] == "USPS"
+    assert "Garbage" in DELIVERY_CARRIERS
+    assert carrier_display_name("Garbage") == "Garbage truck"
+    assert "Garbage truck" in notification_sentence({"delivery_carrier": "Garbage"}, "the curb")

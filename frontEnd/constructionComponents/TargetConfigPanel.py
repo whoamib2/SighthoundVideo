@@ -48,7 +48,7 @@ import wx
 # Local imports...
 from .ConfigPanel import ConfigPanel
 from appCommon.CommonStrings import kTargetSettingToLabel, kTargetLabelToSetting, kTargetLabels
-from backEnd.native.detector import DELIVERY_CARRIERS
+from backEnd.native.detector import DELIVERY_CARRIERS, carrier_display_name
 
 # Constants...
 
@@ -145,9 +145,9 @@ class TargetConfigPanel(ConfigPanel):
 
         self._carrierBoxes = []
         carrierSizer = wx.BoxSizer(wx.HORIZONTAL)
-        carrierSizer.Add(wx.StaticText(self, -1, "Delivery:"), 0, wx.ALIGN_CENTER_VERTICAL | wx.RIGHT, 5)
+        carrierSizer.Add(wx.StaticText(self, -1, "Truck type:"), 0, wx.ALIGN_CENTER_VERTICAL | wx.RIGHT, 5)
         for carrier in DELIVERY_CARRIERS:
-            box = wx.CheckBox(self, -1, carrier)
+            box = wx.CheckBox(self, -1, carrier_display_name(carrier))
             box.Bind(wx.EVT_CHECKBOX, self.OnCarrier)
             self._carrierBoxes.append(box)
             carrierSizer.Add(box, 0, wx.ALIGN_CENTER_VERTICAL | wx.RIGHT, 8)

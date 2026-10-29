@@ -14,7 +14,7 @@ so older clients keep working while newer ones can read them directly:
 
 * ``plate_text`` — license-plate text
 * ``face_identity`` — a face identity label
-* ``delivery_carrier`` — one of USPS, FedEx, UPS, Amazon
+* ``delivery_carrier`` — one of USPS, FedEx, UPS, Amazon, Garbage (garbage truck)
 
 The ONNX detector fills those fields when plate, face, or carrier models
 are configured. The historical closed ``SIOWrapper`` binary is still behind
@@ -38,7 +38,12 @@ ATTR_FACE_IDENTITY = "face_identity"
 ATTR_DELIVERY_CARRIER = "delivery_carrier"
 
 # Stable vocabulary for ``delivery_carrier``. Not detected in this phase.
-DELIVERY_CARRIERS = ("USPS", "FedEx", "UPS", "Amazon")
+DELIVERY_CARRIERS = ("USPS", "FedEx", "UPS", "Amazon", "Garbage")
+
+
+def carrier_display_name(carrier):
+    """UI label for a ``delivery_carrier`` value ("Garbage" -> "Garbage truck")."""
+    return "Garbage truck" if str(carrier) == "Garbage" else str(carrier)
 
 RESERVED_ATTRIBUTE_KEYS = (
     ATTR_PLATE_TEXT,

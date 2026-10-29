@@ -100,7 +100,7 @@ def attribute_search_label(attributes) -> str:
     parts = []
     carrier = str(data.get(DELIVERY_CARRIER) or "").strip()
     if carrier and carrier.lower() != "none":
-        parts.append(carrier)
+        parts.append("Garbage truck" if carrier == "Garbage" else carrier)
     plate = str(data.get(PLATE_TEXT) or "").strip()
     if plate:
         parts.append(plate)

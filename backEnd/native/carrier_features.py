@@ -9,7 +9,9 @@ measure of real delivery-truck accuracy.
 from __future__ import annotations
 
 FEATURE_DIM = 12
-CARRIER_LABELS = ("none", "USPS", "FedEx", "UPS", "Amazon")
+# "Garbage" (garbage / refuse truck) is appended last so trained models that
+# carry their own label list in metadata keep their logit order.
+CARRIER_LABELS = ("none", "USPS", "FedEx", "UPS", "Amazon", "Garbage")
 
 
 def image_features(rgb):
@@ -54,8 +56,32 @@ def heuristic_carrier(rgb):
         scores["FedEx"] = (min(red, blue) - green) / 255.0
     if red > 150.0 and 50.0 < green < 170.0 and blue < 100.0 and red > green + 40.0:
         scores["Amazon"] = (red - blue) / 255.0
+    if _looks_like_garbage_truck(pixels, red, green, blue):
+        scores["Garbage"] = (green - max(red, blue)) / 255.0 + 0.1
     if not scores:
         return None
     name = max(scores, key=scores.get)
     confidence = float(min(0.99, max(0.2, scores[name])))
     return name, confidence
+
+
+def _looks_like_garbage_truck(pixels, red, green, blue):
+    """Green, boxy refuse truck (Waste Management / Republic style).
+
+    COCO has no garbage-truck class, so this runs on vehicle crops like the
+    carrier rules: the crop must be green-dominant overall and boxy (height at
+    least 45% of width, so a long low green car is less likely to match), and
+    the top half must not be much darker than the bottom (a tall hopper body
+    rather than a dark cab roofline). White or gray refuse trucks are left
+    unlabeled; train ``scripts/train_carrier_classifier.py`` with a
+    ``Garbage`` folder for those.
+    """
+    height, width = pixels.shape[0], pixels.shape[1]
+    if width <= 0 or height < 0.45 * width:
+        return False
+    if not (green > 70.0 and green > red + 20.0 and green > blue + 10.0):
+        return False
+    mid = max(1, height // 2)
+    top = float(pixels[:mid, :, 1].mean())
+    bottom = float(pixels[mid:, :, 1].mean()) if height > mid else top
+    return top + 40.0 >= bottom
