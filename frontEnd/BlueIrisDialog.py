@@ -4,6 +4,8 @@ import threading
 
 import wx
 
+from frontEnd.PasswordCtrl import PasswordCtrl, makeShowPasswordToggle
+
 from appCommon import BlueIris
 
 
@@ -26,7 +28,8 @@ class BlueIrisDialog(wx.Dialog):
         self._portCtrl = wx.TextCtrl(self, -1, "81", size=(60, -1))
         self._findBtn = wx.Button(self, -1, "Find servers")
         self._userCtrl = wx.TextCtrl(self, -1, "")
-        self._passCtrl = wx.TextCtrl(self, -1, "", style=wx.TE_PASSWORD)
+        self._passCtrl = PasswordCtrl(self, -1)
+        self._showPass = makeShowPasswordToggle(self, self._passCtrl)
         self._connectBtn = wx.Button(self, -1, "Connect")
         self._status = wx.StaticText(self, -1, " ")
         self._camList = wx.ListBox(self, -1, size=(-1, 140))
@@ -51,6 +54,8 @@ class BlueIrisDialog(wx.Dialog):
         passRow.Add(self._passCtrl, 1, wx.EXPAND)
         passRow.Add(self._connectBtn, 0, wx.LEFT, 8)
         grid.Add(passRow, 1, wx.EXPAND)
+        grid.AddSpacer(0)
+        grid.Add(self._showPass, 0)
 
         sizer = wx.BoxSizer(wx.VERTICAL)
         sizer.Add(intro, 0, wx.ALL, 10)

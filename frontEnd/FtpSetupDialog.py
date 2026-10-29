@@ -47,6 +47,8 @@ import time
 #from PIL import Image
 import wx
 
+from frontEnd.PasswordCtrl import PasswordCtrl, makeShowPasswordToggle
+
 # Toolbox imports...
 from vitaToolbox.wx.TextCtrlUtils import fixSelection
 
@@ -176,10 +178,10 @@ class FtpSetupDialog(wx.Dialog):
         self._userField = wx.TextCtrl(self, -1)
         passwordLabel = wx.StaticText(self, -1, _kPasswordLabelStr,
                                       style=wx.ST_NO_AUTORESIZE)
-        self._passwordField = wx.TextCtrl(self, -1, style=wx.TE_PASSWORD)
-        verifyPasswordLabel = wx.StaticText(self, -1, _kVerifyPasswordLabelStr,
+        self._passwordField = PasswordCtrl(self, -1)
+        verifyPasswordLabel = wx.StaticText(self, -1, "",
                                             style=wx.ST_NO_AUTORESIZE)
-        self._verifyPasswordField = wx.TextCtrl(self, -1, style=wx.TE_PASSWORD)
+        self._verifyPasswordField = makeShowPasswordToggle(self, self._passwordField)
         portLabel = wx.StaticText(self, -1, _kPortLabelStr,
                                   style=wx.ST_NO_AUTORESIZE)
 
@@ -280,14 +282,7 @@ class FtpSetupDialog(wx.Dialog):
         ftpConfig['directory'] = self._directoryField.GetValue().strip()
         ftpConfig['user'] = self._userField.GetValue().strip()
         ftpConfig['password'] = self._passwordField.GetValue().strip()
-        verifyPassword = self._verifyPasswordField.GetValue().strip()
 
-        if ftpConfig['password'] != verifyPassword:
-            self._verifyPasswordField.SetFocus()
-            self._verifyPasswordField.SetValue("")
-            wx.MessageBox(_kPasswordsMustMatchStr, _kPasswordsMustMatchTitleStr,
-                          wx.OK | wx.ICON_ERROR, self)
-            return None
 
         # Convert the port--it must be an int and within range...
         try:
@@ -331,14 +326,13 @@ class FtpSetupDialog(wx.Dialog):
         self._directoryField.SetValue(ftpConfig.get('directory', ""))
         self._userField.SetValue(ftpConfig.get('user', ""))
         self._passwordField.SetValue(ftpConfig.get('password', ""))
-        self._verifyPasswordField.SetValue(ftpConfig.get('password', ""))
         self._portCtrl.SetValue(str(ftpConfig.get('port', "")))
         self._portCtrl.SetStringSelection(str(ftpConfig.get('port', "")))
         self._passiveCheckbox.SetValue(ftpConfig.get('isPassive', True))
 
         # Fix Mac text fields...
         fixSelection(self._hostField, self._directoryField, self._userField,
-                     self._passwordField, self._verifyPasswordField,
+                     self._passwordField,
                      self._portCtrl)
 
 

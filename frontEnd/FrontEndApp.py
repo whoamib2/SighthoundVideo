@@ -1060,12 +1060,29 @@ def validateOSVersion(logger):
     return True
 
 ##############################################################################
+def _enableCrashLog():
+    """Write native crash stacks (all threads) to logs/crash.log."""
+    try:
+        import faulthandler
+
+        folder = os.path.join(os.environ.get("LOCALAPPDATA") or os.path.expanduser("~"), "VigilCam", "logs")
+        os.makedirs(folder, exist_ok=True)
+        handle = open(os.path.join(folder, "crash.log"), "a", encoding="utf-8")
+        handle.write("\n=== %s pid %d ===\n" % (time.strftime("%Y-%m-%d %H:%M:%S"), os.getpid()))
+        handle.flush()
+        faulthandler.enable(handle, all_threads=True)
+        globals()["_crashLogHandle"] = handle
+    except Exception:
+        pass
+
+
 def main():
     # Grab the standard streams before creating the app.  This seems to be
     # needed on Windows.  Note that we can't give a log directory yet because
     # we can't use getUserLocalDataDir() until after the app is created...
     # --console keeps the real stderr so a windowed build can show tracebacks.
     log_startup("FrontEndApp.main argv=%s" % (sys.argv,))
+    _enableCrashLog()
     logger = getLogger(kFrontEndLogName)
     if not console_requested():
         logger.grabStdStreams()

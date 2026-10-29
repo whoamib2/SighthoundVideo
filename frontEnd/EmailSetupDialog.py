@@ -47,6 +47,8 @@ import sys
 from PIL import Image
 import wx
 
+from frontEnd.PasswordCtrl import PasswordCtrl, makeShowPasswordToggle
+
 # Toolbox imports...
 from vitaToolbox.wx.FontUtils import makeFontDefault
 from vitaToolbox.networking.SimpleEmail import kEncryptionNone
@@ -324,10 +326,10 @@ class EmailSetupDialog(wx.Dialog):
         self._userField = wx.TextCtrl(globalPanel, -1)
         passwordLabel = wx.StaticText(globalPanel, -1, _kPasswordLabelStr,
                                       style=wx.ST_NO_AUTORESIZE)
-        self._passwordField = wx.TextCtrl(globalPanel, -1, style=wx.TE_PASSWORD)
-        verifyPasswordLabel = wx.StaticText(globalPanel, -1, _kVerifyPasswordLabelStr,
+        self._passwordField = PasswordCtrl(globalPanel, -1)
+        verifyPasswordLabel = wx.StaticText(globalPanel, -1, "",
                                             style=wx.ST_NO_AUTORESIZE)
-        self._verifyPasswordField = wx.TextCtrl(globalPanel, -1, style=wx.TE_PASSWORD)
+        self._verifyPasswordField = makeShowPasswordToggle(globalPanel, self._passwordField)
         portLabel = wx.StaticText(globalPanel, -1, _kPortLabelStr,
                                   style=wx.ST_NO_AUTORESIZE)
 
@@ -425,9 +427,6 @@ class EmailSetupDialog(wx.Dialog):
             field = self._passwordField
             emailConfig['password'] = \
                 field.GetValue().encode('ascii', 'strict').strip()
-            desc = _kPasswordDescStr
-            field = self._verifyPasswordField
-            verifyPassword = field.GetValue().encode('ascii', 'strict').strip()
             emailConfig['imageInline'] = self._inlineImagesCheck.GetValue()
         except UnicodeEncodeError as e:
             assert desc is not None
@@ -442,12 +441,6 @@ class EmailSetupDialog(wx.Dialog):
 
         desc = None
 
-        if emailConfig['password'] != verifyPassword:
-            self._verifyPasswordField.SetFocus()
-            self._verifyPasswordField.SetValue("")
-            wx.MessageBox(_kPasswordsMustMatchStr, _kPasswordsMustMatchTitleStr,
-                          wx.OK | wx.ICON_ERROR, self)
-            return None
 
         # Convert the port--it must be an int and within range...
         try:
@@ -494,7 +487,6 @@ class EmailSetupDialog(wx.Dialog):
         self._hostField.SetValue(emailConfig.get('host', ""))
         self._userField.SetValue(emailConfig.get('user', ""))
         self._passwordField.SetValue(emailConfig.get('password', ""))
-        self._verifyPasswordField.SetValue(emailConfig.get('password', ""))
         self._portCtrl.SetValue(str(emailConfig.get('port', "")))
         self._portCtrl.SetStringSelection(str(emailConfig.get('port', "")))
         self._encryptionChoice.SetStringSelection(
@@ -503,7 +495,7 @@ class EmailSetupDialog(wx.Dialog):
 
         # Fix Mac text fields...
         fixSelection(self._fromAddrField, self._hostField, self._userField,
-                     self._passwordField, self._verifyPasswordField,
+                     self._passwordField,
                      self._portCtrl)
 
 

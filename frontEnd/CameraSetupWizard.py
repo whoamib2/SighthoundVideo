@@ -51,6 +51,8 @@ import urllib.parse
 
 # Common 3rd-party imports...
 import wx
+
+from frontEnd.PasswordCtrl import PasswordCtrl, makeShowPasswordToggle
 import wx.adv as wxWizard
 
 # Toolbox imports...
@@ -2374,11 +2376,10 @@ class _UpnpSettingsScreen(_BasePage):
         self._userLabel = wx.StaticText(self, -1, "User name:")
         self._userCtrl = wx.TextCtrl(self, -1, size=(200, -1))
         self._passLabel = wx.StaticText(self, -1, "Password:")
-        self._passCtrl = wx.TextCtrl(self, -1, size=(200, -1),
-                                     style=wx.TE_PASSWORD)
-        self._passVerifyLabel = wx.StaticText(self, -1, "Verify password:")
-        self._passVerifyCtrl = wx.TextCtrl(self, -1, size=(200, -1),
-                                           style=wx.TE_PASSWORD)
+        self._passCtrl = PasswordCtrl(self, -1, size=(200, -1))
+        # The password is asked once; this slot holds a "Show password" toggle.
+        self._passVerifyLabel = wx.StaticText(self, -1, "")
+        self._passVerifyCtrl = makeShowPasswordToggle(self, self._passCtrl)
 
         self._rtspPortLabel = wx.StaticText(self, -1, "RTSP port (optional):")
         self._rtspPortCtrl = wx.TextCtrl(self, -1, size=(40, -1))
@@ -2633,7 +2634,6 @@ class _UpnpSettingsScreen(_BasePage):
         self._streamPathCtrl.SetValue(ensureUnicode(pathPart))
         self._userCtrl.SetValue(ensureUnicode(username))
         self._passCtrl.SetValue(ensureUnicode(password))
-        self._passVerifyCtrl.SetValue(ensureUnicode(password))
 
         # Only set the port control if it's RTSP.
         if scheme == 'rtsp':
@@ -2698,11 +2698,6 @@ class _UpnpSettingsScreen(_BasePage):
         username = self._userCtrl.GetValue().strip()
         password = self._passCtrl.GetValue().strip()
 
-        if (ignoreErrors != 'all')                       and \
-           (password != self._passVerifyCtrl.GetValue())    :
-            self._passVerifyCtrl.SetValue('')
-            self._passVerifyCtrl.SetFocus()
-            return (_kPasswordsMustMatchStr, None, None)
 
         if (ignoreErrors == 'none') and (password) and (not (username)):
             return ("A username is required if a password is used.",
@@ -3039,11 +3034,10 @@ class _OnvifCredentialsScreen(_BasePage):
         self._userLabel = wx.StaticText(self, -1, "User name:")
         self._userCtrl = wx.TextCtrl(self, -1, size=(200, -1))
         self._passLabel = wx.StaticText(self, -1, "Password:")
-        self._passCtrl = wx.TextCtrl(self, -1, size=(200, -1),
-                                     style=wx.TE_PASSWORD)
-        self._passVerifyLabel = wx.StaticText(self, -1, "Verify password:")
-        self._passVerifyCtrl = wx.TextCtrl(self, -1, size=(200, -1),
-                                           style=wx.TE_PASSWORD)
+        self._passCtrl = PasswordCtrl(self, -1, size=(200, -1))
+        # The password is asked once; this slot holds a "Show password" toggle.
+        self._passVerifyLabel = wx.StaticText(self, -1, "")
+        self._passVerifyCtrl = makeShowPasswordToggle(self, self._passCtrl)
 
         self._authMessage = wx.StaticText(self, -1, "Please wait while we "
                                                     "connect to your camera...",
@@ -3146,7 +3140,6 @@ class _OnvifCredentialsScreen(_BasePage):
 
         self._userCtrl.SetValue(ensureUnicode(username))
         self._passCtrl.SetValue(ensureUnicode(password))
-        self._passVerifyCtrl.SetValue(ensureUnicode(password))
 
         # Hide the messages.
         self._authMessage.Hide()
@@ -3280,11 +3273,6 @@ class _OnvifCredentialsScreen(_BasePage):
         username = self._userCtrl.GetValue().strip()
         password = self._passCtrl.GetValue().strip()
 
-        if (ignoreErrors != 'all')                       and \
-           (password != self._passVerifyCtrl.GetValue())    :
-            self._passVerifyCtrl.SetValue('')
-            self._passVerifyCtrl.SetFocus()
-            return (_kPasswordsMustMatchStr, None, None)
 
         if (ignoreErrors == 'none') and (password) and (not (username)):
             return ("A username is required if a password is used.",
@@ -4167,11 +4155,10 @@ class _ManualSettingsScreen(_BasePage):
         self._userCtrl = wx.TextCtrl(self, -1, size=(200, -1))
 
         self._passLabel = wx.StaticText(self, -1, "Password:")
-        self._passCtrl = wx.TextCtrl(self, -1, size=(200, -1),
-                                     style=wx.TE_PASSWORD)
-        self._passVerifyLabel = wx.StaticText(self, -1, "Verify password:")
-        self._passVerifyCtrl = wx.TextCtrl(self, -1, size=(200, -1),
-                                           style=wx.TE_PASSWORD)
+        self._passCtrl = PasswordCtrl(self, -1, size=(200, -1))
+        # The password is asked once; this slot holds a "Show password" toggle.
+        self._passVerifyLabel = wx.StaticText(self, -1, "")
+        self._passVerifyCtrl = makeShowPasswordToggle(self, self._passCtrl)
 
         self._advancedLabel = wx.StaticText(self, -1, _kAdvancedLabel,
                 style=wx.ST_NO_AUTORESIZE)
@@ -4419,7 +4406,7 @@ class _ManualSettingsScreen(_BasePage):
 
         # Clear out everything by default, just in case we forget something...
         for ctrl in [self._httpPortCtrl, self._rtspPortCtrl,
-                     self._userCtrl, self._passCtrl, self._passVerifyCtrl,
+                     self._userCtrl, self._passCtrl,
                      self._streamPathCtrl, self._ipCtrl]:
             ctrl.SetValue('')
 
@@ -4490,7 +4477,6 @@ class _ManualSettingsScreen(_BasePage):
         self._streamPathCtrl.SetValue(ensureUnicode(pathPart))
         self._userCtrl.SetValue(ensureUnicode(username))
         self._passCtrl.SetValue(ensureUnicode(password))
-        self._passVerifyCtrl.SetValue(ensureUnicode(password))
 
         self._forceTcpCtrl.SetValue(forceTCP)
 
@@ -4534,11 +4520,6 @@ class _ManualSettingsScreen(_BasePage):
             assert scheme == 'http://'
             portStr = self._httpPortCtrl.GetValue()
 
-        if (ignoreErrors != 'all')                                       and \
-           (self._passCtrl.GetValue() != self._passVerifyCtrl.GetValue())   :
-            self._passVerifyCtrl.SetValue('')
-            self._passVerifyCtrl.SetFocus()
-            return (_kPasswordsMustMatchStr, None, None)
 
         if ignoreErrors == 'none':
             if not hostname:
