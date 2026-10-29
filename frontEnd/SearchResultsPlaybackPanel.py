@@ -64,6 +64,8 @@ from vitaToolbox.wx.ToolbarBitmapTextButton import ToolbarBitmapTextButton
 from vitaToolbox.wx.TranslucentStaticText import TranslucentStaticText
 from vitaToolbox.wx.BitmapFromFile import bitmapFromFile
 from vitaToolbox.sysUtils.TimeUtils import formatTime
+from vitaToolbox.loggingUtils.LoggingUtils import getLogger
+from appCommon.CommonStrings import kFrontEndLogName
 
 # Local imports...
 from backEnd.ClipManager import ClipManager
@@ -1226,6 +1228,10 @@ class SearchResultsPlaybackPanel(BorderImagePanel):
 
     ###########################################################
     def _startTimer(self, delayTime):
+        # wx.Timer.Start() only accepts an int under Python 3; the frame
+        # pacing math yields floats, and the resulting TypeError used to be
+        # swallowed in OnPlayTimer, which silently paused after one frame.
+        delayTime = max(1, int(round(delayTime)))
         self._playTimer.Start(delayTime, True)
         self._expectedTimerTime = time.time()*1000 + delayTime
         return True
@@ -1332,6 +1338,8 @@ class SearchResultsPlaybackPanel(BorderImagePanel):
             # exceptions, we want to ignore these.  If an exception happens
             # normally, we just want to simulate a pause action.
             if DBG_PLAYBACK: self._dbgPlayback( "exception! " + traceback.format_exc() )
+            getLogger(kFrontEndLogName).warning("Playback stopped by error",
+                                                exc_info=True)
             self._resultsModel.setPlay(False, False)
         finally:
             self._skippingFrames = False

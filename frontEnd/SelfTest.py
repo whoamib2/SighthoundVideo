@@ -144,6 +144,7 @@ def _run(frame):
     _stall["max"] = 0.0
     for n, num in enumerate(picks):
         wx.CallLater(1 + n * 700, _select, frame, num)
+    frame._selfTestPlayQueue = [order[-1], order[-3] if len(order) > 2 else order[0], order[0]]
     wx.CallLater(len(picks) * 700 + 4000, _after, frame, picks[-1])
 
 
@@ -175,3 +176,40 @@ def _after(frame, num):
              (panel._slider._minValue, panel._slider._maxValue),
              _t(model.getCurrentAbsoluteMs()))
     log.info("SELFTEST maxStallMs=%d", int(_stall["max"] * 1000))
+    _playTest(frame, num)
+
+
+def _playTest(frame, num, seconds=5.0):
+    """Press play and count distinct frames painted over ``seconds``."""
+    log = getLogger(kFrontEndLogName)
+    model = frame._searchView._resultsModel
+    state = {"frames": 0, "last": None, "startMs": model.getCurrentAbsoluteMs(),
+             "ticks": 0}
+    model.setPlay(True)
+    timer = wx.Timer(frame)
+
+    def onTick(_evt):
+        img = model.getCurrentImg()
+        key = (id(img), model.getCurrentAbsoluteMs())
+        if img is not None and key != state["last"]:
+            state["frames"] += 1
+            state["last"] = key
+        state["ticks"] += 1
+        if state["ticks"] * 0.05 >= seconds:
+            timer.Stop()
+            endMs = model.getCurrentAbsoluteMs()
+            log.info("SELFTEST play result %d framesPainted=%d in %.0fs "
+                     "playing=%s advancedMs=%s from=%s to=%s",
+                     num, state["frames"], seconds, model.isPlaying(),
+                     (endMs - state["startMs"]) if endMs and state["startMs"] else None,
+                     _t(state["startMs"]), _t(endMs))
+            model.setPlay(False)
+            queue = getattr(frame, "_selfTestPlayQueue", None)
+            if queue:
+                nxt = queue.pop(0)
+                _select(frame, nxt)
+                wx.CallLater(4000, _playTest, frame, nxt)
+
+    frame.Bind(wx.EVT_TIMER, onTick, timer)
+    timer.Start(50)
+    frame._selfTestPlayTimer = timer

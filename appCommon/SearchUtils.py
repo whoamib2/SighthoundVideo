@@ -637,7 +637,18 @@ def _combineOverlappingClips(curResults, preservePlayOffset, searchConfig, clipM
             clipInfo.startTime = min(start, prevClipInfo.startTime)
             clipInfo.playStart = min(clipInfo.playStart, prevClipInfo.playStart)
             clipInfo.previewMs = min(clipInfo.previewMs, prevClipInfo.previewMs)
-            clipInfo.objList = list(set(clipInfo.objList+prevClipInfo.objList))
+            # Merge in place with a cached set: rebuilding the list on every
+            # merge was quadratic and held the GIL for seconds when a busy
+            # day merged ~100k objects into one clip, freezing the UI.
+            objSet = getattr(clipInfo, "_objSet", None)
+            if objSet is None:
+                objSet = set(clipInfo.objList)
+                clipInfo.objList = list(objSet)
+                clipInfo._objSet = objSet
+            for prevObj in prevClipInfo.objList:
+                if prevObj not in objSet:
+                    objSet.add(prevObj)
+                    clipInfo.objList.append(prevObj)
             clipInfo.startList.extend(prevClipInfo.startList)
             clipInfo._realStartTime = min(realStart, prevClipInfo._realStartTime)
             clipInfo._startFrame = min(startFrame, prevClipInfo._startFrame)
