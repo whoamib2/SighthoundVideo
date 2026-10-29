@@ -857,6 +857,7 @@ class FrontEndFrame(wx.Frame):
                      self.OnTrainingSamples),
                     (MenuIds.kRescanClips, "", wx.ID_ANY, self.OnRescanClips),
                     (MenuIds.kCommunityTraining, "", wx.ID_ANY, self.OnCommunityTraining),
+                    (MenuIds.kCameraDiagnostics, "", wx.ID_ANY, self.OnCameraDiagnostics),
                     # (None, None, None, None), Separator auto-added on Win...
                     (_kMenuOptions, "", wx.ID_PREFERENCES, self.OnOptions),
                 ) + extraToolsData,
@@ -1374,6 +1375,17 @@ class FrontEndFrame(wx.Frame):
 
 
     ############################################################
+    def OnCameraDiagnostics(self, event=None):
+        """Per-camera decoder (hardware/software), codec, size, fps, reconnects."""
+        from frontEnd.CameraDiagnosticsDialog import CameraDiagnosticsDialog
+        from frontEnd.FrontEndUtils import getUserLocalDataDir
+
+        dlg = CameraDiagnosticsDialog(self, getUserLocalDataDir())
+        try:
+            dlg.ShowModal()
+        finally:
+            dlg.Destroy()
+
     def OnCommunityTraining(self, event=None):
         """Opt-in sample sharing and shared model updates."""
         from frontEnd.CommunityDialog import CommunityDialog

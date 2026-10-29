@@ -107,7 +107,9 @@ def _scale_rgb(rgb: bytes, width: int, height: int, out_w: int, out_h: int) -> t
     if target_w == width and target_h == height:
         return rgb, width, height
     scale = min(target_w / float(width), target_h / float(height))
-    new_w = max(1, int(width * scale))
+    # Multiple-of-4 width keeps RGB rows 4-byte aligned for every consumer
+    # (OpenGL, wx bitmaps, encoders).
+    new_w = max(4, int(width * scale) // 4 * 4)
     new_h = max(1, int(height * scale))
     if new_w == width and new_h == height:
         return rgb, width, height
@@ -164,6 +166,58 @@ def _frame_ms(frame: Any, fallback_ms: int) -> int:
     if stamp is None:
         return int(fallback_ms)
     return int(round(float(stamp) * 1000.0))
+
+
+_HW_PREFERENCE = ("d3d11va", "dxva2", "cuda", "qsv") if sys.platform == "win32" else (
+    "videotoolbox", "vaapi", "cuda", "qsv")
+
+
+def hw_device_for(pref: Any) -> Optional[str]:
+    """FFmpeg hwaccel device for the Options preference ("auto", "none", or a name)."""
+    pref = str(pref or "auto").strip().lower()
+    if pref in ("none", "off", "false", "0"):
+        return None
+    try:
+        from av.codec.hwaccel import hwdevices_available
+
+        available = list(hwdevices_available())
+    except Exception:
+        return None
+    if pref != "auto" and pref in available:
+        return pref
+    for name in _HW_PREFERENCE:
+        if name in available:
+            return name
+    return None
+
+
+def decoder_label(codec_context: Any, hw_device: Optional[str]) -> str:
+    if hw_device and getattr(codec_context, "is_hwaccel", False):
+        return "Hardware (%s)" % hw_device.upper()
+    return "Software"
+
+
+def _tolerant_decode(container: Any, stream: Any, max_bad: int = 100):
+    """Decode frames, skipping corrupt packets instead of dropping the stream.
+
+    One damaged packet (common on Wi-Fi doorbells / Blue Iris restreams)
+    used to raise out of the decode loop and restart the camera process.
+    """
+    import av
+
+    bad = 0
+    for packet in container.demux(stream):
+        try:
+            frames = packet.decode()
+        except (av.error.InvalidDataError, av.error.PatchWelcomeError) as exc:
+            bad += 1
+            if bad > max_bad:
+                raise RuntimeError("too many corrupt packets in a row (%s)" % exc)
+            continue
+        if frames:
+            bad = 0
+        for frame in frames:
+            yield frame
 
 
 def _video_stream(container: Any):
@@ -483,17 +537,36 @@ class StreamReader:
         lowered = uri.lower()
         if lowered.startswith(("rtsp://", "rtsps://", "http://", "https://")):
             options["rtsp_transport"] = "tcp"
+            # Fewer stalls on lossy links; Dahua/Blue Iris honour it.
+            options["stimeout"] = "10000000"
+            options["buffer_size"] = "2097152"
+        hw = hw_device_for(self._extras.get("hardwareDevice", "auto"))
+        hwaccel = None
+        if hw:
+            try:
+                from av.codec.hwaccel import HWAccel
+
+                hwaccel = HWAccel(device_type=hw, allow_software_fallback=True)
+            except Exception:
+                hwaccel, hw = None, None
         # Without a timeout a stalled RTSP read blocks the capture loop forever,
         # and CameraCapture's own stream timeout never gets to run.
-        self._container = av.open(uri, options=options or None, timeout=(15.0, 10.0))
+        try:
+            self._container = av.open(uri, options=options or None, timeout=(15.0, 10.0), hwaccel=hwaccel)
+        except TypeError:
+            hwaccel, hw = None, None
+            self._container = av.open(uri, options=options or None, timeout=(15.0, 10.0))
         stream = _video_stream(self._container)
         try:
             stream.thread_type = "AUTO"
         except Exception:
             pass
+        self._stream = stream
+        self._hw_device = hw
+        self._decoder_info = {}
         self._width = int(stream.codec_context.width or 0)
         self._height = int(stream.codec_context.height or 0)
-        self._iterator = self._container.decode(stream)
+        self._iterator = _tolerant_decode(self._container, stream)
         self._running = True
         if self._record:
             self._writer = _ClipWriter(self)
@@ -555,7 +628,9 @@ class StreamReader:
             return None
         try:
             rgb, width, height, _media_ms = self._read_rgb()
-        except Exception:
+        except Exception as exc:
+            (getattr(self, "logger", None) or logging.getLogger(__name__)).warning(
+                "Stream read failed: %r" % (exc,))
             self._running = False
             return None
         if rgb is None:
@@ -610,6 +685,8 @@ class StreamReader:
             decoded = next(self._iterator)
         except StopIteration:
             return None, 0, 0, 0
+        if not getattr(self, "_decoder_info", None):
+            self._note_decoder(decoded)
         # Convert straight to the recording size inside libswscale. A full
         # 4096x1536 RGB copy per frame plus a Python resize kept the loop at
         # about 3 fps on a 15 fps camera, the RTSP backlog grew until reads
@@ -623,6 +700,43 @@ class StreamReader:
         ms = _frame_ms(decoded, self._fallback_ms)
         self._fallback_ms = ms + 1
         return array.tobytes(), int(width), int(height), ms
+
+    def _note_decoder(self, decoded: Any) -> None:
+        stream = getattr(self, "_stream", None)
+        ctx = getattr(stream, "codec_context", None)
+        rate = getattr(stream, "average_rate", None) or getattr(stream, "guessed_rate", None)
+        info = {
+            "decoder": decoder_label(ctx, getattr(self, "_hw_device", None)),
+            "codec": str(getattr(ctx, "name", "") or ""),
+            "width": int(getattr(decoded, "width", 0) or 0),
+            "height": int(getattr(decoded, "height", 0) or 0),
+            "pix_fmt": str(getattr(getattr(decoded, "format", None), "name", "") or ""),
+            "fps": round(float(rate), 2) if rate else 0.0,
+            "transport": "tcp" if self._uri.lower().startswith("rtsp") else "",
+            "started": time.strftime("%Y-%m-%d %H:%M:%S"),
+        }
+        self._decoder_info = info
+        (getattr(self, "logger", None) or logging.getLogger(__name__)).info(
+            "Stream started: decoder=%(decoder)s codec=%(codec)s %(width)dx%(height)d "
+            "pix_fmt=%(pix_fmt)s fps=%(fps)s" % info)
+        self._write_decoder_info()
+
+    def _write_decoder_info(self) -> None:
+        info = getattr(self, "_decoder_info", None)
+        if not info or not self._mmap_path:
+            return
+        try:
+            import json
+
+            path = os.path.splitext(self._mmap_path)[0] + ".decoder.json"
+            with open(path + ".tmp", "w", encoding="utf-8") as handle:
+                json.dump(info, handle)
+            os.replace(path + ".tmp", path)
+        except Exception:
+            pass
+
+    def getDecoderInfo(self) -> dict:
+        return dict(getattr(self, "_decoder_info", None) or {})
 
     def getProcSize(self) -> tuple[int, int]:
         # Boxes are in analytics-frame coordinates, which match the recorded
@@ -690,6 +804,7 @@ class StreamReader:
             self._mmap_file = handle
             self._mmap_path = filename
             self._mmap_size = size
+            self._write_decoder_info()
             return True
         except Exception:
             self.close_mmap()
@@ -802,8 +917,15 @@ def getLocalCameraNames() -> list[str]:
     return []
 
 
-def getHardwareDevicesList() -> list[dict[str, str]]:
-    return [{"name": name, "kind": "video"} for name in getLocalCameraNames()]
+def getHardwareDevicesList() -> list[str]:
+    """Hardware video decoders usable on this PC (Options > hardware acceleration)."""
+    try:
+        from av.codec.hwaccel import hwdevices_available
+
+        available = set(hwdevices_available())
+    except Exception:
+        return []
+    return [name for name in _HW_PREFERENCE if name in available]
 
 
 def _probe_opencv_cameras() -> list[str]:

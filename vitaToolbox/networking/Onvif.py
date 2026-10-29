@@ -1447,11 +1447,13 @@ class OnvifDevicePoll(object):
                 if tryWithAuth and status == _kHttpUnauthorized:
                     # Dahua/Amcrest with "ONVIF authentication" on also
                     # require HTTP Digest in addition to the UsernameToken.
-                    logger.debug("%s - retrying with HTTP digest" % op)
+                    logger.info("%s - WS-UsernameToken got 401, retrying with HTTP Digest" % op)
                     status, result = digest_post(
                         "http://%s:%d/%s" % (host, port, httpServicePath), xml,
                         self._getOnvifHttpHeaders(onvifAction),
                         credentials[0], credentials[1])
+                if tryWithAuth:
+                    logger.info("%s - authenticated request result %s" % (op, status))
                 if status in [_kHttpBadRequest, _kHttpUnauthorized]:
                     if tryWithAuth or credentials is None:
                         logger.error("%s failed (%s)" % (op, status))

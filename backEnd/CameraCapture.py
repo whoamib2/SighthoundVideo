@@ -299,6 +299,10 @@ class CameraCapture(object):
                                                        True, self._moveFailed,
                                                        extras.get('initFrameSize', 0),
                                                        getDebugPrefAsInt("cameraStreamStats", 3600, userDir) )
+        try:  # decoder / read-failure lines go to this camera's log
+            self._streamReader.logger = self._logger
+        except Exception:
+            pass
 
         # Keep track of the number of objectFrames that were processed since
         # we last sent out msgIdStreamProcessedData.

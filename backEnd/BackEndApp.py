@@ -2875,7 +2875,7 @@ class BackEndApp(object):
                 self._putMsgDC([MessageIds.msgIdDeleteFile, path])
         elif msgId == MessageIds.msgIdSetOnvifSettings:
             (uuid, selectedIp, username, password) = msg[1:]
-            print(("Set onvif settings %s" % username))
+            self._logger.info("ONVIF credentials set for %s at %s (user %r)" % (uuid, selectedIp, username))
             self._onvifScanner.setDeviceSettings(uuid, (username, password), selectedIp)
         elif msgId == MessageIds.msgIdActiveCameraSearch:
             (isMajor, ) = msg[1:]
