@@ -4,7 +4,7 @@ Layout under ``%LOCALAPPDATA%\\VigilCam\\training`` (override with
 ``VIGILCAM_TRAINING_DIR``)::
 
     dataset/            folders read by the carrier trainer
-        none/ USPS/ FedEx/ UPS/ Amazon/ Garbage/
+        none/ USPS/ FedEx/ UPS/ Amazon/ Garbage/ Bus/ School bus/
     general/            samples the app cannot retrain on yet
         Person/ Vehicle/ Animal/ Delivery/ Other/ not_Person/ ...
     samples.jsonl       one JSON line per sample (camera, time, box, label)

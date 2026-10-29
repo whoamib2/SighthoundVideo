@@ -52,7 +52,7 @@ def test_attributes_roundtrip_on_the_wire():
 
 
 def test_reserved_carriers_and_track_match_unpacking():
-    assert DELIVERY_CARRIERS == ("USPS", "FedEx", "UPS", "Amazon", "Garbage")
+    assert DELIVERY_CARRIERS == ("USPS", "FedEx", "UPS", "Amazon", "Garbage", "Bus", "School bus")
     match = TrackMatch(7, "person", 0.9, 0.4, attributes={"note": "later"})
     obj_id, det_type, score, overlap = match
     assert (obj_id, det_type, score, overlap) == (7, "person", 0.9, 0.4)

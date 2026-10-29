@@ -158,3 +158,42 @@ def test_garbage_truck_heuristic_and_text():
     assert "Garbage" in DELIVERY_CARRIERS
     assert carrier_display_name("Garbage") == "Garbage truck"
     assert "Garbage truck" in notification_sentence({"delivery_carrier": "Garbage"}, "the curb")
+
+
+def test_bus_and_school_bus():
+    import numpy as np
+
+    from backEnd.attribute_text import attribute_search_label, notification_sentence
+    from backEnd.native.attribute_recognizers import AttributePipeline
+    from backEnd.native.carrier_features import CARRIER_LABELS, is_school_bus_yellow
+    from backEnd.native.detector import carrier_phrase
+    from backEnd.native.onnx_detector import _with_class
+    from backEnd.training_samples import folder_for, label_choices
+
+    assert CARRIER_LABELS[-2:] == ("Bus", "School bus")
+    yellow = np.zeros((40, 80, 3), dtype=np.uint8)
+    yellow[:, :] = (245, 190, 20)
+    white = np.full((40, 80, 3), 230, dtype=np.uint8)
+    assert is_school_bus_yellow(yellow) and not is_school_bus_yellow(white)
+    assert _with_class({}, "vehicle", 5, "coco") == {"vehicle_class": "bus"}
+    assert _with_class({}, "vehicle", 7, "coco") == {}
+
+    pipeline = AttributePipeline(use_heuristic=True)
+    school = _vehicle(yellow)
+    school.attributes["vehicle_class"] = "bus"
+    city = _vehicle(white)
+    city.attributes["vehicle_class"] = "bus"
+    pipeline.annotate(yellow.tobytes(), 80, 40, [school])
+    pipeline.annotate(white.tobytes(), 80, 40, [city])
+    assert school.attributes["delivery_carrier"] == "School bus"
+    assert city.attributes["delivery_carrier"] == "Bus"
+    # A yellow non-bus vehicle is not a school bus.
+    car = _vehicle(yellow)
+    pipeline.annotate(yellow.tobytes(), 80, 40, [car])
+    assert car.attributes.get("delivery_carrier") != "School bus"
+
+    assert carrier_phrase("Bus") == "Bus" and carrier_phrase("UPS") == "UPS truck"
+    assert notification_sentence({"delivery_carrier": "School bus"}, "the curb").startswith("School bus")
+    assert "Bus" in label_choices() and "School bus" in label_choices()
+    assert folder_for("School bus") == "dataset/School bus"
+    assert attribute_search_label({"delivery_carrier": "Garbage"}) == "Garbage truck"

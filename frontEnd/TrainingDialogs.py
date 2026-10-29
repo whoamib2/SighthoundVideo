@@ -8,7 +8,7 @@ from backEnd import training_samples as ts
 
 _kMaxW, _kMaxH = 800, 450
 _kNote = ("Retraining covers the delivery-carrier / garbage-truck classifier "
-          "(USPS, FedEx, UPS, Amazon, Garbage truck, and 'none' from \"Not a ...\" "
+          "(USPS, FedEx, UPS, Amazon, Garbage truck, Bus, School bus, and 'none' from \"Not a ...\" "
           "corrections). Person, Vehicle, Animal, generic Delivery vehicle and "
           "Other samples are saved for later but the main YOLOX detector is NOT "
           "retrained in the app.")

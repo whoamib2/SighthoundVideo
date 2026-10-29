@@ -991,7 +991,10 @@ def remuxClip(
     progressFn: Any = None,
 ) -> int:
     """Join clip files between absolute timestamps. 0 on success, -1 on failure."""
-    _ = dataDir, extras, logFn
+    _ = dataDir, logFn
+    fmt = str((extras or {}).get("format") or "").lower() if isinstance(extras, dict) else ""
+    if fmt in ("jpg", "jpeg", "png") or str(savePath).lower().endswith((".jpg", ".jpeg", ".png")):
+        return _save_still_frame(fileList, savePath, int(startMs))
     try:
         selected: list[tuple[int, bytes, int, int]] = []
         entries = []
@@ -1017,6 +1020,46 @@ def remuxClip(
         selected.sort(key=lambda item: item[0])
         if not _write_mp4(savePath, selected):
             return -1
+        return 0
+    except Exception:
+        return -1
+
+
+def _save_still_frame(fileList: list, savePath: str, targetMs: int) -> int:
+    """Write the decoded frame nearest ``targetMs`` as a still image.
+
+    Export Frame and Mark as Missed ask for a zero-length range
+    (``startMs == endMs``). A frame almost never lands on that exact
+    millisecond, so the mp4 path selected nothing and failed. Pick the
+    closest frame instead. 0 on success, -1 on failure.
+    """
+    try:
+        from PIL import Image
+
+        best = None
+        for item in fileList or []:
+            if isinstance(item, (list, tuple)):
+                path = item[0]
+                file_start = int(item[1]) if len(item) > 1 and item[1] is not None else None
+            else:
+                path, file_start = item, None
+            origin = None
+            for ms, rgb, width, height, _iw, _ih in _iter_video_frames(path):
+                if origin is None:
+                    origin = ms
+                absolute = ms if file_start is None else int(file_start) + (ms - origin)
+                gap = abs(absolute - int(targetMs))
+                if best is None or gap < best[0]:
+                    best = (gap, rgb, width, height)
+                if absolute > int(targetMs) and best is not None and gap > best[0]:
+                    break
+            if best is not None and best[0] == 0:
+                break
+        if best is None:
+            return -1
+        image = Image.frombytes("RGB", (int(best[2]), int(best[3])), bytes(best[1]))
+        lower = str(savePath).lower()
+        image.save(savePath, "PNG" if lower.endswith(".png") else "JPEG", quality=92)
         return 0
     except Exception:
         return -1

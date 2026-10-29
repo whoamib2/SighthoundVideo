@@ -347,7 +347,8 @@ class SavedQueryDataModel(AbstractModel):
         carriers = list(getattr(self, "_deliveryCarriers", None) or [])
         if carriers:
             if len(carriers) == 1:
-                targetPart = "%s truck" % carriers[0]
+                from backEnd.native.detector import carrier_phrase
+                targetPart = carrier_phrase(carriers[0])
             else:
                 targetPart = "delivery truck"
         wherePart = self._triggers[0]._getAutoNamePart()

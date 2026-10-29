@@ -28,7 +28,12 @@ from backEnd.attribute_text import (
     PLATE_CONFIDENCE,
     PLATE_TEXT,
 )
-from backEnd.native.carrier_features import CARRIER_LABELS, heuristic_carrier, image_features
+from backEnd.native.carrier_features import (
+    CARRIER_LABELS,
+    heuristic_carrier,
+    image_features,
+    is_school_bus_yellow,
+)
 from backEnd.native.onnx_detector import installed_models_dirs, select_execution_providers
 
 _ENV_PLATE_DETECTOR = "SIGHTHOUND_PLATE_DETECTOR_MODEL"
@@ -583,7 +588,10 @@ class AttributePipeline:
         found = {}
         if kind == "vehicle":
             found.update(self._read_plate(crop))
-            found.update(self._read_carrier(crop))
+            if str(detection.attributes.get("vehicle_class") or "") == "bus":
+                found.update(self._read_bus(crop, detection))
+            else:
+                found.update(self._read_carrier(crop))
         elif kind == "person":
             found.update(self._read_face(crop))
         if found:
@@ -771,6 +779,24 @@ class AttributePipeline:
             self._db_threshold = threshold
             self._db_mtime = mtime
         return list(self._db_gallery)
+
+    def _read_bus(self, crop, detection) -> dict:
+        """COCO said bus: label Bus, or School bus when the body is school-bus yellow.
+
+        A trained model that answers "School bus" also counts.
+        """
+        score = float(getattr(detection, "score", 0.5) or 0.5)
+        if is_school_bus_yellow(crop):
+            return {DELIVERY_CARRIER: "School bus", DELIVERY_CONFIDENCE: score}
+        self._maybe_reload_user_carrier()
+        if self.carrier is not None:
+            try:
+                label, confidence = self._carrier_model(crop)
+            except Exception:
+                label, confidence = "none", 0.0
+            if label == "School bus":
+                return {DELIVERY_CARRIER: label, DELIVERY_CONFIDENCE: float(confidence)}
+        return {DELIVERY_CARRIER: "Bus", DELIVERY_CONFIDENCE: score}
 
     def _read_carrier(self, crop) -> dict:
         self._maybe_reload_user_carrier()

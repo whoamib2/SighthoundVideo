@@ -176,7 +176,32 @@ def _after(frame, num):
              (panel._slider._minValue, panel._slider._maxValue),
              _t(model.getCurrentAbsoluteMs()))
     log.info("SELFTEST maxStallMs=%d", int(_stall["max"] * 1000))
+    _frameGrabTest(panel, num)
     _playTest(frame, num)
+
+
+def _frameGrabTest(panel, num):
+    """Same grab Mark as Missed / Export Frame uses, on the paused result."""
+    import tempfile
+
+    log = getLogger(kFrontEndLogName)
+    handle, path = tempfile.mkstemp(prefix="vigilcam_selftest_", suffix=".jpg")
+    os.close(handle)
+    try:
+        ok = panel.grabCurrentFrame(path)
+        size = None
+        if ok:
+            img = wx.Image(path)
+            size = (img.GetWidth(), img.GetHeight()) if img.IsOk() else None
+        log.info("SELFTEST markMissed frameGrab result %d ok=%s bytes=%d image=%s",
+                 num, ok, os.path.getsize(path) if os.path.exists(path) else -1, size)
+    except Exception:
+        log.exception("SELFTEST markMissed frameGrab crashed")
+    finally:
+        try:
+            os.remove(path)
+        except OSError:
+            pass
 
 
 def _playTest(frame, num, seconds=5.0):

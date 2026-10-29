@@ -10,6 +10,8 @@ PLATE_TEXT = "plate_text"
 PLATE_CONFIDENCE = "plate_confidence"
 FACE_IDENTITY = "face_identity"
 FACE_CONFIDENCE = "face_confidence"
+from backEnd.native.detector import carrier_display_name, carrier_phrase  # noqa: E402
+
 DELIVERY_CARRIER = "delivery_carrier"
 DELIVERY_CONFIDENCE = "delivery_confidence"
 
@@ -80,7 +82,7 @@ def notification_sentence(attributes, place: str = "") -> str:
     data = attributes or {}
     carrier = str(data.get(DELIVERY_CARRIER) or "").strip()
     if carrier and carrier.lower() != "none":
-        text = "%s truck" % carrier
+        text = carrier_phrase(carrier)
         where = (place or "").strip()
         if where:
             text = "%s at %s" % (text, where)
@@ -100,7 +102,7 @@ def attribute_search_label(attributes) -> str:
     parts = []
     carrier = str(data.get(DELIVERY_CARRIER) or "").strip()
     if carrier and carrier.lower() != "none":
-        parts.append("Garbage truck" if carrier == "Garbage" else carrier)
+        parts.append(carrier_display_name(carrier))
     plate = str(data.get(PLATE_TEXT) or "").strip()
     if plate:
         parts.append(plate)

@@ -313,6 +313,17 @@ def _decode_predictions(array, layout: str, input_size: int):
     return boxes, scores, classes
 
 
+_COCO_BUS = 5
+
+
+def _with_class(attributes: dict, label: str, class_id: int, mode: str) -> dict:
+    """Copy ``attributes``; tag COCO buses so the attribute stage can say Bus."""
+    merged = dict(attributes)
+    if mode != "sighthound" and label == "vehicle" and int(class_id) == _COCO_BUS:
+        merged["vehicle_class"] = "bus"
+    return merged
+
+
 def _map_label(class_id: int, mode: str) -> Optional[str]:
     if mode == "sighthound":
         return _SIGHTHOUND_LABELS.get(int(class_id))
@@ -460,6 +471,7 @@ class OnnxYoloDetector:
         found_boxes: list[BoundingBox] = []
         found_scores: list[float] = []
         found_types: list[str] = []
+        found_classes: list[int] = []
         for box, score, class_id in zip(boxes, scores, classes):
             if float(score) < threshold:
                 continue
@@ -469,6 +481,7 @@ class OnnxYoloDetector:
             found_boxes.append(_unmap_box(box, scale, pad_x, pad_y, int(width), int(height)))
             found_scores.append(float(score))
             found_types.append(label)
+            found_classes.append(int(class_id))
         detections = []
         for index in _nms(found_boxes, found_scores):
             detections.append(
@@ -476,7 +489,7 @@ class OnnxYoloDetector:
                     type=found_types[index],
                     bounding_box=found_boxes[index],
                     score=found_scores[index],
-                    attributes=dict(attributes),
+                    attributes=_with_class(attributes, found_types[index], found_classes[index], mode),
                 )
             )
         if detections and self._attributes is not None:

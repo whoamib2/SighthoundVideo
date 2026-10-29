@@ -1767,6 +1767,20 @@ class SearchResultsPlaybackPanel(BorderImagePanel):
         return self._progressDlg.SetPercentageDone(percentage)
 
     ###########################################################
+    def grabCurrentFrame(self, framePath, absMs=None):
+        """Write the paused frame (no overlays) to ``framePath`` as JPEG.
+
+        @return True when a non-empty image was written.
+        """
+        if absMs is None:
+            absMs = self._resultsModel.getCurrentClipStart() + \
+                    self._resultsModel.getCurrentRelativeMs()
+        ok = self._dataMgr.saveCurrentClip(framePath, absMs, absMs,
+                getUserLocalDataDir(),
+                {"format": "jpg", "drawBoxes": False, "enableTimestamps": False})
+        return bool(ok) and os.path.isfile(framePath) and os.path.getsize(framePath) > 0
+
+    ###########################################################
     def OnMarkMissed(self, event=None):
         """Grab the paused frame and let the user label a missed or wrong object.
 
@@ -1789,10 +1803,7 @@ class SearchResultsPlaybackPanel(BorderImagePanel):
         handle, framePath = tempfile.mkstemp(prefix="vigilcam_mark_", suffix=".jpg")
         os.close(handle)
         try:
-            ok = self._dataMgr.saveCurrentClip(framePath, startTime, startTime,
-                    getUserLocalDataDir(),
-                    {"format": "jpg", "drawBoxes": False, "enableTimestamps": False})
-            if not ok or not os.path.getsize(framePath):
+            if not self.grabCurrentFrame(framePath, startTime):
                 wx.MessageBox("Could not read the current frame.", "Mark as Missed",
                               wx.ICON_ERROR | wx.OK, self.GetTopLevelParent())
                 return

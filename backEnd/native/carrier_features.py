@@ -11,7 +11,7 @@ from __future__ import annotations
 FEATURE_DIM = 12
 # "Garbage" (garbage / refuse truck) is appended last so trained models that
 # carry their own label list in metadata keep their logit order.
-CARRIER_LABELS = ("none", "USPS", "FedEx", "UPS", "Amazon", "Garbage")
+CARRIER_LABELS = ("none", "USPS", "FedEx", "UPS", "Amazon", "Garbage", "Bus", "School bus")
 
 
 def image_features(rgb):
@@ -85,3 +85,20 @@ def _looks_like_garbage_truck(pixels, red, green, blue):
     top = float(pixels[:mid, :, 1].mean())
     bottom = float(pixels[mid:, :, 1].mean()) if height > mid else top
     return top + 40.0 >= bottom
+
+
+def is_school_bus_yellow(rgb) -> bool:
+    """True when a crop is dominated by school-bus yellow (National School Bus
+    Glossy Yellow is about RGB 255/216/0; on camera roughly 200-255 / 140-220 /
+    0-90). At least 35% of pixels must be that yellow, so a bus with a
+    yellow sign or a yellow car in the background is not enough.
+    """
+    import numpy as np
+
+    image = np.asarray(rgb)
+    if image.size == 0 or image.ndim != 3 or image.shape[2] < 3:
+        return False
+    px = image[:, :, :3].astype(np.int16)
+    red, green, blue = px[:, :, 0], px[:, :, 1], px[:, :, 2]
+    yellow = (red > 150) & (green > 110) & (blue < 100) & (red - blue > 90) & (green - blue > 60) & (red >= green - 10)
+    return float(yellow.mean()) >= 0.35
