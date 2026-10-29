@@ -467,6 +467,13 @@ _MAX_PREROLL_PACKETS = 900
 _SUB_MAX_ASPECT_DIFF = 0.35
 
 
+def redact_uri(text: str) -> str:
+    """Remove user:password@ from any URL in a log message."""
+    import re
+
+    return re.sub(r"([a-zA-Z][a-zA-Z0-9+.-]*://)[^/@\s'\"]+@", r"\1***@", str(text))
+
+
 def network_options(uri: str) -> dict:
     """FFmpeg demuxer options for network cameras (FFmpeg 7+ names).
 
@@ -1065,7 +1072,7 @@ class StreamReader:
         log = getattr(self, "logger", None) or logging.getLogger(__name__)
         recorder = getattr(self, "_recorder", None)
         if recorder is not None and not recorder.alive:
-            log.warning("Main stream (recording) stopped: %r" % (recorder.error,))
+            log.warning("Main stream (recording) stopped: %s" % redact_uri(repr(recorder.error)))
             self._running = False
             return None
         if self._capture is not None:
@@ -1079,7 +1086,7 @@ class StreamReader:
             self._running = False
             return None
         except Exception as exc:
-            log.warning("Stream read failed: %r" % (exc,))
+            log.warning("Stream read failed: %s" % redact_uri(repr(exc)))
             self._running = False
             return None
         if not getattr(self, "_decoder_info", None):

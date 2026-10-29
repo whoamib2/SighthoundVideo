@@ -203,3 +203,8 @@ def test_pts_clock_monotonic_and_reanchors():
     c = clock.ms(5000.0)  # huge jump: re-anchored near wall clock
     assert c > b and abs(c - time.time() * 1000) < 1000
     assert clock.ms(None) > c
+
+
+def test_log_messages_never_contain_camera_passwords():
+    msg = oc.redact_uri("ConnectionResetError(10054, 'x', 'rtsp://ben:secret@bi.example:8090/Cam13')")
+    assert "secret" not in msg and "rtsp://***@bi.example:8090/Cam13" in msg
