@@ -1,4 +1,4 @@
-﻿"""optsearches pure-Python fallback and HW/SW decoder badge helpers."""
+"""optsearches pure-Python fallback and HW/SW decoder badge helpers."""
 
 import json
 
