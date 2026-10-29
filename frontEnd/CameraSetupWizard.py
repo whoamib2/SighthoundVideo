@@ -1997,6 +1997,8 @@ class _DetectedCamerasScreen(_BasePage):
 
         if isUpnp:
             upnpDeviceDict = self.wizard.upnpDataModel.getUpnpDeviceDict()
+            # One entry per camera: prefer the ONVIF entry for the same IP.
+            onvifIps = onvifIpSet(self.wizard.onvifDataModel.getOnvifDeviceDict())
             # Make a sorted list of tuples: (name, identifier)
             # ...where identifier is a USN...
             # We strip out all routers, non-presentable UPNP devices, and wrong-
@@ -2006,7 +2008,8 @@ class _DetectedCamerasScreen(_BasePage):
                           if (not dev.isRouter()) and
                              dev.isPresentable(True) and
                              self._isManufacturerMatch(dev.getModelName()) and
-                             (devUsn not in configuredDevIds) ]
+                             (devUsn not in configuredDevIds) and
+                             upnpDeviceIp(dev) not in onvifIps ]
         else:
             onvifDeviceDict = self.wizard.onvifDataModel.getOnvifDeviceDict()
             # Make a sorted list of tuples: (name, identifier)
@@ -4051,6 +4054,24 @@ class _OnvifSettingsScreen(_BasePage):
 
 
 ##############################################################################
+def onvifIpSet(onvifDeviceDict):
+    """IPs of ONVIF devices that answered on their device service."""
+    ips = set()
+    for dev in onvifDeviceDict.values():
+        for addr in getattr(dev, "validOnvifIpAddrs", None) or []:
+            ips.add(addr[0])
+    return ips
+
+
+def upnpDeviceIp(dev):
+    """Host of a UPnP device (from its presentation URL)."""
+    try:
+        url, _ = dev.getPresentationUrl()
+        return urllib.parse.urlsplit(url).hostname
+    except Exception:
+        return None
+
+
 def _findGenericCamTypes(modelName):
     """Find the generic camera types for the given UPNP model name.
 

@@ -67,6 +67,9 @@ from vitaToolbox.sysUtils.TimeUtils import formatTime
 
 
 _kDeviceTimeout = 30 # consider the device gone if not seen for that long
+# ...unless its device service still answers; then allow up to this long
+# between WS-Discovery replies (re-checked every discovery round).
+_kDeviceGraceTimeout = 24 * 3600
 
 # This is the official IP and port that we send multicast for the WS-Discovery.
 # <http://en.wikipedia.org/wiki/WS-Discovery>
@@ -281,6 +284,40 @@ _kHttpServiceUnavailable = 503
 
 
 ###############################################################################
+def digest_post(url, body, headers, username, password, timeout=_kHttpTimeout):
+    """POST with HTTP Digest auth (Amcrest/Dahua ONVIF wants it on top of
+    WS-UsernameToken). Returns (status, data) or (None, error)."""
+    manager = urllib.request.HTTPPasswordMgrWithDefaultRealm()
+    manager.add_password(None, url, username, password)
+    opener = urllib.request.build_opener(urllib.request.HTTPDigestAuthHandler(manager))
+    request = urllib.request.Request(url, data=body, headers=dict(headers or {}), method="POST")
+    try:
+        with opener.open(request, timeout=timeout) as response:
+            return response.status, response.read()
+    except urllib.error.HTTPError as exc:
+        return exc.code, exc.read()
+    except Exception as exc:
+        return None, str(exc)
+
+
+def onvif_alive(host, port=80, timeout=3):
+    """True if an unauthenticated GetSystemDateAndTime answers at host:port.
+
+    Used to keep cameras whose WS-Discovery replies are unreliable (seen on
+    Amcrest/Dahua firmware) from dropping out of the camera list."""
+    body = ('<?xml version="1.0" encoding="UTF-8"?><s:Envelope '
+            'xmlns:s="http://www.w3.org/2003/05/soap-envelope"><s:Body>'
+            '<GetSystemDateAndTime xmlns="http://www.onvif.org/ver10/device/wsdl"/>'
+            '</s:Body></s:Envelope>').encode("utf-8")
+    request = urllib.request.Request("http://%s:%d/%s" % (host, int(port), _kDeviceServicePath),
+                                     data=body, headers={"Content-Type": "application/soap+xml"})
+    try:
+        with urllib.request.urlopen(request, timeout=timeout) as response:
+            return response.status == 200 and b"SystemDateAndTime" in response.read()
+    except Exception:
+        return False
+
+
 def _createProbeRequest(uuid, withTypes=False):
     """Create a WS-Discovery request.
 
@@ -1407,6 +1444,14 @@ class OnvifDevicePoll(object):
                     path=httpServicePath,
                     logger=logger,
                 )
+                if tryWithAuth and status == _kHttpUnauthorized:
+                    # Dahua/Amcrest with "ONVIF authentication" on also
+                    # require HTTP Digest in addition to the UsernameToken.
+                    logger.debug("%s - retrying with HTTP digest" % op)
+                    status, result = digest_post(
+                        "http://%s:%d/%s" % (host, port, httpServicePath), xml,
+                        self._getOnvifHttpHeaders(onvifAction),
+                        credentials[0], credentials[1])
                 if status in [_kHttpBadRequest, _kHttpUnauthorized]:
                     if tryWithAuth or credentials is None:
                         logger.error("%s failed (%s)" % (op, status))
@@ -2197,6 +2242,24 @@ class OnvifDeviceManager(object):
 
 
     ###########################################################
+    def _checkAliveAsync(self, uuid, address):
+        pending = self.__dict__.setdefault("_aliveChecks", set())
+        if uuid in pending:
+            return
+        pending.add(uuid)
+
+        def check():
+            try:
+                if onvif_alive(address[0], address[1]):
+                    with self._lock:
+                        if uuid in self._deviceLastSeenTime:
+                            self._deviceLastSeenTime[uuid] = time.time()
+            finally:
+                pending.discard(uuid)
+
+        threading.Thread(target=check, name="onvif-alive", daemon=True).start()
+
+    ###########################################################
     def _removeUuid(self, uuid):
         """Give devices a chance to be discovered. It's possible that they are
         busy, or they do not respond to all of the types of messages we send
@@ -2208,6 +2271,13 @@ class OnvifDeviceManager(object):
         try:
             if uuid in self._deviceStates:
                 diff = time.time()-self._deviceLastSeenTime[uuid]
+                state = self._deviceStates[uuid]
+                addrs = list(getattr(state, "validOnvifIpAddrs", None) or [])
+                if diff > _kDeviceTimeout and addrs and diff < _kDeviceGraceTimeout:
+                    # Missed WS-Discovery replies; keep it while its device
+                    # service still answers (checked off the lock).
+                    self._checkAliveAsync(uuid, addrs[-1])
+                    return
                 if diff > _kDeviceTimeout:
                     del self._deviceStates[uuid]
                     del self._deviceLastSeenTime[uuid]
