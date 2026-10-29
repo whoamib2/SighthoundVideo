@@ -123,7 +123,8 @@ def _read_spec(model_path: str, session: Any) -> dict[str, Any]:
         "pad": 114,
         "resize": "bilinear",
         "classes": "coco",
-        "score_threshold": 0.25,
+        # Frigate min_score default; per-label median checked later.
+        "score_threshold": 0.5,
         "input_size": 0,
     }
     sidecar = model_path + ".json"
@@ -454,7 +455,7 @@ class OnnxYoloDetector:
         attributes = self._extra_attributes(outputs)
         layout = str(self._spec.get("layout") or "")
         boxes, scores, classes = _decode_predictions(outputs[0], layout, side)
-        threshold = float(self._spec.get("score_threshold", 0.25) or 0.25)
+        threshold = float(self._spec.get("score_threshold", 0.5) or 0.5)
         mode = str(self._spec.get("classes") or "coco")
         found_boxes: list[BoundingBox] = []
         found_scores: list[float] = []

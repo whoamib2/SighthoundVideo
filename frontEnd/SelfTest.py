@@ -7,7 +7,10 @@ loads and paints a frame. Nothing is changed except the selected result.
 """
 
 import os
+import sys
+import threading
 import time
+import traceback
 
 import wx
 
@@ -22,6 +25,49 @@ def _t(ms):
     if ms is None:
         return "None"
     return time.strftime("%H:%M:%S", time.localtime(ms / 1000.0))
+
+
+_kBeatMs = 100
+_stall = {"last": time.monotonic(), "max": 0.0, "reported": False,
+          "mainId": None}
+
+
+def installStallWatchdog(frame, thresholdSec=1.0):
+    """Log the UI thread's stack whenever it is blocked > thresholdSec.
+
+    A wx timer stamps a heartbeat every 100 ms; a daemon thread checks it.
+    """
+    log = getLogger(kFrontEndLogName)
+    _stall["mainId"] = threading.get_ident()
+    _stall["last"] = time.monotonic()
+    beat = wx.Timer(frame)
+
+    def onBeat(_event):
+        now = time.monotonic()
+        gap = now - _stall["last"]
+        if gap > _stall["max"]:
+            _stall["max"] = gap
+        if _stall["reported"]:
+            log.warning("UI thread was blocked for %.1f s", gap)
+            _stall["reported"] = False
+        _stall["last"] = now
+
+    frame.Bind(wx.EVT_TIMER, onBeat, beat)
+    beat.Start(_kBeatMs)
+    frame._stallBeatTimer = beat
+
+    def watch():
+        while True:
+            time.sleep(0.25)
+            gap = time.monotonic() - _stall["last"]
+            if gap > thresholdSec and not _stall["reported"]:
+                _stall["reported"] = True
+                stackFrame = sys._current_frames().get(_stall["mainId"])
+                stack = "".join(traceback.format_stack(stackFrame)[-14:]) \
+                    if stackFrame else "?"
+                log.warning("UI thread blocked > %.1f s, stack:\n%s",
+                            gap, stack)
+    threading.Thread(target=watch, name="UiStallWatchdog", daemon=True).start()
 
 
 def installSelfTestHook(frame, dataDir):
@@ -91,11 +137,22 @@ def _run(frame):
         return any(a <= c.startTime and c.stopTime <= b for a, b in avail)
     pool = [i for i in range(len(clips)) if recorded(clips[i])] or \
         list(range(len(clips)))
-    newest = max(pool, key=lambda i: clips[i].startTime)
-    log.info("SELFTEST selecting result %d %s-%s", newest,
-             _t(clips[newest].startTime), _t(clips[newest].stopTime))
-    model.setCurrentClipNum(newest)
-    wx.CallLater(4000, _after, frame, newest)
+    # Click through several results quickly (like a user would), then
+    # report each one and the longest UI stall seen.
+    order = sorted(pool, key=lambda i: clips[i].startTime)
+    picks = order[-1:] + order[-6:-1][::-1] + order[:2]
+    _stall["max"] = 0.0
+    for n, num in enumerate(picks):
+        wx.CallLater(1 + n * 700, _select, frame, num)
+    wx.CallLater(len(picks) * 700 + 4000, _after, frame, picks[-1])
+
+
+def _select(frame, num):
+    model = frame._searchView._resultsModel
+    clip = model.getMatchingClips()[num]
+    getLogger(kFrontEndLogName).info("SELFTEST selecting result %d %s-%s",
+                                     num, _t(clip.startTime), _t(clip.stopTime))
+    model.setCurrentClipNum(num)
 
 
 def _after(frame, num):
@@ -117,3 +174,4 @@ def _after(frame, num):
              win.IsShownOnScreen(), data and (data[1], data[2]),
              (panel._slider._minValue, panel._slider._maxValue),
              _t(model.getCurrentAbsoluteMs()))
+    log.info("SELFTEST maxStallMs=%d", int(_stall["max"] * 1000))

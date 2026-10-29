@@ -40,7 +40,7 @@ def test_carrier_reaches_the_database_and_fires_a_rule(tmp_path, monkeypatch):
     monkeypatch.setenv("SIGHTHOUND_CARRIER_MODEL", str(carrier))
 
     video = tmp_path / "truck.mp4"
-    write_moving_rect(video, frames=16, fps=10)
+    write_moving_rect(video, frames=40, fps=10)
     logger = Log()
     queue = _Queue()
     reader = StreamReader("curb", None, None, str(tmp_path), str(tmp_path), str(tmp_path), None, False)

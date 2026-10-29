@@ -358,8 +358,14 @@ class DataManager(object):
         self._connection.setParameters(self._logger, float(kSqlAlertThreshold), os.path.exists(self._curDbPath+".debug"))
         self._cur = self._connection.cursor()
 
-        # Use persistant mode for journal files.
-        self._cur.execute("PRAGMA journal_mode=PERSIST").fetchall()
+        # WAL lets the UI read while the back end writes. With the old
+        # PERSIST journal every read in the UI waited (up to the 45 s busy
+        # timeout) for the analytics writer, freezing the window.
+        try:
+            self._cur.execute("PRAGMA journal_mode=WAL").fetchall()
+            self._cur.execute("PRAGMA synchronous=NORMAL").fetchall()
+        except sql.OperationalError:
+            self._cur.execute("PRAGMA journal_mode=PERSIST").fetchall()
 
         tables = list(map(operator.itemgetter(0),
                      self._cur.execute('''SELECT name FROM sqlite_master '''
@@ -1954,22 +1960,37 @@ class DataManager(object):
             return []
 
 
-        boxOverlay = []
+        # Batched: one query per 400 objects for types and one for boxes.
+        # The old code ran two queries per object, which for a one-minute
+        # 24/7 segment meant hundreds of queries on the UI thread.
+        colors = {}
+        plainIds = []
         for obj in objList:
             if isinstance(obj, tuple):
-                id = obj[0]
-                labelColor = self._getLabelColorForType(obj[3])
+                colors[obj[0]] = self._getLabelColorForType(obj[3])
             else:
-                id = obj
-                labelColor = self._getLabelColor(obj)
+                plainIds.append(obj)
+        for i in range(0, len(plainIds), 400):
+            chunk = plainIds[i:i+400]
+            rows = self._cur.execute(
+                "SELECT uid, type FROM objects WHERE uid IN (%s)" %
+                ",".join("%d" % int(x) for x in chunk)).fetchall()
+            found = dict(rows)
+            for uid in chunk:
+                colors[uid] = self._getLabelColorForType(found.get(uid, "unknown"))
 
-            bboxes = self.getObjectBboxesBetweenTimes([id], firstMs, lastMs)
-            if not bboxes:
-                continue
-
-            for x1, y1, x2, y2, _, frameTime, uid in bboxes:
+        boxOverlay = []
+        ids = list(colors)
+        deadline = time.time() + 2.0
+        for i in range(0, len(ids), 400):
+            if time.time() > deadline:
+                self._logger.warning("Bounding boxes cut short (%d of %d objects)"
+                                     % (i, len(ids)))
+                break
+            for x1, y1, x2, y2, _, frameTime, uid in \
+                    self.getObjectBboxesBetweenTimes(ids[i:i+400], firstMs, lastMs):
                 boxOverlay.append([frameTime, "drawbox=%d:%d:%d:%d:%d:%d:%d:%s:t=0" %
-                        (x1, y1, x2-x1, y2-y1, procW, procH, uid, labelColor)])
+                        (x1, y1, x2-x1, y2-y1, procW, procH, uid, colors[uid])])
         boxOverlay.sort()
         return boxOverlay
 

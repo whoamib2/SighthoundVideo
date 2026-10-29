@@ -57,7 +57,7 @@ def test_sample_video_is_tracked_classified_and_searchable(tmp_path, monkeypatch
     build_bright_blob_model(str(model))
     monkeypatch.setenv("SIGHTHOUND_DETECTOR_MODEL", str(model))
     video = tmp_path / "walk.mp4"
-    write_moving_rect(video, frames=16, fps=10)
+    write_moving_rect(video, frames=40, fps=10)
 
     logger = Log()
     queue = _Queue()

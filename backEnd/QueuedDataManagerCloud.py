@@ -1021,6 +1021,27 @@ class _QueuedObjId(object):
         return sumFrames, sumScore, sumOverlap
 
     ###########################################################
+    # Per-label thresholds for the median score, after Frigate's
+    # objects.filters.<label>.threshold (defaults 0.7). Concept only.
+    _kLabelThreshold = {"person": 0.6, "vehicle": 0.6, "animal": 0.6}
+    _kMinLabelFraction = 0.0
+
+    def _passesLabelThreshold(self, label, frameCount):
+        best = []
+        for ms in self.externalDetections:
+            scores = [s for t, s, _o in self.externalDetections[ms] if t == label]
+            if scores:
+                best.append(max(scores))
+        if not best or frameCount <= 0:
+            return False
+        if len(best) / float(frameCount) < self._kMinLabelFraction:
+            return False
+        best.sort()
+        median = best[len(best)//2] if len(best) % 2 else \
+            0.5 * (best[len(best)//2 - 1] + best[len(best)//2])
+        return median >= self._kLabelThreshold.get(label, 0.7)
+
+    ###########################################################
     def _summarizeScores(self, forceDecision, logger):
         kHighConfidenceScore = 0.9
         kHighConfidenceOverlap = 0.8
@@ -1080,6 +1101,14 @@ class _QueuedObjId(object):
                             " sentry=" + str(self.sentryObjType) + \
                             " frameCount=" + str(frameCount) + \
                             " typesSeen=" + str(allTypes))
+                self.detectorDecision = self.sentryObjType
+            elif not self._passesLabelThreshold(type, frameCount):
+                # Frigate-style check: the median of the best per-frame
+                # score must clear the label's threshold, and the label must
+                # show up in enough of the sampled frames. One weak hit
+                # (e.g. a 0.3 "animal" on swaying leaves) no longer labels it.
+                logger.debug("SentryID=%d: %s rejected (median score below "
+                             "threshold)" % (self.sentryId, type))
                 self.detectorDecision = self.sentryObjType
             else:
                 # In this case, we've either lost the track or decided we've
