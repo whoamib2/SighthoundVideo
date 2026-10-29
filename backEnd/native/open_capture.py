@@ -591,6 +591,32 @@ def _packet_seconds(packet: Any) -> Optional[float]:
     return float(stamp * tb)
 
 
+class _BitrateMeter:
+    """Average bitrate of the recorded (main) stream over a wall-clock window."""
+
+    def __init__(self, window_s: float = 60.0) -> None:
+        self.window_s = window_s
+        self._start: Optional[float] = None
+        self._bytes = 0
+
+    def add(self, size: int, now: float) -> Optional[int]:
+        """Count a packet; return kbps when a window completes, else None."""
+        if self._start is None:
+            self._start = now
+        self._bytes += int(size)
+        elapsed = now - self._start
+        if elapsed < self.window_s:
+            return None
+        kbps = int(round(self._bytes * 8 / 1000.0 / elapsed))
+        self._start, self._bytes = now, 0
+        return kbps
+
+
+def gb_per_day(kbps: float) -> float:
+    """Storage per day for a continuous stream at kbps (decimal GB)."""
+    return float(kbps) * 1000.0 / 8.0 * 86400.0 / 1e9
+
+
 class _RemuxWriter:
     """Records the camera's own compressed packets into fragmented MP4
     segments (no decode, no re-encode). Segments start on a keyframe; the
@@ -617,6 +643,7 @@ class _RemuxWriter:
         self._gop: list[tuple[Any, int]] = []
         self._segments: list[tuple[int, str]] = []
         self.packets_written = 0
+        self._meter = _BitrateMeter()
 
     @property
     def relative_path(self) -> str:
@@ -634,6 +661,13 @@ class _RemuxWriter:
         if packet.size == 0 or packet.stream is not self._in_stream and packet.stream.index != self._in_stream.index:
             return
         ms = self._clock.ms(_packet_seconds(packet))
+        kbps = self._meter.add(packet.size, time.monotonic())
+        if kbps is not None:
+            info = getattr(self._reader, "_decoder_info", None)
+            if isinstance(info, dict):
+                info["measured_kbps"] = kbps
+                info["measured_gb_per_day"] = round(gb_per_day(kbps), 1)
+                self._reader._write_decoder_info()
         with self._lock:
             key = bool(packet.is_keyframe)
             if key:

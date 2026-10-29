@@ -1892,6 +1892,7 @@ class MonitorView(BaseMonitorView):
         removeCameraItem = menu.Append(-1, "Remove Camera...")
         editCameraItem = menu.Append(-1, "Edit Camera...")
         renameCameraItem = menu.Append(-1, "Edit Camera Location...")
+        streamItem = menu.Append(-1, "Stream && Bitrate...")
         reconnectCameraItem = menu.Append(-1, "Reconnect to Camera")
 
         if self._cameraPopupSource and \
@@ -1913,6 +1914,7 @@ class MonitorView(BaseMonitorView):
         self.Bind(wx.EVT_MENU, self.OnRemoveCamera, removeCameraItem)
         self.Bind(wx.EVT_MENU, self.OnEditCamera, editCameraItem)
         self.Bind(wx.EVT_MENU, self.OnRenameCamera, renameCameraItem)
+        self.Bind(wx.EVT_MENU, self.OnStreamSettings, streamItem)
         self.Bind(wx.EVT_MENU, self.OnReconnect, reconnectCameraItem)
         if cameraType != kWebcamCamType:
             self.Bind(wx.EVT_MENU, self.OnCameraWebPage, cameraWebPageItem)
@@ -1923,6 +1925,7 @@ class MonitorView(BaseMonitorView):
             removeCameraItem.Enable(False)
             editCameraItem.Enable(False)
             renameCameraItem.Enable(False)
+            streamItem.Enable(False)
             reconnectCameraItem.Enable(False)
             if cameraType != kWebcamCamType:
                 cameraWebPageItem.Enable(False)
@@ -2124,6 +2127,23 @@ class MonitorView(BaseMonitorView):
 
         if camera == self._curSelectedCamera:
             self._setLargeViewCamera(camera)
+
+
+    ###########################################################
+    def OnStreamSettings(self, event=None):
+        """Show / change the camera's encoder settings (bitrate, fps)."""
+        from frontEnd.CameraEncoderDialog import CameraEncoderDialog
+
+        cameraName = self._cameraPopupSource or self._curSelectedCamera
+        if not cameraName or cameraName not in self._cameraSettings:
+            return
+        _, uri, _ = self._cameraSettings[cameraName]
+        dlg = CameraEncoderDialog(self.GetTopLevelParent(), cameraName, uri,
+                                  self._backEndClient, getUserLocalDataDir())
+        try:
+            dlg.ShowModal()
+        finally:
+            dlg.Destroy()
 
 
     ###########################################################
