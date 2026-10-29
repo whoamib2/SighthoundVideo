@@ -64,7 +64,7 @@ kOpenSourceVersion=True
 # The product shipped from this tree. Sighthound, Inc. remains the copyright
 # holder of the original GPL-3.0 release; that name is not the product name.
 kOemName         = "VigilCam"
-kOemWebsite      = "vigilcam.ai"
+kOemWebsite      = "vigilcam.app"
 
 
 
@@ -157,7 +157,7 @@ kDirectBuyPro = _kStoreBaseUrl + "buy-pro?id=%s&mach=%s"
 
 kServicesHost = "licensing.sighthound.com"
 
-kSupportEmail = "support@vigilcam.ai"
+kSupportEmail = "support@vigilcam.app"
 
 # Mac PLST strings
 kBundleIdentifier  = "ai.vigilcam.app"

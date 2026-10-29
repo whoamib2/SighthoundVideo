@@ -1,6 +1,6 @@
 # VigilCam
 
-VigilCam is a desktop video management system for Windows and macOS: camera management, recording, search, rule-based alerts, and computer-vision-assisted object detection. The product site is [vigilcam.ai](https://vigilcam.ai).
+VigilCam is a desktop video management system for Windows and macOS: camera management, recording, search, rule-based alerts, and computer-vision-assisted object detection. The product site is [vigilcam.app](https://vigilcam.app).
 
 VigilCam is based on the Sighthound Video open-source release. That original work is copyright Sighthound, Inc. and licensed under the GNU GPLv3, as described in `COPYING`. This tree keeps that license. It does not use Sighthound trademarks or logos in the application UI.
 

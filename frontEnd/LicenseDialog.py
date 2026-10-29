@@ -156,7 +156,7 @@ _kLegacyWarning = (
 """VigilCam account and activate a license below to continue """
 """receiving updates. Paid licenses should be linked and activated """
 """automatically after signing in but can also be manually linked in your """
-"""account page at https://vigilcam.ai.""")
+"""account page at https://vigilcam.app.""")
 
 _kCantActivate = (
 """This license cannot be automatically transferred to this machine. """
