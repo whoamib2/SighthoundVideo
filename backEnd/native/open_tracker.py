@@ -13,6 +13,13 @@ blobs recover tracks that the motion gate almost lost. A constant-velocity
 prediction shifts a track before that match, which is the small piece of
 OC-SORT that matters for a blob moving between frames. Tracks are reported
 as ``unknown``; the detector assigns person, vehicle, or animal.
+
+Event filtering follows the ideas in Frigate (github.com/blakeblackshear/
+frigate, MIT): motion threshold, contour min/max area relative to the
+frame, a motion mask (here the burned-in timestamp bands), a lightning /
+global-change guard, a slowly adapting background, a track that must be
+seen for several frames before it becomes an object, and stationary
+objects that stop producing frames. No Frigate code is copied.
 """
 
 from __future__ import annotations
@@ -21,8 +28,20 @@ from typing import Any, Optional
 
 from backEnd.native.errors import NativeDependencyError
 
-_MOTION_THRESHOLD = 24
+_MOTION_THRESHOLD = 30          # Frigate motion.threshold default
 _MIN_AREA = 80
+_MIN_AREA_FRACTION = 0.0015     # min_area relative to the frame
+_MAX_AREA_FRACTION = 0.40       # max_area: bigger blobs are light changes
+_GLOBAL_CHANGE_FRACTION = 0.30  # Frigate lightning_threshold idea
+_MASK_TOP_FRACTION = 0.08       # timestamp / camera-name overlay bands
+_MASK_BOTTOM_FRACTION = 0.05
+_BG_ALPHA_STILL = 0.10
+_BG_ALPHA_FOREGROUND = 0.02     # parked cars and ghosts melt away
+_CONFIRM_HITS = 5               # seen in several frames ...
+_CONFIRM_MS = 500               # ... for most of a second ...
+_CONFIRM_TRAVEL_FRACTION = 0.04 # ... and actually crossing the frame
+_STATIONARY_MS = 10000
+_STATIONARY_TRAVEL_FRACTION = 0.02
 _HIGH_SCORE = 0.5
 _LOW_SCORE = 0.1
 _IOU_MATCH = 0.3
@@ -148,6 +167,14 @@ def _components(mask, min_area: int) -> list[tuple[int, int, int, int, float]]:
     return boxes
 
 
+def _center(box) -> tuple[float, float]:
+    return ((box[0] + box[2]) / 2.0, (box[1] + box[3]) / 2.0)
+
+
+def _dist(a, b) -> float:
+    return ((a[0] - b[0]) ** 2 + (a[1] - b[1]) ** 2) ** 0.5
+
+
 def _greedy_match(tracks: list[tuple[int, int, int, int]], dets: list[tuple[int, int, int, int]], min_iou: float):
     pairs = []
     for ti, track_box in enumerate(tracks):
@@ -177,6 +204,13 @@ class _Track:
         self.hits = 1
         self.time_since_update = 0
         self.sentry_id: Optional[int] = None
+        self.first_ms: Optional[int] = None
+        self.first_center = _center(bbox)
+        self.max_travel = 0.0
+        self.confirmed = False
+        self.anchor = _center(bbox)
+        self.anchor_ms: Optional[int] = None
+        self.stationary = False
 
     def predict(self) -> tuple[int, int, int, int]:
         dx = int(round(self.vx))
@@ -209,11 +243,14 @@ class OpenVideoPipeline:
         self._prev_gray = None
         self._background = None
         self._seen_frame = False
+        self._width = 0
+        self._height = 0
 
     def processClipFrame(self, frame: Any, ms: int) -> None:
         np = _numpy()
         rgb = frame_rgb_array(frame)
         gray = rgb.mean(axis=2).astype(np.uint8)
+        self._height, self._width = gray.shape
         timestamp = int(ms)
         detections = self._gate(gray)
         self._associate(detections, timestamp)
@@ -241,13 +278,31 @@ class OpenVideoPipeline:
         if self._prev_gray is None:
             self._prev_gray = gray
             return []
+        if self._prev_gray.shape != gray.shape or self._background.shape != gray.shape:
+            self._background = gray.copy()
+            self._prev_gray = gray
+            return []
         motion = np.abs(gray.astype(np.int16) - self._prev_gray.astype(np.int16)) > _MOTION_THRESHOLD
         foreground = np.abs(gray.astype(np.int16) - self._background.astype(np.int16)) > _MOTION_THRESHOLD
-        still = ~foreground
+        height, width = gray.shape
+        top = int(height * _MASK_TOP_FRACTION)
+        bottom = height - int(height * _MASK_BOTTOM_FRACTION)
+        for m in (motion, foreground):
+            m[:top] = False
+            m[bottom:] = False
+        frame_area = float(width * height)
+        # Light switching, IR mode change, clouds: re-learn, no detections.
+        if foreground.mean() > _GLOBAL_CHANGE_FRACTION:
+            self._background = gray.copy()
+            return []
+        alpha = np.where(foreground, _BG_ALPHA_FOREGROUND, _BG_ALPHA_STILL).astype(np.float32)
         updated = self._background.astype(np.float32)
-        updated[still] = 0.9 * updated[still] + 0.1 * gray.astype(np.float32)[still]
-        self._background = updated.astype(np.uint8)
-        boxes = _components(foreground, _MIN_AREA)
+        updated += alpha * (gray.astype(np.float32) - updated)
+        self._background = np.clip(updated + 0.5, 0, 255).astype(np.uint8)
+        min_area = max(_MIN_AREA, int(frame_area * _MIN_AREA_FRACTION))
+        max_area = frame_area * _MAX_AREA_FRACTION
+        boxes = [b for b in _components(foreground, min_area)
+                 if (b[2] - b[0]) * (b[3] - b[1]) <= max_area]
         if not boxes:
             return []
         kept = []
@@ -298,8 +353,34 @@ class OpenVideoPipeline:
         collector = self.objectCollector
         if collector is None:
             return
+        travel_need = _CONFIRM_TRAVEL_FRACTION * max(self._width, 1)
+        still_need = _STATIONARY_TRAVEL_FRACTION * max(self._width, 1)
         for track in self._tracks:
-            if track.hits < 2 or track.time_since_update > 0:
+            if track.time_since_update > 0:
+                continue
+            center = _center(track.bbox)
+            if track.first_ms is None:
+                track.first_ms = timestamp
+                track.anchor_ms = timestamp
+            track.max_travel = max(track.max_travel, _dist(center, track.first_center))
+            if not track.confirmed:
+                size = ((track.bbox[2] - track.bbox[0]) * (track.bbox[3] - track.bbox[1])) ** 0.5
+                if (track.hits >= _CONFIRM_HITS
+                        and (timestamp - track.first_ms >= _CONFIRM_MS
+                             or track.hits >= 2 * _CONFIRM_HITS)
+                        and track.max_travel >= max(travel_need, 0.5 * size)):
+                    track.confirmed = True
+                else:
+                    continue
+            # Stationary: no real movement for a while -> stop reporting it
+            # (no new frames, no new events) until it moves again.
+            if _dist(center, track.anchor) > still_need:
+                track.anchor = center
+                track.anchor_ms = timestamp
+                track.stationary = False
+            elif timestamp - (track.anchor_ms or timestamp) >= _STATIONARY_MS:
+                track.stationary = True
+            if track.stationary:
                 continue
             if track.sentry_id is None:
                 track.sentry_id = collector.addObject(timestamp, "unknown")

@@ -14,12 +14,11 @@ so older clients keep working while newer ones can read them directly:
 
 * ``plate_text`` — license-plate text
 * ``face_identity`` — a face identity label
-* ``delivery_carrier`` — one of USPS, FedEx, UPS, Amazon
+* ``delivery_carrier`` — one of USPS, FedEx, UPS, Amazon, Garbage (garbage truck), Bus, School bus
 
-Phase 1 does not run those recognizers. The fields are parsed and preserved
-so a later ONNX Runtime model can fill them in without changing the wire
-format. The historical implementation is the closed ``SIOWrapper`` binary;
-``SIOObjectDetector`` is the only adapter that imports it.
+The ONNX detector fills those fields when plate, face, or carrier models
+are configured. The historical closed ``SIOWrapper`` binary is still behind
+``SIOObjectDetector`` and is the only adapter that imports it.
 """
 
 from __future__ import annotations
@@ -39,7 +38,27 @@ ATTR_FACE_IDENTITY = "face_identity"
 ATTR_DELIVERY_CARRIER = "delivery_carrier"
 
 # Stable vocabulary for ``delivery_carrier``. Not detected in this phase.
-DELIVERY_CARRIERS = ("USPS", "FedEx", "UPS", "Amazon")
+# New types are appended so trained models keep their label order.
+DELIVERY_CARRIERS = ("USPS", "FedEx", "UPS", "Amazon", "Garbage", "Bus", "School bus")
+
+# COCO class of the detection, kept on vehicle detections (e.g. "bus").
+ATTR_VEHICLE_CLASS = "vehicle_class"
+
+_DISPLAY_NAMES = {"Garbage": "Garbage truck"}
+_NOT_TRUCKS = ("Bus", "School bus")
+
+
+def carrier_display_name(carrier):
+    """UI label for a ``delivery_carrier`` value ("Garbage" -> "Garbage truck")."""
+    return _DISPLAY_NAMES.get(str(carrier), str(carrier))
+
+
+def carrier_phrase(carrier):
+    """Alert/rule wording: "UPS truck", "Garbage truck", "Bus", "School bus"."""
+    carrier = str(carrier)
+    if carrier in _DISPLAY_NAMES or carrier in _NOT_TRUCKS:
+        return carrier_display_name(carrier)
+    return "%s truck" % carrier
 
 RESERVED_ATTRIBUTE_KEYS = (
     ATTR_PLATE_TEXT,

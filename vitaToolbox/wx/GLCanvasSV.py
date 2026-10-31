@@ -378,6 +378,10 @@ class GLCanvasSV( GLCanvas ):
             self.SetCurrent( self.glContextSV )
         except Exception:
             return
+        # Rows are tightly packed RGB. The GL default (4-byte rows) sheared
+        # any frame whose width*3 is not a multiple of 4 (e.g. a portrait
+        # doorbell scaled to 270 px wide) into gray/rainbow stripes.
+        gl.glPixelStorei(gl.GL_UNPACK_ALIGNMENT, 1)
         if ( self._cacheFrameSizeWidth == width ) and ( self._cacheFrameSizeHeight == height ):
             # try the faster routine
             gl.glTexSubImage2D( self._texType, 0, 0, 0, width, height, self._inputFormat, gl.GL_UNSIGNED_BYTE, data )

@@ -63,6 +63,7 @@ from vitaToolbox.path.GetDiskSpaceAvailable import checkFreeSpace
 
 # Local imports...
 from appCommon.CommonStrings import kRemoteFolder, isLocalCamera, kMinFreeSysDriveSpaceMB
+from appCommon.CommonStrings import kObjDbFile
 from .ClipManager import ClipManager
 from . import MessageIds
 from .QueuedDataManagerCloud import QueuedDataManagerCloud
@@ -84,7 +85,8 @@ def OB_KEYARG(a): return a
 # Constants...
 
 # Time to wait between retry attempts when connecting to a camera
-_kRetryTimeList = [0, 20, 20, 20, 60]
+# Quick first retry, then exponential backoff capped at a minute.
+_kRetryTimeList = [0, 2, 4, 8, 16, 32, 60]
 _kMaxRetries = 10
 
 # Min time to sleep when we have a bogus URL...
@@ -280,6 +282,8 @@ class CameraCapture(object):
                                                 self._logger,
                                                 extras.get('sioInProcess', False))
         self._queuedDataMgr.setDebugFolder(extras.get('analyticsDumpFolder', None))
+        gallery_db = extras.get('objectDbPath') or os.path.join(self._userDir, kObjDbFile)
+        self._queuedDataMgr.setGalleryDatabase(gallery_db)
 
         self._debugLogManager = DebugLogManager(self._cameraLocation, self._userDir)
         debugConfig = extras.get('debugConfig', None)
@@ -296,6 +300,10 @@ class CameraCapture(object):
                                                        True, self._moveFailed,
                                                        extras.get('initFrameSize', 0),
                                                        getDebugPrefAsInt("cameraStreamStats", 3600, userDir) )
+        try:  # decoder / read-failure lines go to this camera's log
+            self._streamReader.logger = self._logger
+        except Exception:
+            pass
 
         # Keep track of the number of objectFrames that were processed since
         # we last sent out msgIdStreamProcessedData.
@@ -729,6 +737,11 @@ class CameraCapture(object):
             self._runner.processClipFrame(frame, self._ms)
             self._numObjFramesSinceLastNotify = \
                 self._queuedDataMgr.numObjectsAddedSinceLastCheck
+            if self._numObjFramesSinceLastNotify:
+                # Objects in view: keep analytics at full frame rate.
+                noteActivity = getattr(self._streamReader, "noteActivity", None)
+                if noteActivity is not None:
+                    noteActivity()
 
             self._timingInfo.inputItemMark( 'capture.DProcessed' )
 

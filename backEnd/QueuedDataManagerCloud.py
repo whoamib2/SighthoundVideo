@@ -56,6 +56,7 @@ from . import MessageIds
 from appCommon.CommonStrings import kThumbsSubfolder
 
 from backEnd.native.tracking import object_collector_base
+from backEnd.attribute_text import merge_track_attributes
 
 # Globals...
 from vitaToolbox.image.ImageConversion import convertProcFrameToPIL
@@ -185,8 +186,20 @@ class QueuedDataManagerCloud(object_collector_base()):
 
         self._stats = CloudStats(_kStatsReportInterval)
 
+        # Once-a-minute analytics counters (see _logMinuteStats)
+        self._minuteStats = defaultdict(int)
+        self._minuteStatsStart = time.time()
+
         self._debugMode = not hasattr(sys, 'frozen')
 
+
+    ###########################################################
+    def setGalleryDatabase(self, path):
+        """Tell the in-process detector which local file holds face embeddings."""
+        client = getattr(self, "_httpClient", None)
+        setter = getattr(client, "set_gallery_db", None)
+        if setter is not None:
+            setter(path)
 
 
     ###########################################################
@@ -355,6 +368,7 @@ class QueuedDataManagerCloud(object_collector_base()):
         self._logger.debug( "addObject: " + str(timeStart) + " type=" + objType + " id=" + str(camObjId))
 
         queuedObjId = _QueuedObjId(self._id, camObjId, timeStart, objType)
+        self._minuteStats["objects"] += 1
         self._temporaryIdList.append(queuedObjId)
 
         # Always save a thumbnail of the first frame of each object
@@ -399,18 +413,17 @@ class QueuedDataManagerCloud(object_collector_base()):
         if frame is None:
             return
 
-        if frame.wasResized:
-            # try to obtain a full-size frame
-            frameForAnalyzing = frame.getLargeFrame()
-            if frameForAnalyzing is None:
-                return
-        else:
-            # rely on locally defined interval to determine when to run detections
-            kMinAnalyticsInterval = 500
-            if self._lastAnalyzedFrameMs is not None and \
-                frame.ms - self._lastAnalyzedFrameMs < kMinAnalyticsInterval:
-                return
-            frameForAnalyzing = frame
+        # Rate-limit detector calls whether or not the tracker frame was
+        # downscaled from a larger camera frame.
+        kMinAnalyticsInterval = 500
+        if self._lastAnalyzedFrameMs is not None and \
+            frame.ms - self._lastAnalyzedFrameMs < kMinAnalyticsInterval:
+            return
+
+        frameForAnalyzing = frame
+        if getattr(frame, "wasResized", False):
+            # Detect on the full-size frame; boxes are scaled by sizeRatio.
+            frameForAnalyzing = frame.getLargeFrame() or frame
 
         self._lastAnalyzedFrameMs = frameForAnalyzing.ms
 
@@ -431,6 +444,7 @@ class QueuedDataManagerCloud(object_collector_base()):
 
         self._outstandingDetectionRequests += 1
         self._lastDetectionRequestTimestamp = timestamp
+        self._minuteStats["detectorFrames"] += 1
 
     ###########################################################
     def _frameReadyToReport(self, ms, sentryLastProcMs):
@@ -464,8 +478,12 @@ class QueuedDataManagerCloud(object_collector_base()):
 
             if not obj.reported:
                 camObjId = obj.dbId[1]
-                self._queue.put([MessageIds.msgIdDataAddObject, self._id,
-                          camObjId, ms, objType, self.cameraLocation])
+                message = [MessageIds.msgIdDataAddObject, self._id,
+                          camObjId, ms, objType, self.cameraLocation]
+                attributes = getattr(obj, "detectionAttributes", None)
+                if attributes:
+                    message.append(dict(attributes))
+                self._queue.put(message)
                 self._stats.record(obj)
                 obj.reported = True
 
@@ -496,6 +514,8 @@ class QueuedDataManagerCloud(object_collector_base()):
 
             # First let objects where the positive detection occurred know
             timestamp, detections = result
+            for detection in detections:
+                self._minuteStats["det:" + str(detection[1])] += 1
             if self._debugMode:
                 self._logger.debug("Detection response: %d - %s" % (timestamp, str(detections)))
             for detection in detections:
@@ -559,10 +579,35 @@ class QueuedDataManagerCloud(object_collector_base()):
         self._logger.debug("Still tracking objects in " + str(len(self._trackedObjects)) + " frames")
 
     ###########################################################
+    def _logMinuteStats(self, now=None):
+        """Log, once a minute, how many frames reached the tracker and the
+        detector and how many detections came back, by label."""
+        now = time.time() if now is None else now
+        elapsed = now - self._minuteStatsStart
+        if elapsed < 60:
+            return None
+        stats = self._minuteStats
+        labels = sorted(k[4:] for k in stats if k.startswith("det:"))
+        detections = sum(stats["det:" + k] for k in labels)
+        line = ("Analytics last %ds: trackerFrames=%d detectorFrames=%d "
+                "detections=%d %s objectsTracked=%d unsampledObjects=%d" % (
+                    int(elapsed), stats["trackerFrames"], stats["detectorFrames"],
+                    detections,
+                    " ".join("%s=%d" % (k, stats["det:" + k]) for k in labels) or "-",
+                    stats["objects"], _QueuedObjId.unsampledObjects))
+        _QueuedObjId.unsampledObjects = 0
+        self._logger.info(line)
+        self._minuteStats = defaultdict(int)
+        self._minuteStatsStart = now
+        return line
+
+    ###########################################################
     def frameCompleted(self, msTimestamp, frameNum):
         """ Callback from Sentry, invoked when processing for frame with msTimestamp
             is completed, and no more events for it should be expected
         """
+        self._minuteStats["trackerFrames"] += 1
+        self._logMinuteStats()
         # Save all the tracks from the last frame
         self._flushSavedObjects()
 
@@ -680,7 +725,12 @@ class QueuedDataManagerCloud(object_collector_base()):
         #       `addFrame()` used to have `action` as a parameter before we
         #       started using Sentry. So we just mention this here as a note
         #       for documentation pursposes.
-        idObj = _QueuedObjId.getQueuedObjId(objId)
+        try:
+            idObj = _QueuedObjId.getQueuedObjId(objId)
+        except KeyError:
+            # A purged id must not take down the capture process.
+            self._logger.warning("Dropping frame for unknown object id %s" % objId)
+            return
         idObj.reportSeen(time, self._logger)
         # save the object for this ms
         self._trackedObjects.setdefault(time,[]).append((idObj, frameId, bbox))
@@ -810,9 +860,15 @@ class _QueuedObjId(object):
 
     _idToQueuedObj = {}
     _idNum = -1
-    _idLastPurgeTime = time.time()
-    _idPurgeInterval = 30       # purge old IDs every 30s
-    _idPurgeTimeout = 5*60      # ID is old after it hasn't been seen for 5 minutes
+    # All three are in milliseconds: purgeOldIds() is called with frame
+    # timestamps in ms. They used to be in seconds, which purged every id
+    # 300 ms after it was last seen, so a slow tracker (about 1 frame/s on a
+    # 4096-wide stream) lost every object before detection could run, and
+    # the next addFrame raised "Id 'N' does not exist" and killed capture.
+    _idLastPurgeTime = 0
+    _idPurgeInterval = 30*1000       # purge old IDs every 30s
+    unsampledObjects = 0
+    _idPurgeTimeout = 5*60*1000      # ID is old after it hasn't been seen for 5 minutes
     _minDetectionEvents = 3
     _maxDetectionEvents = 8
 
@@ -842,7 +898,7 @@ class _QueuedObjId(object):
         qObjId = cls._idToQueuedObj.get(theId, None)
         if qObjId is not None:
             return qObjId
-        raise RuntimeError("Id '%s' does not exist." % theId)
+        raise KeyError("Id '%s' does not exist." % theId)
 
 
     ###########################################################
@@ -872,6 +928,7 @@ class _QueuedObjId(object):
         self.detectionsRequested = 0   # number of detection requests sent for this object
         self.reported = False          # whether the object was reported
         self.sentryFramesSeen = 0     # number of times this object was seen by sentry
+        self.detectionAttributes = {} # best plate, face, and carrier reads
 
         _QueuedObjId._idToQueuedObj[idNum] = self
 
@@ -898,16 +955,17 @@ class _QueuedObjId(object):
         identity, delivery carrier). They are stored for a later response
         path and do not change the type/score decision.
         """
+        if attributes:
+            self.detectionAttributes = merge_track_attributes(
+                getattr(self, "detectionAttributes", {}), attributes
+            )
         if self.detectorDecision is not None:
-            # do not update the object if final determination had been made
+            # The type is settled. Later frames can still improve a plate,
+            # a face match, or a carrier label.
             return
 
         self.lastDetectionEventTime = ms
         self.externalDetections[ms].append((type, score, overlap))
-        if attributes:
-            if not hasattr(self, "detectionAttributes"):
-                self.detectionAttributes = {}
-            self.detectionAttributes.update(attributes)
 
     ###########################################################
     def notifyDetectionRequested(self, ms):
@@ -963,6 +1021,27 @@ class _QueuedObjId(object):
         return sumFrames, sumScore, sumOverlap
 
     ###########################################################
+    # Per-label thresholds for the median score, after Frigate's
+    # objects.filters.<label>.threshold (defaults 0.7). Concept only.
+    _kLabelThreshold = {"person": 0.6, "vehicle": 0.6, "animal": 0.6}
+    _kMinLabelFraction = 0.0
+
+    def _passesLabelThreshold(self, label, frameCount):
+        best = []
+        for ms in self.externalDetections:
+            scores = [s for t, s, _o in self.externalDetections[ms] if t == label]
+            if scores:
+                best.append(max(scores))
+        if not best or frameCount <= 0:
+            return False
+        if len(best) / float(frameCount) < self._kMinLabelFraction:
+            return False
+        best.sort()
+        median = best[len(best)//2] if len(best) % 2 else \
+            0.5 * (best[len(best)//2 - 1] + best[len(best)//2])
+        return median >= self._kLabelThreshold.get(label, 0.7)
+
+    ###########################################################
     def _summarizeScores(self, forceDecision, logger):
         kHighConfidenceScore = 0.9
         kHighConfidenceOverlap = 0.8
@@ -991,6 +1070,7 @@ class _QueuedObjId(object):
 
         # Determine if the decision can be made now
         if len(highConfidenceTypes) == 1:
+            type = highConfidenceTypes[0]
             typeFrames = sumFrames[type]
             avgScore = sumScore[type] / float(typeFrames)
             avgOverlap = sumOverlap[type] / float(typeFrames)
@@ -1013,11 +1093,22 @@ class _QueuedObjId(object):
                 # This would happen, when Sentry-detected object is so
                 # short-lived, that we don't see any full-size frames to
                 # run detection on
-                logger.error("SentryID=" + str(self.sentryId) + ":" + \
+                # Normal for motion blips that end before the next detector
+                # sample (one every 500 ms). Counted in the per-minute line.
+                _QueuedObjId.unsampledObjects += 1
+                logger.debug("SentryID=" + str(self.sentryId) + ":" + \
                             "    no frames!." + \
                             " sentry=" + str(self.sentryObjType) + \
                             " frameCount=" + str(frameCount) + \
                             " typesSeen=" + str(allTypes))
+                self.detectorDecision = self.sentryObjType
+            elif not self._passesLabelThreshold(type, frameCount):
+                # Frigate-style check: the median of the best per-frame
+                # score must clear the label's threshold, and the label must
+                # show up in enough of the sampled frames. One weak hit
+                # (e.g. a 0.3 "animal" on swaying leaves) no longer labels it.
+                logger.debug("SentryID=%d: %s rejected (median score below "
+                             "threshold)" % (self.sentryId, type))
                 self.detectorDecision = self.sentryObjType
             else:
                 # In this case, we've either lost the track or decided we've

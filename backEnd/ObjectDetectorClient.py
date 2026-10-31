@@ -72,6 +72,8 @@ _kPink = (255, 132, 0)
 _kCropMargin = 20 # number pixels around Sentry detection to send to the API
 _kNetworkSize = 300 # This needs to be changed, if SIOWrapper changes the model to SSD500
 _kMinOverlap = 0.3 # minimum overlap we allow between detection box and Sentry box
+_kFullFrameMaxWidth = 960 # wider frames are cropped around each tracked box
+_kMaxCropsPerFrame = 6 # largest tracked boxes sent to the detector per frame
 _kMinContainment = 0.9 # object needs to be well-contained within motion blob, for us to consider containment when overlap fails
 _kCloud = False
 
@@ -295,7 +297,10 @@ class ObjectDetectorClient(threading.Thread):
             outputFileBase = os.path.join(self._outputFolderBoxes, str(timestamp))
 
         output = []
-        if self._full_frame:
+        # A 4096-wide frame shrunk to the 416-pixel network input leaves a
+        # person about 10 pixels tall, too small for YOLOX nano. Crop around
+        # each tracked box instead on wide frames.
+        if self._full_frame and image.size[0] <= _kFullFrameMaxWidth:
             objects = self._processSingleImage(image)
             for obj, id, box in scaledUpBoxes:
                 matched = self._processJSONResult(objects, (obj, id, box))
@@ -305,6 +310,10 @@ class ObjectDetectorClient(threading.Thread):
                         output.append(match)
         else:
             objects = []
+            if self._full_frame and len(scaledUpBoxes) > _kMaxCropsPerFrame:
+                scaledUpBoxes = sorted(
+                    scaledUpBoxes, key=lambda item: item[2].width * item[2].height, reverse=True
+                )[:_kMaxCropsPerFrame]
             for obj, id, box in scaledUpBoxes:
                 cropRect, sentryRectInCrop = self._getCropRect(image.size, box)
                 imageCrop = image.crop(cropRect)
@@ -582,6 +591,12 @@ class ObjectDetectorClientInProcess(ObjectDetectorClient):
         super(ObjectDetectorClientInProcess, self).__init__(id, logger)
         self._full_frame = True
         self._detector = create_detector(self._logger, _getModelDir(), enable_gpu=False)
+
+    def set_gallery_db(self, path):
+        """Point face matching at the local object database."""
+        setter = getattr(self._detector, "set_gallery_db", None)
+        if setter is not None:
+            setter(path)
 
     #---------------------------------------------------------------------------
     def _doRefreshHTTPConnection(self):

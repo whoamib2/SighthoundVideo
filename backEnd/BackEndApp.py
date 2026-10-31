@@ -88,7 +88,7 @@ from vitaToolbox.path.GetDiskSpaceAvailable import checkFreeSpace
 from vitaToolbox.windows.winUtils import registerForForcedQuitEvents
 from vitaToolbox.sysUtils.MachineId import machineId
 from vitaToolbox.sysUtils.TimeUtils import getTimeAsMs
-from vitaToolbox.strUtils.EnsureUnicode import ensureUtf8
+from vitaToolbox.strUtils.EnsureUnicode import ensureUnicode, ensureUtf8
 from vitaToolbox.threading.ThreadPool import ThreadPool
 from vitaToolbox.process.ProcessUtils import listChildProcessesOfPID
 from vitaToolbox.profiling.QueueStats import QueueStats
@@ -331,6 +331,8 @@ class BackEndApp(object):
         self._userLocalDataDir = userLocalDataDir
         self._logDir = os.path.join(self._userLocalDataDir, "logs")
         self._logger = getLogger(_kLogName, self._logDir, _kLogSize)
+        from backEnd.triggers import TriggerUtils
+        TriggerUtils.setLogger(self._logger)
         self._logger.grabStdStreams()
 
         assert type(self._userLocalDataDir) == str
@@ -863,6 +865,8 @@ class BackEndApp(object):
 
         self._clipDbPath = os.path.join(self._dataStorageLocation, kClipDbFile)
         self._objDbPath = os.path.join(self._dataStorageLocation, kObjDbFile)
+        # Camera and analytics processes match faces against this local file.
+        os.environ["SIGHTHOUND_OBJECT_DB"] = self._objDbPath
         self._responseDbPath = os.path.join(self._dataStorageLocation,
                                             kResponseDbFile)
         self._videoDir = os.path.join(videoStorageLocation, kVideoFolder)
@@ -1816,6 +1820,7 @@ class BackEndApp(object):
             if loc == camLocation:
                 pendingMoves.append(os.path.basename(targetPath))
         extra['pendingMoves'] = pendingMoves
+        extra['objectDbPath'] = self._objDbPath
 
         self._enableDiskLogging(False)
         try:
@@ -2303,7 +2308,9 @@ class BackEndApp(object):
 
                 # Update if the rule is currently schedule or not if necessary.
                 curScheduled = False
-                if ms/1000 > schedChange:
+                # schedChange is None when the schedule never changes (an
+                # "every day, 24 hours" rule). Python 2 let None compare.
+                if schedChange is not None and ms/1000 > schedChange:
                     curScheduled, nextSchedChange = rule.getScheduleInfo()
                     self._ruleDicts[cameraLocation][ruleName] = \
                         (rule, curScheduled, nextSchedChange, query, responses)
@@ -2437,9 +2444,13 @@ class BackEndApp(object):
 
         # Data manager messages
         elif msgId == MessageIds.msgIdDataAddObject:
-            (pipeId, camObjId, addTime, objType, location) = msg[1:]
+            tail = msg[1:]
+            (pipeId, camObjId, addTime, objType, location) = tail[:5]
+            attributes = tail[5] if len(tail) > 5 and isinstance(tail[5], dict) else None
 
             dbId = self._dataManager.addObject(addTime, objType, location)
+            if attributes:
+                self._dataManager.setObjectAttributes(dbId, attributes, addTime)
 
             self._logger.info("Received msgIdDataAddObject, loc: %s, time: %i,"
                               "type: %s, dbId: %i"
@@ -2866,7 +2877,7 @@ class BackEndApp(object):
                 self._putMsgDC([MessageIds.msgIdDeleteFile, path])
         elif msgId == MessageIds.msgIdSetOnvifSettings:
             (uuid, selectedIp, username, password) = msg[1:]
-            print(("Set onvif settings %s" % username))
+            self._logger.info("ONVIF credentials set for %s at %s (user %r)" % (uuid, selectedIp, username))
             self._onvifScanner.setDeviceSettings(uuid, (username, password), selectedIp)
         elif msgId == MessageIds.msgIdActiveCameraSearch:
             (isMajor, ) = msg[1:]
@@ -3492,9 +3503,9 @@ class BackEndApp(object):
                     shutil.move(src, dst)
                     moved = True
                 else:
-                    self._logger.error("Pending move item " + ensureUtf8(src) + " does not exist")
+                    self._logger.error("Pending move item " + ensureUnicode(src) + " does not exist")
             except Exception as e:
-                self._logger.error("Failed to move file (" + ensureUtf8(src) + "->" + ensureUtf8(dst) + "): " + str(e))
+                self._logger.error("Failed to move file (" + ensureUnicode(src) + "->" + ensureUnicode(dst) + "): " + str(e))
 
             if moved:
                 # If it was successfully relocated remove it from the dict.

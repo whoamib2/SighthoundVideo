@@ -47,6 +47,7 @@ from backEnd.native.detector import (
     parse_rgb_body,
 )
 from backEnd.native.onnx_detector import create_detector
+from appCommon.CommonStrings import kObjDbFile
 
 
 #from DebugLogManager import DebugLogManager
@@ -182,6 +183,12 @@ class PlatformHTTPWrapper(object):
                 "models/yolox_nano.onnx is next to the app.\n%s" % traceback.format_exc()
             )
             self._detector = _EmptyDetector()
+        gallery = os.environ.get("SIGHTHOUND_OBJECT_DB") or os.path.join(
+            self._localDataDir, kObjDbFile
+        )
+        setter = getattr(self._detector, "set_gallery_db", None)
+        if setter is not None:
+            setter(gallery)
 
         HandlerClass = HandlerFactory(self._logger, self._detector)
         HTTPServer.allow_reuse_address = True

@@ -426,12 +426,12 @@ class _MoveVideoProgressDialog(wx.Dialog):
             return
 
         now = time.time()
-        percent = float(curBytesCopied)/self._targetSize
+        percent = float(curBytesCopied)/self._targetSize if self._targetSize else 0.0
         percent = min(0.999, percent)
         gb = curBytesCopied/1024./1024/1024
 
         # Update the gauge
-        self._gauge.SetValue(100*percent)
+        self._gauge.SetValue(int(100*percent))  # wx 4 needs an int
 
         # Update the estimated time string
         if percent == 0:

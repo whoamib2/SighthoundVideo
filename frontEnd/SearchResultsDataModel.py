@@ -1540,6 +1540,9 @@ class SearchResultsDataModel(wx.EvtHandler, AbstractModel):
                                     self._desiredVideoSize, True, True)
 
             if self._startTime == -1:
+                getLogger(kFrontEndLogName).info(
+                    "Clip not available yet: %s %d-%d (try %d)", camLoc,
+                    firstMs, lastMs, self._videoLoadTimerRetries)
                 raise _FailedToLoadException()
 
             # Keep track of real play ms...
@@ -1555,8 +1558,9 @@ class SearchResultsDataModel(wx.EvtHandler, AbstractModel):
             self._img = self._dataMgr.getFrameAt(playMs)
 
             if self._img is None:
-                # Try to handle case where getFrameAt failed (untested).
-                # TODO: Do we need to log this?
+                getLogger(kFrontEndLogName).info(
+                    "No frame at %d in %s %d-%d", playMs, camLoc,
+                    firstMs, lastMs)
                 raise _FailedToLoadException()
 
             self._currentMs = self._dataMgr.getCurFrameOffset()
@@ -1582,7 +1586,15 @@ class SearchResultsDataModel(wx.EvtHandler, AbstractModel):
             self._isVideoLoaded = True
 
             res = True
+            failed = False
         except _FailedToLoadException:
+            failed = True
+        except Exception:
+            # Anything else used to escape into the wx timer and leave the
+            # player black with nothing in the log.
+            getLogger(kFrontEndLogName).exception("Clip load failed")
+            failed = True
+        if failed:
             # Send a bogus 'videoLoaded' on the first retry; we'll send another
             # when we actually succeed.
             if self._videoLoadTimerRetries == 0:

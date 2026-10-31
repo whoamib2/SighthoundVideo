@@ -51,6 +51,8 @@ import urllib.parse
 
 # Common 3rd-party imports...
 import wx
+
+from frontEnd.PasswordCtrl import PasswordCtrl, makeShowPasswordToggle
 import wx.adv as wxWizard
 
 # Toolbox imports...
@@ -1764,6 +1766,21 @@ class _DetectedCamerasScreen(_BasePage):
         innerSizer.Add(self._manualRadio, 0, wx.RESERVE_SPACE_EVEN_IF_HIDDEN |
                        wx.TOP | wx.BOTTOM, _kPaddingSize)
 
+        # Blue Iris: servers found on the network show here; the button
+        # opens the login and camera picker.
+        self._blueIrisServers = []
+        self._blueIrisScanStarted = False
+        self._blueIrisLabel = wx.StaticText(self, -1,
+            "Searching the network for Blue Iris servers...")
+        self._blueIrisButton = wx.Button(self, -1, "Add a Blue Iris camera...")
+        makeFontDefault(self._blueIrisLabel)
+        blueIrisSizer = wx.BoxSizer(wx.HORIZONTAL)
+        blueIrisSizer.Add(self._blueIrisButton, 0, wx.ALIGN_CENTER_VERTICAL)
+        blueIrisSizer.Add(self._blueIrisLabel, 1,
+                          wx.ALIGN_CENTER_VERTICAL | wx.LEFT, _kPaddingSize)
+        innerSizer.Add(blueIrisSizer, 0, wx.EXPAND | wx.BOTTOM, _kPaddingSize)
+        self._blueIrisButton.Bind(wx.EVT_BUTTON, self.OnBlueIris)
+
         self.sizer.Add(innerSizer, 1, wx.EXPAND | wx.LEFT | wx.RIGHT,
                        3*_kPaddingSize)
 
@@ -1781,6 +1798,74 @@ class _DetectedCamerasScreen(_BasePage):
         self.wizard.Bind(wxWizard.EVT_WIZARD_PAGE_CHANGING, self.OnChanging)
 
         self._listBox.Bind(wx.EVT_RIGHT_DOWN, self.OnRightClick)
+
+
+    ###########################################################
+    def _startBlueIrisScan(self):
+        """Look for Blue Iris servers once, in the background."""
+        if self._blueIrisScanStarted:
+            return
+        self._blueIrisScanStarted = True
+        import threading
+        from appCommon import BlueIris
+
+        def work():
+            try:
+                found = BlueIris.discoverServers()
+            except Exception:
+                found = []
+            wx.CallAfter(self._blueIrisScanDone, found)
+        threading.Thread(target=work, daemon=True).start()
+
+
+    ###########################################################
+    def _blueIrisScanDone(self, found):
+        if not self:
+            return
+        self._blueIrisServers = found
+        if found:
+            self._blueIrisLabel.SetLabel("Blue Iris found at " + ", ".join(
+                "%s:%d" % hp for hp in found))
+            self._blueIrisButton.SetLabel("Connect to Blue Iris...")
+        else:
+            self._blueIrisLabel.SetLabel("No Blue Iris server found "
+                                         "(you can still enter one).")
+        self.Layout()
+
+
+    ###########################################################
+    def OnBlueIris(self, event=None):
+        """Log into Blue Iris, pick a camera and continue as a manual
+        (\"Other IP camera\") setup with the URL filled in."""
+        from .BlueIrisDialog import BlueIrisDialog
+        cameras = []
+        try:
+            client = self.wizard.backEndClient
+            for location in client.getCameraLocations():
+                _t, uri, _e, extra = client.getCameraSettings(location)
+                cameras.append((uri, extra))
+        except Exception:
+            client = None
+        dlg = BlueIrisDialog(self.GetTopLevelParent(), self._blueIrisServers,
+                             backEndClient=client, cameras=cameras)
+        try:
+            if dlg.ShowModal() != wx.ID_OK or not dlg.getResult():
+                return
+            url, camName = dlg.getResult()
+            self.wizard.camExtras.update(dlg.getExtras())
+        finally:
+            dlg.Destroy()
+        self.wizard.cameraManufacturer = kOtherCameraManufacturer
+        self.wizard.cameraType = kOtherIpCamType
+        self.wizard.cameraUri = url
+        if not getattr(self.wizard, 'cameraName', None):
+            try:
+                self.wizard.cameraName = camName
+            except Exception:
+                pass
+        self._manualRadio.SetValue(True)
+        self._updateUiFromSelection()
+        self.wizard.ShowPage(self.GetNext())
 
 
     ###########################################################
@@ -1922,6 +2007,8 @@ class _DetectedCamerasScreen(_BasePage):
 
         if isUpnp:
             upnpDeviceDict = self.wizard.upnpDataModel.getUpnpDeviceDict()
+            # One entry per camera: prefer the ONVIF entry for the same IP.
+            onvifIps = onvifIpSet(self.wizard.onvifDataModel.getOnvifDeviceDict())
             # Make a sorted list of tuples: (name, identifier)
             # ...where identifier is a USN...
             # We strip out all routers, non-presentable UPNP devices, and wrong-
@@ -1931,7 +2018,8 @@ class _DetectedCamerasScreen(_BasePage):
                           if (not dev.isRouter()) and
                              dev.isPresentable(True) and
                              self._isManufacturerMatch(dev.getModelName()) and
-                             (devUsn not in configuredDevIds) ]
+                             (devUsn not in configuredDevIds) and
+                             upnpDeviceIp(dev) not in onvifIps ]
         else:
             onvifDeviceDict = self.wizard.onvifDataModel.getOnvifDeviceDict()
             # Make a sorted list of tuples: (name, identifier)
@@ -2105,6 +2193,8 @@ class _DetectedCamerasScreen(_BasePage):
         if event.GetPage() != self:
             event.Skip()
             return
+
+        self._startBlueIrisScan()
 
         # Ensure the proper controls are displayed and populated.
         camUri = self.wizard.cameraUri
@@ -2299,11 +2389,10 @@ class _UpnpSettingsScreen(_BasePage):
         self._userLabel = wx.StaticText(self, -1, "User name:")
         self._userCtrl = wx.TextCtrl(self, -1, size=(200, -1))
         self._passLabel = wx.StaticText(self, -1, "Password:")
-        self._passCtrl = wx.TextCtrl(self, -1, size=(200, -1),
-                                     style=wx.TE_PASSWORD)
-        self._passVerifyLabel = wx.StaticText(self, -1, "Verify password:")
-        self._passVerifyCtrl = wx.TextCtrl(self, -1, size=(200, -1),
-                                           style=wx.TE_PASSWORD)
+        self._passCtrl = PasswordCtrl(self, -1, size=(200, -1))
+        # The password is asked once; this slot holds a "Show password" toggle.
+        self._passVerifyLabel = wx.StaticText(self, -1, "")
+        self._passVerifyCtrl = makeShowPasswordToggle(self, self._passCtrl)
 
         self._rtspPortLabel = wx.StaticText(self, -1, "RTSP port (optional):")
         self._rtspPortCtrl = wx.TextCtrl(self, -1, size=(40, -1))
@@ -2558,7 +2647,6 @@ class _UpnpSettingsScreen(_BasePage):
         self._streamPathCtrl.SetValue(ensureUnicode(pathPart))
         self._userCtrl.SetValue(ensureUnicode(username))
         self._passCtrl.SetValue(ensureUnicode(password))
-        self._passVerifyCtrl.SetValue(ensureUnicode(password))
 
         # Only set the port control if it's RTSP.
         if scheme == 'rtsp':
@@ -2623,11 +2711,6 @@ class _UpnpSettingsScreen(_BasePage):
         username = self._userCtrl.GetValue().strip()
         password = self._passCtrl.GetValue().strip()
 
-        if (ignoreErrors != 'all')                       and \
-           (password != self._passVerifyCtrl.GetValue())    :
-            self._passVerifyCtrl.SetValue('')
-            self._passVerifyCtrl.SetFocus()
-            return (_kPasswordsMustMatchStr, None, None)
 
         if (ignoreErrors == 'none') and (password) and (not (username)):
             return ("A username is required if a password is used.",
@@ -2964,11 +3047,10 @@ class _OnvifCredentialsScreen(_BasePage):
         self._userLabel = wx.StaticText(self, -1, "User name:")
         self._userCtrl = wx.TextCtrl(self, -1, size=(200, -1))
         self._passLabel = wx.StaticText(self, -1, "Password:")
-        self._passCtrl = wx.TextCtrl(self, -1, size=(200, -1),
-                                     style=wx.TE_PASSWORD)
-        self._passVerifyLabel = wx.StaticText(self, -1, "Verify password:")
-        self._passVerifyCtrl = wx.TextCtrl(self, -1, size=(200, -1),
-                                           style=wx.TE_PASSWORD)
+        self._passCtrl = PasswordCtrl(self, -1, size=(200, -1))
+        # The password is asked once; this slot holds a "Show password" toggle.
+        self._passVerifyLabel = wx.StaticText(self, -1, "")
+        self._passVerifyCtrl = makeShowPasswordToggle(self, self._passCtrl)
 
         self._authMessage = wx.StaticText(self, -1, "Please wait while we "
                                                     "connect to your camera...",
@@ -3071,7 +3153,6 @@ class _OnvifCredentialsScreen(_BasePage):
 
         self._userCtrl.SetValue(ensureUnicode(username))
         self._passCtrl.SetValue(ensureUnicode(password))
-        self._passVerifyCtrl.SetValue(ensureUnicode(password))
 
         # Hide the messages.
         self._authMessage.Hide()
@@ -3205,11 +3286,6 @@ class _OnvifCredentialsScreen(_BasePage):
         username = self._userCtrl.GetValue().strip()
         password = self._passCtrl.GetValue().strip()
 
-        if (ignoreErrors != 'all')                       and \
-           (password != self._passVerifyCtrl.GetValue())    :
-            self._passVerifyCtrl.SetValue('')
-            self._passVerifyCtrl.SetFocus()
-            return (_kPasswordsMustMatchStr, None, None)
 
         if (ignoreErrors == 'none') and (password) and (not (username)):
             return ("A username is required if a password is used.",
@@ -3609,6 +3685,20 @@ class _OnvifSettingsScreen(_BasePage):
                     _getHighestResolutionByLicense(self.wizard)
                 self.wizard.camExtras['recordAudio'] = self._audioCtrl.GetValue()
                 self.wizard.camExtras['forceTCP'] = self._forceTcpCtrl.GetValue()
+                # Lowest-resolution other ONVIF profile feeds analytics and
+                # grid thumbnails; the chosen profile is recorded.
+                try:
+                    from backEnd.native.open_capture import pick_onvif_sub_uri
+                    choices = [(self._onvifUriCtrl.GetString(i),
+                                self._onvifUriCtrl.GetClientData(i))
+                               for i in range(self._onvifUriCtrl.GetCount())]
+                    subUri = pick_onvif_sub_uri(choices, cameraUri)
+                except Exception:
+                    subUri = None
+                if subUri:
+                    self.wizard.camExtras['subStreamUri'] = subUri
+                else:
+                    self.wizard.camExtras.pop('subStreamUri', None)
 
 
     ###########################################################
@@ -3988,6 +4078,24 @@ class _OnvifSettingsScreen(_BasePage):
 
 
 ##############################################################################
+def onvifIpSet(onvifDeviceDict):
+    """IPs of ONVIF devices that answered on their device service."""
+    ips = set()
+    for dev in onvifDeviceDict.values():
+        for addr in getattr(dev, "validOnvifIpAddrs", None) or []:
+            ips.add(addr[0])
+    return ips
+
+
+def upnpDeviceIp(dev):
+    """Host of a UPnP device (from its presentation URL)."""
+    try:
+        url, _ = dev.getPresentationUrl()
+        return urllib.parse.urlsplit(url).hostname
+    except Exception:
+        return None
+
+
 def _findGenericCamTypes(modelName):
     """Find the generic camera types for the given UPNP model name.
 
@@ -4092,11 +4200,10 @@ class _ManualSettingsScreen(_BasePage):
         self._userCtrl = wx.TextCtrl(self, -1, size=(200, -1))
 
         self._passLabel = wx.StaticText(self, -1, "Password:")
-        self._passCtrl = wx.TextCtrl(self, -1, size=(200, -1),
-                                     style=wx.TE_PASSWORD)
-        self._passVerifyLabel = wx.StaticText(self, -1, "Verify password:")
-        self._passVerifyCtrl = wx.TextCtrl(self, -1, size=(200, -1),
-                                           style=wx.TE_PASSWORD)
+        self._passCtrl = PasswordCtrl(self, -1, size=(200, -1))
+        # The password is asked once; this slot holds a "Show password" toggle.
+        self._passVerifyLabel = wx.StaticText(self, -1, "")
+        self._passVerifyCtrl = makeShowPasswordToggle(self, self._passCtrl)
 
         self._advancedLabel = wx.StaticText(self, -1, _kAdvancedLabel,
                 style=wx.ST_NO_AUTORESIZE)
@@ -4344,7 +4451,7 @@ class _ManualSettingsScreen(_BasePage):
 
         # Clear out everything by default, just in case we forget something...
         for ctrl in [self._httpPortCtrl, self._rtspPortCtrl,
-                     self._userCtrl, self._passCtrl, self._passVerifyCtrl,
+                     self._userCtrl, self._passCtrl,
                      self._streamPathCtrl, self._ipCtrl]:
             ctrl.SetValue('')
 
@@ -4415,7 +4522,6 @@ class _ManualSettingsScreen(_BasePage):
         self._streamPathCtrl.SetValue(ensureUnicode(pathPart))
         self._userCtrl.SetValue(ensureUnicode(username))
         self._passCtrl.SetValue(ensureUnicode(password))
-        self._passVerifyCtrl.SetValue(ensureUnicode(password))
 
         self._forceTcpCtrl.SetValue(forceTCP)
 
@@ -4459,11 +4565,6 @@ class _ManualSettingsScreen(_BasePage):
             assert scheme == 'http://'
             portStr = self._httpPortCtrl.GetValue()
 
-        if (ignoreErrors != 'all')                                       and \
-           (self._passCtrl.GetValue() != self._passVerifyCtrl.GetValue())   :
-            self._passVerifyCtrl.SetValue('')
-            self._passVerifyCtrl.SetFocus()
-            return (_kPasswordsMustMatchStr, None, None)
 
         if ignoreErrors == 'none':
             if not hostname:

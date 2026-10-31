@@ -68,6 +68,9 @@ from .triggers.LineTrigger import LineTrigger
 from .triggers.MinSizeTrigger import MinSizeTrigger
 from .triggers.RegionTrigger import RegionTrigger
 from .triggers.TargetTrigger import TargetTrigger
+from .triggers.AttributeTriggers import DeliveryTrigger
+from .triggers.AttributeTriggers import FaceTrigger
+from .triggers.AttributeTriggers import PlateTrigger
 
 from .triggers.TriggerRegion import TriggerRegion
 from .triggers.TriggerLineSegment import TriggerLineSegment
@@ -211,6 +214,15 @@ class SavedQueryDataModel(AbstractModel):
             else:
                 assert False, "No record response found"
 
+        # Attribute rules. Empty values keep an old query on its previous path.
+        self._plateMode = ""
+        self._platePattern = ""
+        self._faceMode = ""
+        self._faceName = ""
+        self._deliveryCarriers = []
+        self._deliveryCooldownSec = 300
+        self._deliveryUseZone = False
+
         # Keep track of what we last edited.  Start with the camera block...
         # ...this is a tuple that looks like: (sourceBlock, blockNum)
         # Can be 'videoSource', 'target', 'trigger', 'ifSeen', ...
@@ -332,7 +344,17 @@ class SavedQueryDataModel(AbstractModel):
         @return autoName  The automatically generated name.
         """
         targetPart = self._targets[0]._getAutoNamePart()
+        carriers = list(getattr(self, "_deliveryCarriers", None) or [])
+        if carriers:
+            if len(carriers) == 1:
+                from backEnd.native.detector import carrier_phrase
+                targetPart = carrier_phrase(carriers[0])
+            else:
+                targetPart = "delivery truck"
         wherePart = self._triggers[0]._getAutoNamePart()
+        if carriers and getattr(self, "_deliveryUseZone", False):
+            region_name = self._triggers[0].getRegionName() or "the zone"
+            wherePart = "at %s" % region_name
         videoPart = self._videoSource._getAutoNamePart()
 
         # If target and where are both non-blank, need a space between them.
@@ -428,6 +450,13 @@ class SavedQueryDataModel(AbstractModel):
 
         @param  state  The information previously returned from __getstate__
         """
+        state.setdefault("_plateMode", "")
+        state.setdefault("_platePattern", "")
+        state.setdefault("_faceMode", "")
+        state.setdefault("_faceName", "")
+        state.setdefault("_deliveryCarriers", [])
+        state.setdefault("_deliveryCooldownSec", 300)
+        state.setdefault("_deliveryUseZone", False)
         self.__dict__ = state
         self._visibleName = self._calcVisibleName()
 
@@ -542,18 +571,79 @@ class SavedQueryDataModel(AbstractModel):
                        for target in self.getTargets()]
         if targetTypes[0][0] != 'anything':
             # Add a target trigger...
-            return TargetTrigger(dataManager, targetTypes, preTargetTrigger)
+            trigger = TargetTrigger(dataManager, targetTypes, preTargetTrigger)
         else:
             # No target trigger needed; though do make sure that there's only
             # on target...
             assert len(targetTypes) == 1, \
                    "Don't know what to do about multiple targets w/ anything."
 
-        if preTargetTrigger is None:
-            # Add in a target trigger if nothing else (since that's fast!)
-            return TargetTrigger(dataManager, [])
-        else:
-            return preTargetTrigger
+            if preTargetTrigger is None:
+                # Add in a target trigger if nothing else (since that's fast!)
+                trigger = TargetTrigger(dataManager, [])
+            else:
+                trigger = preTargetTrigger
+        return self._withAttributeTriggers(dataManager, trigger, whereModel)
+
+
+    ###########################################################
+    def _withAttributeTriggers(self, dataManager, trigger, whereModel):
+        """Wrap plate, face, and delivery tests around the existing trigger."""
+        plate_mode = getattr(self, "_plateMode", "") or ""
+        if plate_mode:
+            trigger = PlateTrigger(
+                dataManager, plate_mode, getattr(self, "_platePattern", "") or "", trigger
+            )
+        face_mode = getattr(self, "_faceMode", "") or ""
+        if face_mode:
+            trigger = FaceTrigger(
+                dataManager, face_mode, getattr(self, "_faceName", "") or "", trigger
+            )
+        carriers = list(getattr(self, "_deliveryCarriers", None) or [])
+        if carriers:
+            points = None
+            if getattr(self, "_deliveryUseZone", False) and whereModel is not None:
+                if whereModel.getTriggerType() == "regionTrigger":
+                    points = whereModel.getRegion().getPoints()
+            cooldown = int(getattr(self, "_deliveryCooldownSec", 300) or 0) * 1000
+            trigger = DeliveryTrigger(dataManager, carriers, cooldown, points, trigger)
+        return trigger
+
+    def getPlateMode(self):
+        return getattr(self, "_plateMode", "") or ""
+    def setPlateMode(self, mode):
+        self._plateMode = mode or ""
+        self.update("plateMode")
+    def getPlatePattern(self):
+        return getattr(self, "_platePattern", "") or ""
+    def setPlatePattern(self, pattern):
+        self._platePattern = pattern or ""
+        self.update("platePattern")
+    def getFaceMode(self):
+        return getattr(self, "_faceMode", "") or ""
+    def setFaceMode(self, mode):
+        self._faceMode = mode or ""
+        self.update("faceMode")
+    def getFaceName(self):
+        return getattr(self, "_faceName", "") or ""
+    def setFaceName(self, name):
+        self._faceName = name or ""
+        self.update("faceName")
+    def getDeliveryCarriers(self):
+        return list(getattr(self, "_deliveryCarriers", None) or [])
+    def setDeliveryCarriers(self, carriers):
+        self._deliveryCarriers = list(carriers or [])
+        self.update("deliveryCarriers")
+    def getDeliveryCooldownSec(self):
+        return int(getattr(self, "_deliveryCooldownSec", 300) or 0)
+    def setDeliveryCooldownSec(self, seconds):
+        self._deliveryCooldownSec = int(seconds or 0)
+        self.update("deliveryCooldownSec")
+    def getDeliveryUseZone(self):
+        return bool(getattr(self, "_deliveryUseZone", False))
+    def setDeliveryUseZone(self, enabled):
+        self._deliveryUseZone = bool(enabled)
+        self.update("deliveryUseZone")
 
 
     ###########################################################

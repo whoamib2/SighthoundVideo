@@ -481,6 +481,11 @@ _kCameraTable = [
     ("EyeSpy247", "EyeSpy247 (other MPEG-4)",  ("http://", "/img/video.asf", None)),    # Confirmed in house
     ("EyeSpy247", "EyeSpy247 (other MJPEG)",   ("http://", "/img/video.mjpeg", None)),  # Confirmed in house
 
+    # Amcrest and other Dahua-based cameras (UPnP reports manufacturer "General",
+    # model "IPC"). Main stream is subtype=0, sub stream subtype=1; RTSP 554.
+    ("Amcrest", "Amcrest / Dahua (other - main stream)", ("rtsp://", "/cam/realmonitor?channel=1&subtype=0", None)),
+    ("Amcrest", "Amcrest / Dahua (other - sub stream)",  ("rtsp://", "/cam/realmonitor?channel=1&subtype=1", None)),
+
     ("EYEsurv", "EYEsurv ESIP-MP1.3-BT1",  ("rtsp://", "/cam/realmonitor?channel=1&subtype=0", None)),  # Reported by a user
     ("EYEsurv", "EYEsurv (other)",         ("rtsp://", "/cam/realmonitor?channel=1&subtype=0", None)),  # Reported by a user
 
@@ -1476,6 +1481,10 @@ if _kDebugWithoutSpecificUpnp:
 # A list that we'll go through (in order) if we don't find a match in the
 # kUpnpModelMap...
 kUpnpGenericList = [
+    (r'(General )?IPC$',  "Amcrest / Dahua (other - main stream)"),
+    (r'(General )?IPC$',  "Amcrest / Dahua (other - sub stream)"),
+    (r'Amcrest.*',        "Amcrest / Dahua (other - main stream)"),
+    (r'Amcrest.*',        "Amcrest / Dahua (other - sub stream)"),
     (r'ACTi Corporation ACM.*', "ACTi (other ACM)"),
     (r'ACTi Corporation TCM.*', "ACTi (other TCM)"),
 
@@ -1786,6 +1795,14 @@ kCameraDescriptions = {
     """These settings have been confirmed to work with the PTZ, F+ and EXT """
     """models; may work with other cameras.""",
 
+
+    'Amcrest / Dahua (other - main stream)':
+    """Amcrest and Dahua-based cameras (UPnP "General IPC"): full-resolution """
+    """main stream over RTSP port 554.""",
+
+    'Amcrest / Dahua (other - sub stream)':
+    """Amcrest and Dahua-based cameras (UPnP "General IPC"): low-resolution """
+    """sub stream over RTSP port 554.""",
 
     'EYEsurv (other)':
     """These settings were reported by a user to work with the ESIP-MP1.3-BT1; """

@@ -168,7 +168,9 @@ _kDescriptors = {
     kClipDbFile: (ClipManager,
         [('clips', 11)]),
     kObjDbFile: (DataManager,
-        [("objects", 16), ('actions', 7), ('motion', 7)]),
+        [("objects", 16), ('actions', 7), ('motion', 7),
+         ("objAttributes", 5), ("faceIdentities", 5),
+         ("plateWatchlist", 2), ("attributeSettings", 2)]),
     kResponseDbFile: (ResponseDbManager,
         [('clipsToSend', 12), ('lastSentInfo', 6), ('pushNotifications', 4)])
 }

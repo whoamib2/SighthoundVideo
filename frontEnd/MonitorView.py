@@ -212,6 +212,8 @@ class MonitorView(BaseMonitorView):
 
         # A _FpsStats object per camera.
         self._fpsStats = {}
+        self._decoderBadges = {}
+        self._lastBadgeCheck = 0
 
         self._lastStatusQueryTime = time.time()
 
@@ -399,6 +401,10 @@ class MonitorView(BaseMonitorView):
         self._topLeftColSizer = wx.BoxSizer(wx.VERTICAL)
         self._topLeftColSizer.Add(hSizer, 1, wx.EXPAND)
         self._topLeftColSizer.Add(self._shadowBottom, 0, wx.EXPAND)
+        # Decoder / stream status of the camera in the large view.
+        self._largeViewDecoderText = wx.StaticText(self._topLeftPanel, -1, "")
+        self._largeViewDecoderText.SetFont(self._largeViewDecoderText.GetFont().Smaller())
+        self._topLeftColSizer.Add(self._largeViewDecoderText, 0, wx.LEFT | wx.EXPAND, 4)
         self._activeViewTimer = wx.Timer(self, _kActiveTimerId)
 
         self._ruleListPanel = RuleListPanel(self._leftSplitterWindow, self._backEndClient,
@@ -968,14 +974,29 @@ class MonitorView(BaseMonitorView):
 
         nameLabel = TranslucentStaticText(self._previewWin, -1, cameraLocation,
                                           style=wx.ST_ELLIPSIZE_END)
-        nameLabel.SetMaxSize((_kSmallVideoSize[0] - recordOn.GetSize().GetWidth(),
-                              nameLabel.GetSize().GetHeight()))
-        nameLabel.SetMinSize(nameLabel.GetMaxSize())
+        nameLabel.SetToolTip(cameraLocation)
 
         warningIcon = HoverBitmapButton(self._previewWin, wx.ID_ANY,
                                         "frontEnd/bmps/Warning.png",
                                         name=cameraLocation)
         warningIcon.Hide()
+
+        decoderBadge = wx.StaticText(self._previewWin, -1, "", name=cameraLocation,
+                                     style=wx.ALIGN_CENTRE_HORIZONTAL | wx.ST_NO_AUTORESIZE)
+        decoderBadge.SetFont(decoderBadge.GetFont().Smaller().Bold())
+        badgeW = decoderBadge.GetTextExtent("HW")[0] + 6
+        decoderBadge.SetMinSize((badgeW, -1))
+        decoderBadge.SetMaxSize((badgeW, -1))
+        decoderBadge.SetToolTip("Decoder: not reported yet")
+
+        # Name takes what is left of the tile width after the record icon,
+        # the badge and the warning icon, so the row never spills into the
+        # neighbouring tile.
+        nameW = tile_name_width(_kSmallVideoSize[0], recordOn.GetSize().GetWidth(),
+                                _kCtrlPadding, badgeW, warningIcon.GetSize().GetWidth())
+        nameLabel.SetMaxSize((nameW, nameLabel.GetSize().GetHeight()))
+        nameLabel.SetMinSize(nameLabel.GetMaxSize())
+        self._decoderBadges[cameraLocation] = decoderBadge
 
         self._previewControls[cameraLocation] = \
                     (videoWindow, recordOn, recordOff, nameLabel, warningIcon)
@@ -1019,6 +1040,9 @@ class MonitorView(BaseMonitorView):
             labelSizer.Add(overlapSizer, 0, wx.ALL | wx.ALIGN_CENTER_VERTICAL,
                            _kCtrlPadding//2)
             labelSizer.Add(nameLabel, 1, wx.ALIGN_CENTER_VERTICAL)
+            decoderBadge = self._decoderBadges.get(cameraLocation)
+            if decoderBadge:
+                labelSizer.Add(decoderBadge, 0, wx.ALIGN_CENTER_VERTICAL | wx.LEFT, 2)
 
             # ...extra craziness to make sure that the warning takes up space
             # even if hidden...
@@ -1027,7 +1051,9 @@ class MonitorView(BaseMonitorView):
             warningSizer.AddSpacer(1)
             labelSizer.Add(warningSizer, 0, wx.ALIGN_CENTER_VERTICAL)
 
-            cameraSizer.Add(labelSizer, 0, wx.TOP | wx.EXPAND,
+            # Keep the row exactly as wide as the video tile.
+            labelSizer.SetMinSize((_kSmallVideoSize[0], -1))
+            cameraSizer.Add(labelSizer, 0, wx.TOP | wx.LEFT | wx.RIGHT,
                             _kCtrlPadding//2)
 
             self._previewSizer.Add(cameraSizer, 0)
@@ -1100,6 +1126,38 @@ class MonitorView(BaseMonitorView):
             self._backEndClient.setLiveViewParams(self._largeViewCamera, _kSmallVideoSize[0], _kSmallVideoSize[1], 0, _kSmallVideoFps)
         self._backEndClient.setLiveViewParams(cameraLocation, w, h, audioVolume, 0)
         self._largeViewCamera = cameraLocation
+        self._lastBadgeCheck = 0
+        self._updateDecoderBadges()
+
+
+    ###########################################################
+    def _updateDecoderBadges(self):
+        """Refresh HW/SW tile badges and the large-view status (every 5 s)."""
+        now = time.time()
+        if now - self._lastBadgeCheck < 5:
+            return
+        self._lastBadgeCheck = now
+        try:
+            from frontEnd.DecoderBadge import badge_for, read_decoder_info, status_line
+            dataDir = getUserLocalDataDir()
+            for camera, badge in list(self._decoderBadges.items()):
+                if not badge:
+                    continue
+                text, tip = badge_for(read_decoder_info(dataDir, camera))
+                if badge.GetLabel().strip() != text:
+                    badge.SetLabel(text)
+                    badge.SetForegroundColour(wx.Colour(0, 140, 0) if text == "HW" else wx.Colour(170, 110, 0))
+                    badge.GetContainingSizer() and self._previewWin.Layout()
+                badge.SetToolTip(tip)
+            label = getattr(self, "_largeViewDecoderText", None)
+            if label:
+                camera = self._largeViewCamera
+                info = read_decoder_info(dataDir, camera) if camera else {}
+                line = status_line(camera, info) if camera else ""
+                if label.GetLabel() != line:
+                    label.SetLabel(line)
+        except Exception:
+            self._logger.debug("decoder badge update failed", exc_info=True)
 
 
     ###########################################################
@@ -1399,6 +1457,10 @@ class MonitorView(BaseMonitorView):
             videoWindow.SetName(curLocation)
             warningIcon.SetName(curLocation)
             del self._previewControls[origLocation]
+            if origLocation in self._decoderBadges:
+                badge = self._decoderBadges.pop(origLocation)
+                badge.SetName(curLocation)
+                self._decoderBadges[curLocation] = badge
             nameLabel.SetLabel(curLocation)
             self._previewControls[curLocation] = \
                     (videoWindow, recordOn, recordOff, nameLabel, warningIcon)
@@ -1456,6 +1518,9 @@ class MonitorView(BaseMonitorView):
         for ctrl in self._previewControls[cameraLocation]:
             ctrl.Destroy()
         del self._previewControls[cameraLocation]
+        badge = self._decoderBadges.pop(cameraLocation, None)
+        if badge:
+            badge.Destroy()
 
         del self._cameraSettings[cameraLocation]
         self._enabledModel.enableCamera(cameraLocation, None)
@@ -1748,7 +1813,14 @@ class MonitorView(BaseMonitorView):
 
                         fpsStats.trackFrameRate(requestFps, captureFps, self._logger)
                         if not warningIcon is None:
-                            warningIcon.Show(fpsStats.checkForErrors())
+                            hasError = fpsStats.checkForErrors()
+                            if hasError != warningIcon.IsShown():
+                                warningIcon.Show(hasError)
+                                self._previewWin.Layout()
+                            if hasError:
+                                warningIcon.SetToolTip(
+                                    warning_tooltip(fpsStats, requestFps, captureFps))
+                        self._updateDecoderBadges()
 
                         if self._debugModeModel.isDebugMode() and nameLabel is not None:
                             nameLabel.SetLabel("%s %.2f %.2f" % (location,
@@ -1838,6 +1910,7 @@ class MonitorView(BaseMonitorView):
         removeCameraItem = menu.Append(-1, "Remove Camera...")
         editCameraItem = menu.Append(-1, "Edit Camera...")
         renameCameraItem = menu.Append(-1, "Edit Camera Location...")
+        streamItem = menu.Append(-1, "Stream && Bitrate...")
         reconnectCameraItem = menu.Append(-1, "Reconnect to Camera")
 
         if self._cameraPopupSource and \
@@ -1859,6 +1932,7 @@ class MonitorView(BaseMonitorView):
         self.Bind(wx.EVT_MENU, self.OnRemoveCamera, removeCameraItem)
         self.Bind(wx.EVT_MENU, self.OnEditCamera, editCameraItem)
         self.Bind(wx.EVT_MENU, self.OnRenameCamera, renameCameraItem)
+        self.Bind(wx.EVT_MENU, self.OnStreamSettings, streamItem)
         self.Bind(wx.EVT_MENU, self.OnReconnect, reconnectCameraItem)
         if cameraType != kWebcamCamType:
             self.Bind(wx.EVT_MENU, self.OnCameraWebPage, cameraWebPageItem)
@@ -1869,6 +1943,7 @@ class MonitorView(BaseMonitorView):
             removeCameraItem.Enable(False)
             editCameraItem.Enable(False)
             renameCameraItem.Enable(False)
+            streamItem.Enable(False)
             reconnectCameraItem.Enable(False)
             if cameraType != kWebcamCamType:
                 cameraWebPageItem.Enable(False)
@@ -2073,6 +2148,23 @@ class MonitorView(BaseMonitorView):
 
 
     ###########################################################
+    def OnStreamSettings(self, event=None):
+        """Show / change the camera's encoder settings (bitrate, fps)."""
+        from frontEnd.CameraEncoderDialog import CameraEncoderDialog
+
+        cameraName = self._cameraPopupSource or self._curSelectedCamera
+        if not cameraName or cameraName not in self._cameraSettings:
+            return
+        _, uri, _ = self._cameraSettings[cameraName]
+        dlg = CameraEncoderDialog(self.GetTopLevelParent(), cameraName, uri,
+                                  self._backEndClient, getUserLocalDataDir())
+        try:
+            dlg.ShowModal()
+        finally:
+            dlg.Destroy()
+
+
+    ###########################################################
     def OnCameraWebPage(self, event):
         """Go to a camera's web page.
 
@@ -2236,10 +2328,30 @@ _kFpsIgnoreSamples = 20
 _kFpsTriggerCount = 15
 
 # If we see capture FPS fall below this, it's an error...
-_kMinCaptureFps = 7.5
+# VigilCam analyses the sub stream at a deliberately low rate (about 2 fps)
+# while cameras deliver 4-20 fps, so "request < capture" and the old 7.5 fps
+# floor flagged every healthy camera. Only warn on a real stall.
+_kMinCaptureFps = 1.5
+_kMinRequestFps = 1.0
 
 # Do not warn more often than that, unless declining fps
 _kMinWarningDistance = 60
+
+def tile_name_width(tileW, recordW, padding, badgeW, warningW):
+    """Pixels left for the camera name in a tile's label row."""
+    return max(20, int(tileW) - int(recordW) - int(padding) - int(badgeW) - 2 - int(warningW))
+
+
+def warning_tooltip(fpsStats, requestFps, captureFps):
+    """One-line reason for the tile warning icon (click for details)."""
+    if fpsStats.slowRequestFpsSince:
+        return ("Analytics is falling behind: %.1f fps processed vs %.1f fps "
+                "from the camera. Click for details." % (requestFps, captureFps))
+    if fpsStats.slowCaptureFpsSince:
+        return ("Low frame rate from the camera: %.1f fps. Click for details."
+                % captureFps)
+    return ""
+
 
 class _FpsStats(object):
     """A little internal class for tracking frames per second."""
@@ -2315,7 +2427,7 @@ class _FpsStats(object):
 
         nowTime = time.time()
 
-        if requestFps < captureFps:
+        if requestFps < min(captureFps, _kMinRequestFps):
             self._slowRequestFpsCount += 1
             if self._slowRequestFpsCount >= _kFpsTriggerCount:
                 if self._slowRequestFpsStart is None:

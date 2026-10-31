@@ -64,6 +64,8 @@ from vitaToolbox.wx.ToolbarBitmapTextButton import ToolbarBitmapTextButton
 from vitaToolbox.wx.TranslucentStaticText import TranslucentStaticText
 from vitaToolbox.wx.BitmapFromFile import bitmapFromFile
 from vitaToolbox.sysUtils.TimeUtils import formatTime
+from vitaToolbox.loggingUtils.LoggingUtils import getLogger
+from appCommon.CommonStrings import kFrontEndLogName
 
 # Local imports...
 from backEnd.ClipManager import ClipManager
@@ -222,6 +224,8 @@ class SearchResultsPlaybackPanel(BorderImagePanel):
         self._exportClipMenuItem         = MenuIds.getToolsMenuItem(menuBar, MenuIds.kExportClipMenu)
         self._exportForBugReportMenuItem = MenuIds.getToolsMenuItem(menuBar, MenuIds.kExportClipForBugReportMenu)
         self._exportFrameMenuItem        = MenuIds.getToolsMenuItem(menuBar, MenuIds.kExportFrame)
+        self._markMissedMenuItem         = MenuIds.getToolsMenuItem(menuBar, MenuIds.kMarkMissed)
+        self._rescanSelectedMenuItem     = MenuIds.getToolsMenuItem(menuBar, MenuIds.kRescanSelected)
         self._deleteClipMenuItem         = MenuIds.getToolsMenuItem(menuBar, MenuIds.kDeleteClipMenu)
         self._exportForTimeRangeMenuItem = MenuIds.getToolsMenuItem(menuBar, MenuIds.kExportAllWithinTimeRangeMenu)
         self._submitClipForAnalysisMenuItem = MenuIds.getToolsMenuItem(menuBar, MenuIds.kSubmitClipForAnalysis)
@@ -230,6 +234,12 @@ class SearchResultsPlaybackPanel(BorderImagePanel):
         self._menuItems = [self._deleteClipMenuItem, self._exportClipMenuItem,
                            self._exportForBugReportMenuItem,
                            self._exportFrameMenuItem,  self._exportForTimeRangeMenuItem]
+        if self._markMissedMenuItem:
+            self._menuItems.append(self._markMissedMenuItem)
+            topWin.Bind(wx.EVT_MENU, self.OnMarkMissed, self._markMissedMenuItem)
+        if self._rescanSelectedMenuItem:
+            self._menuItems.append(self._rescanSelectedMenuItem)
+            topWin.Bind(wx.EVT_MENU, self.OnRescanSelected, self._rescanSelectedMenuItem)
 
         if self._submitClipForAnalysisMenuItem and self._submitClipForAnalysisWithNoteMenuItem:
             self._menuItems += [ self._submitClipForAnalysisMenuItem,
@@ -1226,6 +1236,10 @@ class SearchResultsPlaybackPanel(BorderImagePanel):
 
     ###########################################################
     def _startTimer(self, delayTime):
+        # wx.Timer.Start() only accepts an int under Python 3; the frame
+        # pacing math yields floats, and the resulting TypeError used to be
+        # swallowed in OnPlayTimer, which silently paused after one frame.
+        delayTime = max(1, int(round(delayTime)))
         self._playTimer.Start(delayTime, True)
         self._expectedTimerTime = time.time()*1000 + delayTime
         return True
@@ -1332,6 +1346,8 @@ class SearchResultsPlaybackPanel(BorderImagePanel):
             # exceptions, we want to ignore these.  If an exception happens
             # normally, we just want to simulate a pause action.
             if DBG_PLAYBACK: self._dbgPlayback( "exception! " + traceback.format_exc() )
+            getLogger(kFrontEndLogName).warning("Playback stopped by error",
+                                                exc_info=True)
             self._resultsModel.setPlay(False, False)
         finally:
             self._skippingFrames = False
@@ -1755,6 +1771,68 @@ class SearchResultsPlaybackPanel(BorderImagePanel):
         return self._progressDlg.SetPercentageDone(percentage)
 
     ###########################################################
+    def OnRescanSelected(self, event=None):
+        """Re-scan the vehicles in the selected search result(s)."""
+        from frontEnd.TrainingDialogs import selectedObjectIds, showRescanDialog
+
+        frame = self.GetTopLevelParent()
+        showRescanDialog(frame, selectedObjectIds(frame))
+
+    ###########################################################
+    def grabCurrentFrame(self, framePath, absMs=None):
+        """Write the paused frame (no overlays) to ``framePath`` as JPEG.
+
+        @return True when a non-empty image was written.
+        """
+        if absMs is None:
+            absMs = self._resultsModel.getCurrentClipStart() + \
+                    self._resultsModel.getCurrentRelativeMs()
+        ok = self._dataMgr.saveCurrentClip(framePath, absMs, absMs,
+                getUserLocalDataDir(),
+                {"format": "jpg", "drawBoxes": False, "enableTimestamps": False})
+        return bool(ok) and os.path.isfile(framePath) and os.path.getsize(framePath) > 0
+
+    ###########################################################
+    def OnMarkMissed(self, event=None):
+        """Grab the paused frame and let the user label a missed or wrong object.
+
+        Works anywhere the playback can export a frame, including recorded
+        time with no event on the timeline.
+
+        @param  event  The menu event.
+        """
+        import tempfile
+
+        from frontEnd.TrainingDialogs import MarkMissedDialog
+
+        if self._resultsModel.isPlaying():
+            wx.MessageBox("Pause playback on the moment you want to mark first.",
+                          "Mark as Missed", wx.ICON_INFORMATION | wx.OK,
+                          self.GetTopLevelParent())
+            return
+        startTime = self._resultsModel.getCurrentClipStart() + \
+                    self._resultsModel.getCurrentRelativeMs()
+        handle, framePath = tempfile.mkstemp(prefix="vigilcam_mark_", suffix=".jpg")
+        os.close(handle)
+        try:
+            if not self.grabCurrentFrame(framePath, startTime):
+                wx.MessageBox("Could not read the current frame.", "Mark as Missed",
+                              wx.ICON_ERROR | wx.OK, self.GetTopLevelParent())
+                return
+            dlg = MarkMissedDialog(self.GetTopLevelParent(), framePath,
+                                   self._resultsModel.getCurrentCameraName() or "",
+                                   startTime)
+            try:
+                dlg.ShowModal()
+            finally:
+                dlg.Destroy()
+        finally:
+            try:
+                os.remove(framePath)
+            except OSError:
+                pass
+
+    ###########################################################
     def OnExportFrame(self, event):
         """Export the current frame.
 
@@ -2035,6 +2113,10 @@ class SearchResultsPlaybackPanel(BorderImagePanel):
 
         self._exportFrameMenuItem.Enable(self._exportClipMenuItem.IsEnabled() and \
                         not self._resultsModel.isPlaying())
+        if self._markMissedMenuItem:
+            self._markMissedMenuItem.Enable(self._exportFrameMenuItem.IsEnabled())
+        if self._rescanSelectedMenuItem:
+            self._rescanSelectedMenuItem.Enable(self._exportClipMenuItem.IsEnabled())
 
 
     ###########################################################

@@ -297,7 +297,12 @@ class ClipManager(object):
         self._cur = self._connection.cursor()
 
         # Use persistant mode for journal files.
-        self._cur.execute("PRAGMA journal_mode=PERSIST").fetchall()
+        # WAL: UI reads no longer wait on the recorder's writes.
+        try:
+            self._cur.execute("PRAGMA journal_mode=WAL").fetchall()
+            self._cur.execute("PRAGMA synchronous=NORMAL").fetchall()
+        except sql.OperationalError:
+            self._cur.execute("PRAGMA journal_mode=PERSIST").fetchall()
 
         tables = self._cur.execute('''SELECT name FROM sqlite_master '''
                                    '''WHERE type='table' ORDER BY name;''')

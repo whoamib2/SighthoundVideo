@@ -57,6 +57,7 @@ _kMaxHoursPerDay   = 25   # Daylight savings changeover...
 
 _kMinTimebarWidth = _kMaxHoursPerDay * _kMinDivisionsPerHour + 2 # 2px for border
 _kTimebarHeight = 17
+_kRecordedBandHeight = 6
 
 _kSecIn1H       = 60 * 60
 _kMsIn1H        = 1000 * _kSecIn1H
@@ -408,9 +409,9 @@ class SearchResultsTimelineControl(wx.Control):
 
         self._cursorPosition = None
 
-        if not self.IsShown():
-            return
-
+        # Always rebuild, even while hidden: a search that finishes while the
+        # timeline is hidden (or the window is in the tray) otherwise left a
+        # stale map with no green until the window was resized.
         self._makeDivisionMap()
         self._makeTimebarBitmap()
         self.Refresh()
@@ -423,9 +424,6 @@ class SearchResultsTimelineControl(wx.Control):
         @param  resultsModel  Should be self._resultsModel
         """
         assert resultsModel == self._resultsModel
-
-        if not self.IsShown():
-            return
 
         # Ignore this if no search range...
         if self._curMidnightMs is None:
@@ -592,6 +590,18 @@ class SearchResultsTimelineControl(wx.Control):
                     seqStartDivision = i
                     seqType = type(divisionData)
 
+            # With 24/7 recording almost every minute also has a motion
+            # clip, so clip markers covered all the green. Always draw the
+            # recorded ranges as a green band along the bottom so recorded
+            # time is visible under the clips.
+            gc.SetBrush(availBrush)
+            for (startMs, stopMs) in self._resultsModel.getAvailableVideoRanges():
+                startDiv = self._calcDivisionFor(startMs)
+                stopDiv = self._calcDivisionFor(stopMs)
+                gc.DrawRectangle(startDiv + 1, _kTimebarHeight - 1 -
+                                 _kRecordedBandHeight, stopDiv - startDiv + 1,
+                                 _kRecordedBandHeight)
+
 
         # Get the result...
         dc.SelectObject(wx.NullBitmap)
@@ -673,9 +683,6 @@ class SearchResultsTimelineControl(wx.Control):
     ###########################################################
     def recreateTimeline(self):
         """Update the timeline bitmap and cursor position."""
-        if not self.IsShown():
-            return
-
         self._makeDivisionMap()
         self._makeTimebarBitmap()
 

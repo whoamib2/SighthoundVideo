@@ -1,4 +1,4 @@
-# Build and test VigilCam on Windows, and optionally make an installer.
+﻿# Build and test VigilCam on Windows, and optionally make an installer.
 #
 #   powershell -NoProfile -ExecutionPolicy Bypass -File scripts\build_windows.ps1
 #   powershell -NoProfile -ExecutionPolicy Bypass -File scripts\build_windows.ps1 -Package
@@ -10,7 +10,8 @@
 
 [CmdletBinding()]
 param(
-    [switch]$Package
+    [switch]$Package,
+    [switch]$RequireNative
 )
 
 # Stop applies to cmdlets. Native stderr must not stop the script: Windows
@@ -412,9 +413,12 @@ if ($LASTEXITCODE -ne 0) {
 
 $vsRoot = Find-Msvc2022
 if (-not $vsRoot) {
-    $script:NativeStatus = 'skipped (MSVC 2022 was not found)'
+    $script:NativeStatus = 'SKIPPED - MSVC 2022 not found; region/line rules use the slower Python optsearches fallback'
     Write-Host ""
-    Write-Host "MSVC 2022 was not found. Skipping the CMake build of optsearches, launch, and xnat." -ForegroundColor Yellow
+    Write-Host "WARNING: MSVC 2022 was not found. Skipping the CMake build of optsearches, launch, and xnat." -ForegroundColor Red
+    Write-Host "         Region and line rules will use the pure-Python optsearches fallback (backEnd\triggers\optsearches_py.py)." -ForegroundColor Red
+    Write-Host "         Install 'Visual Studio 2022 Build Tools' (C++ workload) or pass -RequireNative to make this an error." -ForegroundColor Red
+    if ($RequireNative) { throw "Native build required (-RequireNative) but MSVC 2022 was not found." }
 } else {
     $cmake = Find-Cmake $vsRoot
     if (-not $cmake) {

@@ -220,6 +220,37 @@ class DataManager(object):
         except sql.OperationalError:
             # Happens if two processes try at same time...
             pass
+        self._ensureAttributeSchema()
+
+
+    ###########################################################
+    def _ensureAttributeSchema(self):
+        """Create plate, face, and carrier tables on old and new databases.
+
+        ``PRAGMA user_version`` 3 marks this schema. Older files are at 0.
+        The tables are also created when the version was already bumped, so a
+        partial upgrade still finishes. Embeddings stay in this file.
+        """
+        statements = (
+            '''CREATE TABLE IF NOT EXISTS objAttributes '''
+            '''(objUid INTEGER, key TEXT, value TEXT, confidence REAL, '''
+            '''time INTEGER, PRIMARY KEY (objUid, key))''',
+            '''CREATE TABLE IF NOT EXISTS faceIdentities '''
+            '''(id INTEGER PRIMARY KEY, name TEXT UNIQUE, embedding BLOB, '''
+            '''dim INTEGER, createdMs INTEGER)''',
+            '''CREATE TABLE IF NOT EXISTS plateWatchlist '''
+            '''(id INTEGER PRIMARY KEY, pattern TEXT UNIQUE)''',
+            '''CREATE TABLE IF NOT EXISTS attributeSettings '''
+            '''(key TEXT PRIMARY KEY, value TEXT)''',
+        )
+        for statement in statements:
+            self._cur.execute(statement)
+        try:
+            version = self._cur.execute("PRAGMA user_version").fetchone()[0]
+        except sql.OperationalError:
+            version = 0
+        if not version:
+            self._cur.execute("PRAGMA user_version=3")
 
 
     ###########################################################
@@ -327,8 +358,14 @@ class DataManager(object):
         self._connection.setParameters(self._logger, float(kSqlAlertThreshold), os.path.exists(self._curDbPath+".debug"))
         self._cur = self._connection.cursor()
 
-        # Use persistant mode for journal files.
-        self._cur.execute("PRAGMA journal_mode=PERSIST").fetchall()
+        # WAL lets the UI read while the back end writes. With the old
+        # PERSIST journal every read in the UI waited (up to the 45 s busy
+        # timeout) for the analytics writer, freezing the window.
+        try:
+            self._cur.execute("PRAGMA journal_mode=WAL").fetchall()
+            self._cur.execute("PRAGMA synchronous=NORMAL").fetchall()
+        except sql.OperationalError:
+            self._cur.execute("PRAGMA journal_mode=PERSIST").fetchall()
 
         tables = list(map(operator.itemgetter(0),
                      self._cur.execute('''SELECT name FROM sqlite_master '''
@@ -339,6 +376,7 @@ class DataManager(object):
             self._createTables()
 
         self._upgradeOldTablesIfNeeded()
+        self._ensureAttributeSchema()
 
         # Always call addIndices to update old versions of databases...
         self._addIndices()
@@ -407,6 +445,7 @@ class DataManager(object):
         """Reset the database"""
         assert self._connection is not None
 
+        self._connection.execute('''DROP TABLE IF EXISTS objAttributes''')
         self._connection.execute('''DROP TABLE objects''')
         self._connection.execute('''DROP TABLE motion''')
 
@@ -601,6 +640,165 @@ class DataManager(object):
         else:
             # TODO: not sure why this happens, but be robust...
             return "unknown"
+
+
+    ###########################################################
+    def setObjectAttributes(self, objId, attributes, timeMs=0):
+        """Store plate, face, and carrier values for one object.
+
+        @param  objId       The object id.
+        @param  attributes  Recognizer fields. Empty values are skipped.
+        @param  timeMs      Time associated with the read.
+        """
+        from backEnd.attribute_text import stored_attribute_rows
+
+        assert self._connection is not None
+        for key, value, confidence, when in stored_attribute_rows(attributes, timeMs):
+            self._cur.execute(
+                '''INSERT OR REPLACE INTO objAttributes '''
+                '''(objUid, key, value, confidence, time) VALUES (?, ?, ?, ?, ?)''',
+                (int(objId), key, value, float(confidence), int(when)))
+
+
+    ###########################################################
+    def getObjectAttributes(self, objId):
+        """Return ``{key: value, key_confidence: confidence}`` for one object."""
+        assert self._connection is not None
+        rows = self._cur.execute(
+            '''SELECT key, value, confidence FROM objAttributes WHERE objUid=?''',
+            (int(objId),)).fetchall()
+        found = {}
+        for key, value, confidence in rows:
+            found[key] = value
+            if confidence is not None:
+                found["%s_confidence" % key] = confidence
+        # plate_text's confidence column is stored as plate_text_confidence.
+        # Recognizers and notifications use plate_confidence. Keep both names.
+        aliases = (
+            ("plate_text_confidence", "plate_confidence"),
+            ("face_identity_confidence", "face_confidence"),
+            ("delivery_carrier_confidence", "delivery_confidence"),
+        )
+        for stored, public in aliases:
+            if stored in found and public not in found:
+                found[public] = found[stored]
+        return found
+
+
+    ###########################################################
+    def notificationSentenceNear(self, cameraLocation, ms, slop=2000):
+        """Join attribute sentences for objects at one camera around ``ms``."""
+        from backEnd.attribute_text import notification_sentence
+
+        assert self._connection is not None
+        rows = self._cur.execute(
+            '''SELECT uid FROM objects WHERE camLoc=? AND timeStart<=? '''
+            '''AND timeStop>=?''',
+            (cameraLocation, int(ms) + int(slop), int(ms) - int(slop))).fetchall()
+        parts = []
+        for (obj_id,) in rows:
+            text = notification_sentence(self.getObjectAttributes(obj_id))
+            if text and text not in parts:
+                parts.append(text)
+        return ", ".join(parts)
+
+
+    ###########################################################
+    def enrollFace(self, name, embedding, dim=None):
+        """Store a face embedding locally. Replaces an existing name."""
+        assert self._connection is not None
+        label = str(name or "").strip()
+        if not label:
+            raise ValueError("face name is empty")
+        raw = bytes(embedding)
+        width = int(dim) if dim else len(raw) // 4
+        if width <= 0 or len(raw) < width * 4:
+            raise ValueError("face embedding is empty")
+        now = int(time.time() * 1000)
+        self._cur.execute('''DELETE FROM faceIdentities WHERE name=?''', (label,))
+        self._cur.execute(
+            '''INSERT INTO faceIdentities (name, embedding, dim, createdMs) '''
+            '''VALUES (?, ?, ?, ?)''',
+            (label, sql.Binary(raw), width, now))
+        self.save()
+
+
+    ###########################################################
+    def deleteFace(self, name):
+        """Remove one enrolled person. The stored vector is deleted with the row."""
+        assert self._connection is not None
+        self._cur.execute(
+            '''DELETE FROM faceIdentities WHERE name=?''', (str(name or "").strip(),))
+        self.save()
+
+
+    ###########################################################
+    def listFaces(self):
+        """Return ``(name, dim, createdMs)`` rows, ordered by name."""
+        assert self._connection is not None
+        return self._cur.execute(
+            '''SELECT name, dim, createdMs FROM faceIdentities ORDER BY name'''
+        ).fetchall()
+
+
+    ###########################################################
+    def getFaceThreshold(self):
+        """Cosine similarity required for a gallery match. Default 0.4."""
+        assert self._connection is not None
+        try:
+            row = self._cur.execute(
+                "SELECT value FROM attributeSettings WHERE key='face_threshold'"
+            ).fetchone()
+        except sql.OperationalError:
+            return 0.4
+        if row is None or row[0] in (None, ""):
+            return 0.4
+        try:
+            return float(row[0])
+        except (TypeError, ValueError):
+            return 0.4
+
+
+    ###########################################################
+    def setFaceThreshold(self, value):
+        """Set the cosine threshold used the next time a camera process reloads."""
+        assert self._connection is not None
+        self._cur.execute(
+            '''INSERT OR REPLACE INTO attributeSettings (key, value) '''
+            '''VALUES ('face_threshold', ?)''',
+            (str(float(value)),))
+        self.save()
+
+
+    ###########################################################
+    def addPlateWatch(self, pattern):
+        """Add a plate pattern. ``*`` and ``?`` are wildcards."""
+        assert self._connection is not None
+        text = str(pattern or "").strip()
+        if not text:
+            raise ValueError("plate pattern is empty")
+        self._cur.execute(
+            '''INSERT OR IGNORE INTO plateWatchlist (pattern) VALUES (?)''', (text,))
+        self.save()
+
+
+    ###########################################################
+    def removePlateWatch(self, pattern):
+        """Remove one watchlist pattern."""
+        assert self._connection is not None
+        self._cur.execute(
+            '''DELETE FROM plateWatchlist WHERE pattern=?''', (str(pattern or "").strip(),))
+        self.save()
+
+
+    ###########################################################
+    def listPlateWatchlist(self):
+        """Return watchlist patterns in insertion order."""
+        assert self._connection is not None
+        rows = self._cur.execute(
+            '''SELECT pattern FROM plateWatchlist ORDER BY id'''
+        ).fetchall()
+        return [row[0] for row in rows]
 
 
     ###########################################################
@@ -1762,22 +1960,41 @@ class DataManager(object):
             return []
 
 
-        boxOverlay = []
+        # Batched: one query per 400 objects for types and one for boxes.
+        # The old code ran two queries per object, which for a one-minute
+        # 24/7 segment meant hundreds of queries on the UI thread.
+        colors = {}
+        labels = {}
+        self._lastBoxLabels = labels
+        plainIds = []
         for obj in objList:
             if isinstance(obj, tuple):
-                id = obj[0]
-                labelColor = self._getLabelColorForType(obj[3])
+                labels[obj[0]] = obj[3]
+                colors[obj[0]] = self._getLabelColorForType(obj[3])
             else:
-                id = obj
-                labelColor = self._getLabelColor(obj)
+                plainIds.append(obj)
+        for i in range(0, len(plainIds), 400):
+            chunk = plainIds[i:i+400]
+            rows = self._cur.execute(
+                "SELECT uid, type FROM objects WHERE uid IN (%s)" %
+                ",".join("%d" % int(x) for x in chunk)).fetchall()
+            found = dict(rows)
+            for uid in chunk:
+                labels[uid] = found.get(uid, "unknown")
+                colors[uid] = self._getLabelColorForType(labels[uid])
 
-            bboxes = self.getObjectBboxesBetweenTimes([id], firstMs, lastMs)
-            if not bboxes:
-                continue
-
-            for x1, y1, x2, y2, _, frameTime, uid in bboxes:
+        boxOverlay = []
+        ids = list(colors)
+        deadline = time.time() + 2.0
+        for i in range(0, len(ids), 400):
+            if time.time() > deadline:
+                self._logger.warning("Bounding boxes cut short (%d of %d objects)"
+                                     % (i, len(ids)))
+                break
+            for x1, y1, x2, y2, _, frameTime, uid in \
+                    self.getObjectBboxesBetweenTimes(ids[i:i+400], firstMs, lastMs):
                 boxOverlay.append([frameTime, "drawbox=%d:%d:%d:%d:%d:%d:%d:%s:t=0" %
-                        (x1, y1, x2-x1, y2-y1, procW, procH, uid, labelColor)])
+                        (x1, y1, x2-x1, y2-y1, procW, procH, uid, colors[uid])])
         boxOverlay.sort()
         return boxOverlay
 
@@ -1876,6 +2093,7 @@ class DataManager(object):
             if self._markupModel.getShowBoxesAroundObjects():
                 boxOverlay = self._getBoundingBoxes(self._curVidPath, objList, self._fileStart-10, self._fileStop+10)
                 extras ['boxList'] = boxOverlay
+                extras ['boxLabels'] = dict(getattr(self, '_lastBoxLabels', {}) or {})
             if self._markupModel.getShowRegionZones():
                 zonesOverlay = self._getRegionZones(self._curVidPath)
                 if zonesOverlay is not None:
@@ -2341,11 +2559,11 @@ class DataManager(object):
                 continue
 
             for x1, y1, x2, y2, _, _, _ in bboxes:
-                bbox = (round((x1 * thumbH)/float(procH)),
-                        round((y1 * thumbH)/float(procH)),
-                        round((x2 * thumbH)/float(procH)) - 1,
-                        round((y2 * thumbH)/float(procH)) - 1)
-                draw.rectangle( bbox, outline=labelColor)
+                left = round((x1 * thumbH)/float(procH))
+                top = round((y1 * thumbH)/float(procH))
+                right = max(left, round((x2 * thumbH)/float(procH)) - 1)
+                bottom = max(top, round((y2 * thumbH)/float(procH)) - 1)
+                draw.rectangle((left, top, right, bottom), outline=labelColor)
 
     ###########################################################
     def _populateThumbCache(self, camLoc, timeIndex):

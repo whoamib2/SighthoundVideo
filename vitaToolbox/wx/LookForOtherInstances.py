@@ -58,7 +58,12 @@ def _bring_existing_window_forward(mainWindowName):
     for className in _WINDOW_CLASSES:
         hwnd = ctypes.windll.user32.FindWindowW(className, mainWindowName)
         if hwnd:
-            ctypes.windll.user32.SetForegroundWindow(hwnd)
+            user32 = ctypes.windll.user32
+            # The window may be hidden to the tray or minimized.
+            user32.ShowWindow(hwnd, 5)   # SW_SHOW
+            if user32.IsIconic(hwnd):
+                user32.ShowWindow(hwnd, 9)   # SW_RESTORE
+            user32.SetForegroundWindow(hwnd)
             return True
     return False
 

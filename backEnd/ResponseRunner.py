@@ -66,6 +66,7 @@ from appCommon.CommonStrings import kGatewayPath
 from appCommon.CommonStrings import kVersionString
 from appCommon.CommonStrings import kGatewayTimeoutSecs
 from appCommon.CommonStrings import kDefaultNotificationSubject
+from backEnd.attribute_text import choose_notification
 
 from appCommon.hostedServices.ServicesClient import ServicesClient
 
@@ -1291,7 +1292,17 @@ class ResponseRunner(object):
                 return text
             result = text[0:maxLen] + ending
             return result
-        content = ensureUtf8(_kNotificationFormatStr % limit_text(ruleName, 64))
+        content_text = _kNotificationFormatStr % limit_text(ruleName, 64)
+        try:
+            dataMgr = actionCtx._executionContext.getDataMgr()
+            sentence = dataMgr.notificationSentenceNear(camLoc, ms)
+            chosen = choose_notification(sentence, ruleName)
+            if chosen:
+                content_text = chosen
+        except Exception:
+            self._logger.error("attribute notification text failed: %s" %
+                               sys.exc_info()[1])
+        content = ensureUtf8(content_text)
 
         data = { 'camLoc'  : camLoc,
                  'ruleName': ruleName,
@@ -1428,6 +1439,16 @@ class ResponseRunner(object):
             else:
                 body = _kEmailBodyMultiple % (ruleName, numTriggers,
                                               timeStr, dateStr)
+            try:
+                sentence = dataMgr.notificationSentenceNear(camLoc, firstMs)
+                chosen = choose_notification(sentence, ruleName)
+                if chosen and chosen != ('Alert for rule "%s"' % ruleName):
+                    body = chosen + "\n\n" + body
+                    if subject == kDefaultNotificationSubject:
+                        subject = chosen
+            except Exception:
+                self._logger.error("attribute email text failed: %s" %
+                                   sys.exc_info()[1])
 
             textInline = emailSettings.get('textInline', False)
             imageInline = emailSettings.get('imageInline', True)

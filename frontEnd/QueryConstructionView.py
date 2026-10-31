@@ -289,7 +289,8 @@ class QueryConstructionView(wx.Panel):
                                   self._validLocations),
             ('target', 0):
                 TargetConfigPanel(self, self._videoWindow,
-                                  self._queryDataModel.getTargets()[0]),
+                                  self._queryDataModel.getTargets()[0],
+                                  self._queryDataModel),
             ('trigger', 0):
                 WhereConfigPanel(self, self._videoWindow,
                                  self._queryDataModel.getTriggers()[0],

@@ -44,17 +44,38 @@ from vitaToolbox.ctypesUtils.LoadLibrary import LoadLibrary
 
 _libName = 'optsearches'
 _searchlib = None
+_logger = None
+
+
+def setLogger(logger):
+    """Log optsearches messages (e.g. the Python fallback) to this logger
+    (BackEndApp.log) instead of the unconfigured module logger."""
+    global _logger
+    _logger = logger
 
 
 def _lib():
-    """Load optsearches the first time a search actually runs."""
+    """Load optsearches the first time a search actually runs.
+
+    When the compiled library is missing (MSVC not installed at build time)
+    the pure-Python port in optsearches_py is used, so region and line
+    rules keep working instead of raising on every real-time search.
+    """
     global _searchlib
     if _searchlib is None:
-        lib = LoadLibrary(None, _libName)
-        lib.is_obj_inside.argtypes = [BBOX, c_int, POINTER(BBOX), c_int]
-        lib.is_obj_inside.restype = c_int
-        lib.did_obj_cross.argtypes = [BBOX, BBOX, BBOX, c_int, c_int]
-        lib.did_obj_cross.restype = c_int
+        try:
+            lib = LoadLibrary(None, _libName)
+            lib.is_obj_inside.argtypes = [BBOX, c_int, POINTER(BBOX), c_int]
+            lib.is_obj_inside.restype = c_int
+            lib.did_obj_cross.argtypes = [BBOX, BBOX, BBOX, c_int, c_int]
+            lib.did_obj_cross.restype = c_int
+        except Exception:
+            import logging
+
+            from backEnd.triggers import optsearches_py as lib
+
+            (_logger or logging.getLogger(__name__)).warning(
+                "Native optsearches library not found; using the Python implementation")
         _searchlib = lib
     return _searchlib
 

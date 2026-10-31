@@ -13,10 +13,12 @@ Execution providers, in order, when ``enable_gpu`` is set:
 * Windows: DirectML, then CUDA, then CPU
 * Linux and macOS: CUDA, then CPU
 
-CPU is always the fallback. Plate, face, and delivery-carrier recognizers are
-not run. If a model output is named ``plate_text``, ``face_identity``, or
-``delivery_carrier``, that value is copied onto each detection so the existing
-HTTP fields stay populated.
+The Windows installer ships ``onnxruntime-directml``. DirectML is used when
+that provider loads, and CPU otherwise. After boxes are decoded, plate, face, and
+delivery recognizers in ``attribute_recognizers`` run on the person and
+vehicle crops when their ONNX files are present. If a detector output is
+named ``plate_text``, ``face_identity``, or ``delivery_carrier``, that value
+is still copied onto each detection.
 """
 
 from __future__ import annotations
@@ -61,19 +63,53 @@ def select_execution_providers(
     return chosen
 
 
+def installed_models_dirs() -> list[str]:
+    """Model folders for a frozen app, then the source-tree ``models`` directory."""
+    folders = []
+    if getattr(sys, "frozen", False):
+        exe_dir = os.path.dirname(os.path.abspath(sys.executable))
+        folders.append(os.path.join(exe_dir, "models"))
+        meipass = getattr(sys, "_MEIPASS", "") or ""
+        if meipass:
+            folders.append(os.path.join(meipass, "models"))
+    folders.append(
+        os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..", "models"))
+    )
+    unique: list[str] = []
+    seen = set()
+    for folder in folders:
+        key = os.path.normcase(os.path.abspath(folder))
+        if key in seen:
+            continue
+        seen.add(key)
+        unique.append(os.path.abspath(folder))
+    return unique
+
+
+def _shared_detector_path() -> Optional[str]:
+    """Community-updated detector (see backEnd/community.py), if installed."""
+    try:
+        from backEnd.community import shared_model_path
+
+        return shared_model_path("detector")
+    except Exception:
+        return None
+
+
 def default_model_candidates(model_dir: Optional[str] = None) -> list[str]:
     candidates = []
     env = os.environ.get(_ENV_MODEL)
     if env:
         candidates.append(env)
+    shared = _shared_detector_path()
+    if shared:
+        candidates.append(shared)
     if model_dir:
         candidates.append(os.path.join(model_dir, "yolox_nano.onnx"))
         candidates.append(os.path.join(model_dir, "detector.onnx"))
-    repo_models = os.path.abspath(
-        os.path.join(os.path.dirname(__file__), "..", "..", "models")
-    )
-    candidates.append(os.path.join(repo_models, "yolox_nano.onnx"))
-    candidates.append(os.path.join(repo_models, "detector.onnx"))
+    for folder in installed_models_dirs():
+        candidates.append(os.path.join(folder, "yolox_nano.onnx"))
+        candidates.append(os.path.join(folder, "detector.onnx"))
     return candidates
 
 
@@ -100,7 +136,8 @@ def _read_spec(model_path: str, session: Any) -> dict[str, Any]:
         "pad": 114,
         "resize": "bilinear",
         "classes": "coco",
-        "score_threshold": 0.25,
+        # Frigate min_score default; per-label median checked later.
+        "score_threshold": 0.5,
         "input_size": 0,
     }
     sidecar = model_path + ".json"
@@ -129,6 +166,15 @@ def _read_spec(model_path: str, session: Any) -> dict[str, Any]:
     return spec
 
 
+def _wants_bgr(spec: dict[str, Any]) -> bool:
+    """YOLOX COCO weights were trained on OpenCV BGR images. Feeding RGB
+    roughly halves vehicle scores and loses most small objects."""
+    order = str(spec.get("channel_order") or "").lower()
+    if order in ("bgr", "rgb"):
+        return order == "bgr"
+    return str(spec.get("layout") or "").lower() == "yolox"
+
+
 def _input_hw(session: Any, spec: dict[str, Any]) -> tuple[int, int, bool]:
     """Return ``(height, width, channels_first)``."""
     shape = session.get_inputs()[0].shape
@@ -154,7 +200,17 @@ def _is_dim(value: Any) -> bool:
     return isinstance(value, int) and value > 0
 
 
-def _letterbox(rgb: bytes, width: int, height: int, size: int, pad: int, normalize: bool, resize: str, channels_first: bool):
+def _letterbox(
+    rgb: bytes,
+    width: int,
+    height: int,
+    size: int,
+    pad: int,
+    normalize: bool,
+    resize: str,
+    channels_first: bool,
+    bgr: bool = False,
+):
     import numpy as np
     from PIL import Image
 
@@ -169,6 +225,8 @@ def _letterbox(rgb: bytes, width: int, height: int, size: int, pad: int, normali
     pad_y = (size - new_h) // 2
     canvas.paste(resized, (pad_x, pad_y))
     array = np.asarray(canvas).astype(np.float32)
+    if bgr:
+        array = array[:, :, ::-1]
     if normalize:
         array *= 1.0 / 255.0
     if channels_first:
@@ -266,6 +324,17 @@ def _decode_predictions(array, layout: str, input_size: int):
     classes = class_scores.argmax(axis=1).astype(np.int32)
     scores = class_scores.max(axis=1)
     return boxes, scores, classes
+
+
+_COCO_BUS = 5
+
+
+def _with_class(attributes: dict, label: str, class_id: int, mode: str) -> dict:
+    """Copy ``attributes``; tag COCO buses so the attribute stage can say Bus."""
+    merged = dict(attributes)
+    if mode != "sighthound" and label == "vehicle" and int(class_id) == _COCO_BUS:
+        merged["vehicle_class"] = "bus"
+    return merged
 
 
 def _map_label(class_id: int, mode: str) -> Optional[str]:
@@ -366,6 +435,21 @@ class OnnxYoloDetector:
         self._output_names = [item.name for item in self._session.get_outputs()]
         self._height, self._width, self._channels_first = _input_hw(self._session, self._spec)
         self._log("info", "ONNX detector %s providers=%s" % (model_path, ",".join(self.providers)))
+        self._attributes = None
+        try:
+            from backEnd.native.attribute_recognizers import AttributePipeline
+
+            self._attributes = AttributePipeline.from_environment(
+                enable_gpu=enable_gpu, logger=logger
+            )
+        except Exception as exc:
+            self._log("error", "attribute recognizers were not attached: %s" % exc)
+
+    def set_gallery_db(self, path: Optional[str]) -> None:
+        """Point face matching at the local object database."""
+        pipeline = self._attributes
+        if pipeline is not None:
+            pipeline.set_gallery_db(path)
 
     def _log(self, level: str, message: str) -> None:
         logger = self._logger
@@ -389,16 +473,18 @@ class OnnxYoloDetector:
             bool(self._spec.get("normalize", True)),
             str(self._spec.get("resize", "bilinear")),
             self._channels_first,
+            _wants_bgr(self._spec),
         )
         outputs = self._session.run(None, {self._input_name: blob})
         attributes = self._extra_attributes(outputs)
         layout = str(self._spec.get("layout") or "")
         boxes, scores, classes = _decode_predictions(outputs[0], layout, side)
-        threshold = float(self._spec.get("score_threshold", 0.25) or 0.25)
+        threshold = float(self._spec.get("score_threshold", 0.5) or 0.5)
         mode = str(self._spec.get("classes") or "coco")
         found_boxes: list[BoundingBox] = []
         found_scores: list[float] = []
         found_types: list[str] = []
+        found_classes: list[int] = []
         for box, score, class_id in zip(boxes, scores, classes):
             if float(score) < threshold:
                 continue
@@ -408,6 +494,7 @@ class OnnxYoloDetector:
             found_boxes.append(_unmap_box(box, scale, pad_x, pad_y, int(width), int(height)))
             found_scores.append(float(score))
             found_types.append(label)
+            found_classes.append(int(class_id))
         detections = []
         for index in _nms(found_boxes, found_scores):
             detections.append(
@@ -415,9 +502,11 @@ class OnnxYoloDetector:
                     type=found_types[index],
                     bounding_box=found_boxes[index],
                     score=found_scores[index],
-                    attributes=dict(attributes),
+                    attributes=_with_class(attributes, found_types[index], found_classes[index], mode),
                 )
             )
+        if detections and self._attributes is not None:
+            self._attributes.annotate(rgb, width, height, detections)
         return detections
 
     def _extra_attributes(self, outputs: list[Any]) -> dict[str, Any]:

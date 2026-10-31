@@ -96,3 +96,17 @@ def test_remux_keeps_a_time_range(tmp_path):
     joined = tmp_path / "joined.mp4"
     assert remuxClip([(str(trimmed), 1000)], str(joined), 1000, 5000, str(tmp_path), {}, None) == 0
     assert os.path.getsize(joined) > 0
+
+
+def test_export_single_frame_as_jpeg_between_frames(tmp_path):
+    """Export Frame / Mark as Missed ask for start == end; must not fail."""
+    from PIL import Image
+
+    video = tmp_path / "sample.mp4"
+    write_moving_rect(video, frames=8)
+    still = tmp_path / "frame.jpg"
+    # 1013 ms is between frames: the old mp4 path selected nothing (-1).
+    assert remuxClip([(str(video), 1000)], str(still), 1013, 1013, str(tmp_path),
+                     {"format": "jpg", "drawBoxes": False}, None) == 0
+    assert Image.open(still).size == (320, 240)
+    assert remuxClip([], str(tmp_path / "none.jpg"), 5, 5, None, {"format": "jpg"}, None) == -1
