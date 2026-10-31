@@ -386,7 +386,7 @@ class HoverBitmapButton(wx.Control):
                 self._nextDelay = _repeatDelayFn(self._nextDelay)
                 if int(self._nextDelay) == 0:
                     self._nextDelay = 1
-                self._repeatTimer.Start(self._nextDelay, True)
+                self._repeatTimer.Start(int(self._nextDelay), True)
 
 
     ###########################################################
@@ -409,7 +409,7 @@ class HoverBitmapButton(wx.Control):
             if self._wantRepeats:
                 self._sendEvent()
                 self._nextDelay = _repeatDelayFn(_kInitRepeatDelay)
-                self._repeatTimer.Start(_kInitRepeatDelay, True)
+                self._repeatTimer.Start(int(_kInitRepeatDelay), True)
 
             self.Refresh()
         else:

@@ -42,6 +42,7 @@ import sys
 
 # Common 3rd-party imports...
 import wx
+import wx.adv  # EVT_DATE_CHANGED
 
 # Toolbox imports...
 from vitaToolbox.wx.BackgroundStyleUtils import kBackgroundStyle
@@ -62,6 +63,23 @@ _kDateInternational = "%a %d.%m.%Y"
 
 _kTodayString = "Today"
 _kYesterdayString = "Yesterday"
+
+
+def popup_position(anchor, popupSize, area, anchorHeight=0):
+    """Top-left for a popup centred under ``anchor`` (screen point at the
+    bottom-centre of the control), kept inside the monitor work ``area``
+    (a wx.Rect or (x, y, w, h)). Flips above the control if it would run
+    off the bottom."""
+    ax, ay = anchor
+    pw, ph = popupSize
+    left, top, width, height = tuple(area)
+    x = ax - pw // 2
+    y = ay
+    if y + ph > top + height:
+        y = ay - anchorHeight - ph
+    x = max(left, min(x, left + width - pw))
+    y = max(top, min(y, top + height - ph))
+    return (int(x), int(y))
 
 
 ##############################################################################
@@ -174,6 +192,18 @@ class VitaDatePickerCtrl(wx.Panel):
 
         self.SetSizer(sizer)
 
+        # Same-size arrows, centred on the date label.
+        arrowSize = self._prevDayButton.GetBestSize()
+        self._nextDayButton.SetMinSize(arrowSize)
+        self._prevDayButton.SetToolTip("Previous day")
+        self._nextDayButton.SetToolTip("Next day")
+        self._dateButton.SetToolTip("Click to pick a date (days with recordings are green)")
+
+        # We use a custom background style, so we must paint our own
+        # background or the gaps between the arrows and the label show
+        # stale pixels (the stray mark after the right arrow).
+        self.Bind(wx.EVT_PAINT, self.OnPaintBackground)
+
         # Bind...
         self._prevDayButton.Bind(wx.EVT_BUTTON, self.OnPrevDay)
         self._nextDayButton.Bind(wx.EVT_BUTTON, self.OnNextDay)
@@ -183,6 +213,14 @@ class VitaDatePickerCtrl(wx.Panel):
 
         # Make sure label and prev/next is right...
         self._updateUi()
+
+
+    ###########################################################
+    def OnPaintBackground(self, event):
+        """Fill our background (owners on image panels set it to match)."""
+        dc = wx.PaintDC(self)
+        dc.SetBackground(wx.Brush(self.GetBackgroundColour()))
+        dc.Clear()
 
 
     ###########################################################
@@ -325,15 +363,21 @@ class VitaDatePickerCtrl(wx.Panel):
                              self._isBoldFn)
         try:
             # Put the dialog at the right place...
-            dlgWidth, _ = dlg.GetSize()
             myWidth, myHeight = self.GetSize()
-            topCenterX, topCenterY = self.ClientToScreen((myWidth//2, 0))
-            dlg.SetPosition((topCenterX - dlgWidth//2, topCenterY))
+            anchor = self.ClientToScreen((myWidth//2, myHeight))
+            displayIndex = wx.Display.GetFromPoint(anchor)
+            if displayIndex == wx.NOT_FOUND:
+                displayIndex = wx.Display.GetFromWindow(self)
+            area = wx.Display(max(displayIndex, 0)).GetClientArea()
+            dlg.SetPosition(popup_position(anchor, dlg.GetSize(), area,
+                                           myHeight))
 
             # Show it...
-            dlg.ShowModal()
+            result = dlg.ShowModal()
 
             # Get the results...
+            if result != wx.ID_OK:
+                return
             newDate = dlg.GetValue()
             newDate = self._makeDateInRange(newDate)
             if newDate != self._date:
@@ -549,9 +593,11 @@ class _CalendarPopup(wx.Dialog):
         self.SetDoubleBuffered(True)
         self.SetBackgroundColour("white")
 
-        # Init the return code to -1 so that we can tell if EndModal was
-        # called (we don't want to call it twice--that crashes on Windows)
-        self.SetReturnCode(-1)
+        # Track EndModal ourselves (calling it twice crashes on Windows).
+        # Do NOT pre-set the return code to -1: under wxWidgets 3.2 a
+        # non-zero return code makes ShowModal() return at once, so the
+        # calendar opened and closed before it was ever drawn.
+        self._ended = False
 
         # Make a zero-sized Cancel button so that Escape works on Windows.
         self.SetEscapeId(wx.ID_CANCEL)
@@ -648,7 +694,23 @@ class _CalendarPopup(wx.Dialog):
         self._updateMonth(True)
 
         self.Fit()
-        wx.CallLater(1, self._updateMonth)
+        wx.CallLater(1, self._safeUpdateMonth)
+
+
+    ###########################################################
+    def _safeUpdateMonth(self):
+        """Deferred first fill; the popup may already be gone."""
+        if self and not self._ended:
+            self._updateMonth()
+
+
+    ###########################################################
+    def EndModal(self, retCode):
+        """End once only (a second EndModal crashes on Windows)."""
+        if self._ended:
+            return
+        self._ended = True
+        super(_CalendarPopup, self).EndModal(retCode)
 
 
     ###########################################################
@@ -759,7 +821,7 @@ class _CalendarPopup(wx.Dialog):
         event.Skip()
 
         # If we've already called EndModal, we're a no-op
-        if self.GetReturnCode() != -1:
+        if self._ended or not self.IsModal():
             return
 
         mouseState = wx.GetMouseState()

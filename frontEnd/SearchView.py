@@ -343,6 +343,9 @@ class SearchView(BaseView):
                                               datetime.date.fromtimestamp(0),
                                               "today",
                                               self._isDateBold)
+        # The left panel's border image is white inside; match it so the
+        # gaps around the arrows don't show stray pixels.
+        self._datePicker.SetBackgroundColour(wx.WHITE)
 
         # A counter for the results list
         self._resultsCounter = TranslucentStaticText(leftPanel, -1, "0 Results",

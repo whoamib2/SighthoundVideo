@@ -104,7 +104,7 @@ def test_calendar_marks_recording_days():
     wx = pytest.importorskip("wx")
     from vitaToolbox.wx import VitaDatePickerCtrl as mod
 
-    app = wx.App(False)
+    app = wx.GetApp() or wx.App(False)  # one wx.App per process
     try:
         frame = wx.Frame(None)
         today = datetime.date.today()
@@ -118,4 +118,4 @@ def test_calendar_marks_recording_days():
         popup.Destroy()
         frame.Destroy()
     finally:
-        app.Destroy()
+        assert app

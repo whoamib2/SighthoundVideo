@@ -538,6 +538,11 @@ class DiskCleaner(object):
             the current time;  in other words, only if we'd stopped
             writing to this thumbs location
         """
+        # Thumbs kept directly under a camera folder (<cam>/thumbs, as the
+        # port writes them) have no numeric time folder; they're still being
+        # written, so don't cache them -- they get re-counted each scan.
+        if not str(timeID).isdigit():
+            return
         try:
             # updating only makes sense if we've finished writing to this folder
             if int(timeID) < int(str(time.time())[:5]):

@@ -1810,7 +1810,7 @@ class FrontEndFrame(wx.Frame):
                 bmpPath = _kSupportWarnBmpPath
                 bmpDownPath = _kSupportWarnBmpDownPath
                 if daysLeft == 0:
-                    self._renewTimer.Start(max(5000, (exp-now)*1000), True)
+                    self._renewTimer.Start(int(max(5000, (exp-now)*1000)), True)
                 else:
                     self._renewTimer.Start(_kSecondsPerDay*1000, True)
             else:

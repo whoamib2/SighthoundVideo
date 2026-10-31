@@ -52,6 +52,8 @@ from vitaToolbox.wx.TruncateText import truncateText
 
 # Constants...
 _kIconSpacing = 2
+_kIconRightMargin = 2
+_kRowPadding = 2
 
 # Horizontal and vertical margins; seems to be different on Mac and Win...
 # ...also need an extra few pixels on Mac when settings our default size...
@@ -214,6 +216,12 @@ class ListBoxWithIcons(wx.VListBox):
         """
         # Make a copy of the rect so we can mess with it (TODO: needed?)
         rect = wx.Rect(*rect.Get())
+        # Keep icons inside the visible client area (never under the
+        # vertical scrollbar) with a small right margin.
+        clientWidth = self.GetClientSize().width
+        if clientWidth > 0 and rect.x + rect.width > clientWidth:
+            rect.SetWidth(max(0, clientWidth - rect.x))
+        rect.SetWidth(max(0, rect.width - _kIconRightMargin))
 
         # Get the item we're drawing...
         itemText, iconBmpList = self._items[n]
@@ -294,7 +302,7 @@ class ListBoxWithIcons(wx.VListBox):
 
             # Now go through the icons...
             for iconBmp in reversed(iconBmpList):
-                height = max(height, iconBmp.GetHeight())
+                height = max(height, iconBmp.GetHeight() + _kRowPadding)
 
         return height
 
