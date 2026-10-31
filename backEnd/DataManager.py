@@ -1964,9 +1964,12 @@ class DataManager(object):
         # The old code ran two queries per object, which for a one-minute
         # 24/7 segment meant hundreds of queries on the UI thread.
         colors = {}
+        labels = {}
+        self._lastBoxLabels = labels
         plainIds = []
         for obj in objList:
             if isinstance(obj, tuple):
+                labels[obj[0]] = obj[3]
                 colors[obj[0]] = self._getLabelColorForType(obj[3])
             else:
                 plainIds.append(obj)
@@ -1977,7 +1980,8 @@ class DataManager(object):
                 ",".join("%d" % int(x) for x in chunk)).fetchall()
             found = dict(rows)
             for uid in chunk:
-                colors[uid] = self._getLabelColorForType(found.get(uid, "unknown"))
+                labels[uid] = found.get(uid, "unknown")
+                colors[uid] = self._getLabelColorForType(labels[uid])
 
         boxOverlay = []
         ids = list(colors)
@@ -2089,6 +2093,7 @@ class DataManager(object):
             if self._markupModel.getShowBoxesAroundObjects():
                 boxOverlay = self._getBoundingBoxes(self._curVidPath, objList, self._fileStart-10, self._fileStop+10)
                 extras ['boxList'] = boxOverlay
+                extras ['boxLabels'] = dict(getattr(self, '_lastBoxLabels', {}) or {})
             if self._markupModel.getShowRegionZones():
                 zonesOverlay = self._getRegionZones(self._curVidPath)
                 if zonesOverlay is not None:

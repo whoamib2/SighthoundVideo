@@ -467,6 +467,11 @@ _kDisabledColorForDayInMonth    = ((127, 127, 127, 255), (  0,   0,   0,   0), (
 _kNormalColorForDayNotInMonth   = ((  0,   0,   0, 255), (  0,   0,   0,   0), (  0,   0,   0,   0))
 _kPressedColorForDayNotInMonth  = (( 85,  26, 139, 255), (222, 238, 253, 255), (  0,   0,   0,   0))
 _kHoverColorForDayNotInMonth    = ((  0,   0,   0, 255), (222, 238, 253, 255), (  0,   0,   0,   0))
+# Days that have recordings stored: white on green so they stand out.
+_kNormalColorForRecordingDay    = ((255, 255, 255, 255), ( 46, 140,  60, 255), (  0,   0,   0,   0))
+_kPressedColorForRecordingDay   = (( 85,  26, 139, 255), (222, 238, 253, 255), (  0,   0,   0,   0))
+_kHoverColorForRecordingDay     = ((255, 255, 255, 255), ( 30, 110,  45, 255), (  0,   0,   0,   0))
+_kRecordingLegend = "Green days have recordings"
 _kDisabledColorForDayNotInMonth = ((127, 127, 127, 255), (  0,   0,   0,   0), (  0,   0,   0,   0))
 
 
@@ -619,6 +624,10 @@ class _CalendarPopup(wx.Dialog):
             daySizer.Add(self._dayButtons[i], 1, wx.EXPAND)
         mainSizer.Add(daySizer, 0, wx.EXPAND)
 
+        if self._isBoldFn is not None:
+            legend = wx.StaticText(self, -1, _kRecordingLegend)
+            legend.SetForegroundColour(wx.Colour(46, 140, 60))
+            mainSizer.Add(legend, 0, wx.ALIGN_CENTER_HORIZONTAL | wx.TOP, 4)
         mainSizer.Add(self._todayButton, 0, wx.EXPAND)
 
         borderSizer = wx.BoxSizer()
@@ -675,12 +684,24 @@ class _CalendarPopup(wx.Dialog):
         # Go through and set all of the labels...
         for i in range(_kNumDaysInCal):
             self._dayButtons[i].SetLabel(str(curDate.day))
+            hasVideo = False
+            if self._isBoldFn is not None and not disableAll:
+                try:
+                    hasVideo = bool(self._isBoldFn(curDate))
+                except Exception:
+                    hasVideo = False
 
             if curDate == self._chosenDate and not disableAll:
                 # Init date
                 self._dayButtons[i].SetColors(
                     _kNormalColorForInitial, None,
                     _kPressedColorForInitial, _kHoverColorForInitial
+                )
+            elif hasVideo:
+                # Recordings stored on this day
+                self._dayButtons[i].SetColors(
+                    _kNormalColorForRecordingDay, _kDisabledColorForDayInMonth,
+                    _kPressedColorForRecordingDay, _kHoverColorForRecordingDay
                 )
             elif curDate.month == self._firstOfMonth.month and not disableAll:
                 # This month
@@ -707,8 +728,9 @@ class _CalendarPopup(wx.Dialog):
                 wantEnabled = False
 
             if self._isBoldFn is not None:
-                self._dayButtons[i].SetBold(wantEnabled and
-                                            self._isBoldFn(curDate))
+                self._dayButtons[i].SetBold(wantEnabled and hasVideo)
+                self._dayButtons[i].SetToolTip(
+                    "Recordings stored" if hasVideo else "No recordings")
 
             self._dayButtons[i].Enable(wantEnabled)
 

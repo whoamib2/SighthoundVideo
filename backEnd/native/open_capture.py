@@ -99,6 +99,16 @@ class VideoFrame:
         return Image.frombytes("RGB", (self.width, self.height), self.rgb)
 
 
+def decoder_info_path(mmapPath: str, userDir: str, camera: str) -> str:
+    """Where the HW/SW + bitrate status goes: next to the live mmap, or
+    <userDir>/live/<camera>.decoder.json when no live view is open."""
+    if mmapPath:
+        return os.path.splitext(mmapPath)[0] + ".decoder.json"
+    if userDir and camera:
+        return os.path.join(userDir, "live", camera + ".decoder.json")
+    return ""
+
+
 def _scale_rgb(rgb: bytes, width: int, height: int, out_w: int, out_h: int) -> tuple[bytes, int, int]:
     if out_w <= 0 and out_h <= 0:
         return rgb, width, height
@@ -1320,12 +1330,15 @@ class StreamReader:
 
     def _write_decoder_info(self) -> None:
         info = getattr(self, "_decoder_info", None)
-        if not info or not self._mmap_path:
+        if not info:
+            return
+        path = decoder_info_path(self._mmap_path, self._user_dir, self._camera_location)
+        if not path:
             return
         try:
             import json
 
-            path = os.path.splitext(self._mmap_path)[0] + ".decoder.json"
+            os.makedirs(os.path.dirname(path), exist_ok=True)
             with open(path + ".tmp", "w", encoding="utf-8") as handle:
                 json.dump(info, handle)
             os.replace(path + ".tmp", path)
@@ -1850,11 +1863,19 @@ class ClipReader:
         self._index = -1
         self._muted = False
         self._has_audio = False
+        self._file_start = 0
+        self._overlay = None
 
     def open(self, path: str, outW: int = 0, outH: int = 0, fileStart: int = 0, extras: Any = None) -> bool:
-        _ = fileStart, extras
         self.close()
         self._path = path
+        self._file_start = int(fileStart or 0)
+        self._overlay = None
+        if isinstance(extras, dict) and (extras.get("boxList") or extras.get("zonesList")):
+            from backEnd.native.box_overlay import BoxOverlay
+
+            overlay = BoxOverlay(extras.get("boxList"), extras.get("boxLabels"), extras.get("zonesList"))
+            self._overlay = overlay if overlay else None
         self._out_w = int(outW or 0)
         self._out_h = int(outH or 0)
         try:
@@ -2009,6 +2030,11 @@ class ClipReader:
             return None
         rgb, width, height = value
         scaled, out_w, out_h = _scale_rgb(rgb, width, height, self._out_w, self._out_h)
+        if self._overlay is not None:
+            try:
+                scaled = self._overlay.draw(scaled, out_w, out_h, self._file_start + self._stamps[index])
+            except Exception as exc:
+                logging.getLogger(__name__).warning("Box overlay failed: %r", exc)
         return ClipFrame(scaled, out_w, out_h, self._stamps[index], self._input_size)
 
 

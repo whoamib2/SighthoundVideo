@@ -974,18 +974,28 @@ class MonitorView(BaseMonitorView):
 
         nameLabel = TranslucentStaticText(self._previewWin, -1, cameraLocation,
                                           style=wx.ST_ELLIPSIZE_END)
-        nameLabel.SetMaxSize((_kSmallVideoSize[0] - recordOn.GetSize().GetWidth(),
-                              nameLabel.GetSize().GetHeight()))
-        nameLabel.SetMinSize(nameLabel.GetMaxSize())
+        nameLabel.SetToolTip(cameraLocation)
 
         warningIcon = HoverBitmapButton(self._previewWin, wx.ID_ANY,
                                         "frontEnd/bmps/Warning.png",
                                         name=cameraLocation)
         warningIcon.Hide()
 
-        decoderBadge = wx.StaticText(self._previewWin, -1, "  ", name=cameraLocation)
-        decoderBadge.SetFont(decoderBadge.GetFont().Smaller())
+        decoderBadge = wx.StaticText(self._previewWin, -1, "", name=cameraLocation,
+                                     style=wx.ALIGN_CENTRE_HORIZONTAL | wx.ST_NO_AUTORESIZE)
+        decoderBadge.SetFont(decoderBadge.GetFont().Smaller().Bold())
+        badgeW = decoderBadge.GetTextExtent("HW")[0] + 6
+        decoderBadge.SetMinSize((badgeW, -1))
+        decoderBadge.SetMaxSize((badgeW, -1))
         decoderBadge.SetToolTip("Decoder: not reported yet")
+
+        # Name takes what is left of the tile width after the record icon,
+        # the badge and the warning icon, so the row never spills into the
+        # neighbouring tile.
+        nameW = tile_name_width(_kSmallVideoSize[0], recordOn.GetSize().GetWidth(),
+                                _kCtrlPadding, badgeW, warningIcon.GetSize().GetWidth())
+        nameLabel.SetMaxSize((nameW, nameLabel.GetSize().GetHeight()))
+        nameLabel.SetMinSize(nameLabel.GetMaxSize())
         self._decoderBadges[cameraLocation] = decoderBadge
 
         self._previewControls[cameraLocation] = \
@@ -1032,7 +1042,7 @@ class MonitorView(BaseMonitorView):
             labelSizer.Add(nameLabel, 1, wx.ALIGN_CENTER_VERTICAL)
             decoderBadge = self._decoderBadges.get(cameraLocation)
             if decoderBadge:
-                labelSizer.Add(decoderBadge, 0, wx.ALIGN_CENTER_VERTICAL | wx.RIGHT, 2)
+                labelSizer.Add(decoderBadge, 0, wx.ALIGN_CENTER_VERTICAL | wx.LEFT, 2)
 
             # ...extra craziness to make sure that the warning takes up space
             # even if hidden...
@@ -1041,7 +1051,9 @@ class MonitorView(BaseMonitorView):
             warningSizer.AddSpacer(1)
             labelSizer.Add(warningSizer, 0, wx.ALIGN_CENTER_VERTICAL)
 
-            cameraSizer.Add(labelSizer, 0, wx.TOP | wx.EXPAND,
+            # Keep the row exactly as wide as the video tile.
+            labelSizer.SetMinSize((_kSmallVideoSize[0], -1))
+            cameraSizer.Add(labelSizer, 0, wx.TOP | wx.LEFT | wx.RIGHT,
                             _kCtrlPadding//2)
 
             self._previewSizer.Add(cameraSizer, 0)
@@ -1133,7 +1145,7 @@ class MonitorView(BaseMonitorView):
                     continue
                 text, tip = badge_for(read_decoder_info(dataDir, camera))
                 if badge.GetLabel().strip() != text:
-                    badge.SetLabel(text or "  ")
+                    badge.SetLabel(text)
                     badge.SetForegroundColour(wx.Colour(0, 140, 0) if text == "HW" else wx.Colour(170, 110, 0))
                     badge.GetContainingSizer() and self._previewWin.Layout()
                 badge.SetToolTip(tip)
@@ -1801,7 +1813,13 @@ class MonitorView(BaseMonitorView):
 
                         fpsStats.trackFrameRate(requestFps, captureFps, self._logger)
                         if not warningIcon is None:
-                            warningIcon.Show(fpsStats.checkForErrors())
+                            hasError = fpsStats.checkForErrors()
+                            if hasError != warningIcon.IsShown():
+                                warningIcon.Show(hasError)
+                                self._previewWin.Layout()
+                            if hasError:
+                                warningIcon.SetToolTip(
+                                    warning_tooltip(fpsStats, requestFps, captureFps))
                         self._updateDecoderBadges()
 
                         if self._debugModeModel.isDebugMode() and nameLabel is not None:
@@ -2310,10 +2328,30 @@ _kFpsIgnoreSamples = 20
 _kFpsTriggerCount = 15
 
 # If we see capture FPS fall below this, it's an error...
-_kMinCaptureFps = 7.5
+# VigilCam analyses the sub stream at a deliberately low rate (about 2 fps)
+# while cameras deliver 4-20 fps, so "request < capture" and the old 7.5 fps
+# floor flagged every healthy camera. Only warn on a real stall.
+_kMinCaptureFps = 1.5
+_kMinRequestFps = 1.0
 
 # Do not warn more often than that, unless declining fps
 _kMinWarningDistance = 60
+
+def tile_name_width(tileW, recordW, padding, badgeW, warningW):
+    """Pixels left for the camera name in a tile's label row."""
+    return max(20, int(tileW) - int(recordW) - int(padding) - int(badgeW) - 2 - int(warningW))
+
+
+def warning_tooltip(fpsStats, requestFps, captureFps):
+    """One-line reason for the tile warning icon (click for details)."""
+    if fpsStats.slowRequestFpsSince:
+        return ("Analytics is falling behind: %.1f fps processed vs %.1f fps "
+                "from the camera. Click for details." % (requestFps, captureFps))
+    if fpsStats.slowCaptureFpsSince:
+        return ("Low frame rate from the camera: %.1f fps. Click for details."
+                % captureFps)
+    return ""
+
 
 class _FpsStats(object):
     """A little internal class for tracking frames per second."""
@@ -2389,7 +2427,7 @@ class _FpsStats(object):
 
         nowTime = time.time()
 
-        if requestFps < captureFps:
+        if requestFps < min(captureFps, _kMinRequestFps):
             self._slowRequestFpsCount += 1
             if self._slowRequestFpsCount >= _kFpsTriggerCount:
                 if self._slowRequestFpsStart is None:
